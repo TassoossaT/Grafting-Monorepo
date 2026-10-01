@@ -2,7 +2,7 @@ import { hasTrait, nearestOnSegment } from "../../../../features/edit-constructi
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
-import { rulePointFor } from "./ruler-session.ts";
+import { rulerOf } from "./ruler.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
@@ -76,7 +76,7 @@ export function buildFrameAt(ctx: ToolContext, sample: PointerSample): BuildFram
 
 /** `p` ruled along the frame's own directions -- on a corner, a side, or in line with one -- when the ruler's snap is on; unchanged otherwise. */
 export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition {
-  return rulePointFor(ctx, p, { axes: [frame.u, frame.v] });
+  return rulerOf(ctx).point(p, { axes: [frame.u, frame.v] });
 }
 
 /** Where the pointer is on the level `y` a shape is drawn at -- see {@link pointerAtHeight}. */

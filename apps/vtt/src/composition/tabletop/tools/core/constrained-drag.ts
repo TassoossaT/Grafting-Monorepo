@@ -3,8 +3,6 @@ import type { ConstructionPosition } from "../../../../ports/index.ts";
 import type { PointerSample, ToolGesture } from "./tool-context.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
 
-/** Shift snaps an orbit to steps of this many radians -- 15 degrees. */
-const TURN_STEP = Math.PI / 12;
 /** Screen pixels a vertical drag takes per world unit. */
 const PIXELS_PER_UNIT = 40;
 
@@ -64,8 +62,8 @@ export function createConstrainedDrag(motion: HandleMotion, handle: Construction
         }
         case "orbit": {
           const turned = turning!.turn(current.ray ? pointerAtHeight(current, handle.y) : current.point);
-          const angle = current.shiftKey ? Math.round(turned / TURN_STEP) * TURN_STEP : turned;
-          return { position: rotateInPlan(handle, motion.center, angle), angle };
+          // Where the turn lands -- on a step of the protractor -- is the ruler's to say (`Ruler.turn`), not this drag's.
+          return { position: rotateInPlan(handle, motion.center, turned), angle: turned };
         }
       }
     },

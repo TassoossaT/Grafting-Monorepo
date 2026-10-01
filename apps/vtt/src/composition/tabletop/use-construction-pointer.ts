@@ -11,11 +11,12 @@ import type { SelectedNodeInfo } from "@/widgets";
 import { VIEW_FOV_DEGREES } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { metersPerPixelAt } from "./tools/core/pointer-scale.ts";
-import { createRulerSession, NO_FEEDBACK, type RulerFeedback } from "./tools/core/ruler-session.ts";
+import { createRulerSession } from "./tools/core/ruler-session.ts";
+import { NO_FEEDBACK, rulerOf, type RulerFeedback } from "./tools/core/ruler.ts";
 import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/ruler-preview.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, MEASURE_UNITS, carriesArrows, dimensionsOf, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
+import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, MEASURE_UNITS, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
 import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
@@ -219,6 +220,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       },
       get rulerDisabled() {
         return optionsRef.current.rulerSettings?.disabled;
+      },
+      get rulerAngleStep() {
+        return angleStepRef.current;
       },
       get rulerLengthStep() {
         const { rulerSettings, measureUnit } = optionsRef.current;
@@ -522,7 +526,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
             const focus = tool.handlesOnHover ? focusRef.current : undefined;
             if (focus && focus.faces.size > 0) {
               const faces = optionsRef.current.runtime.getAllRegionTopologies().filter((topology) => focus.faces.has(faceKey(topology)));
-              feedbackRef.current = { guides: feedbackRef.current.guides, measures: [...feedbackRef.current.measures, ...dimensionsOf(faces)] };
+              feedbackRef.current = { guides: feedbackRef.current.guides, measures: [...feedbackRef.current.measures, ...rulerOf(ctx).dimensions(faces)] };
             }
             showRuler(event);
           }

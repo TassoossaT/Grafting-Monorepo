@@ -422,7 +422,7 @@ test("the rotate handle turns a whole spiral round its centre: still the same ex
   } finally { session.free(); }
 });
 
-test("the rotate handle turns a free ramp round its middle, handles and all; Shift snaps to 15 degrees", async () => {
+test("the rotate handle turns a free ramp round its middle, handles and all; the protractor's step lands the turn", async () => {
   const { ctx, runtime, session } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   try {
@@ -433,8 +433,10 @@ test("the rotate handle turns a free ramp round its middle, handles and all; Shi
       return runtime.curveBatch({ tolerance: 0.01, commands: [{ kind: "split", curve: runtime.curveBatch({ tolerance: 0.01, commands: [{ kind: "resolve", handles: span.curve, start: [a.x, a.y, a.z], end: [b.x, b.y, b.z] }] })[0].curves[0], t: 0.5 }] })[0].curves[0].points[3];
     };
     const was = midpoint();
-    // 50 degrees with Shift held lands on 45.
-    const pivot = await rotate(ctx, runtime, (50 * Math.PI) / 180, true);
+    // The table offers steps of 15 degrees (Shift would ask for the finer 5): a turn a hair off 45 lands on it.
+    ctx.rulerSnap = true;
+    ctx.rulerAngleStep = (15 * Math.PI) / 180;
+    const pivot = await rotate(ctx, runtime, (46.4 * Math.PI) / 180);
     const now = midpoint();
     const raw = Math.atan2(now[2] - pivot.z, now[0] - pivot.x) - Math.atan2(was[2] - pivot.z, was[0] - pivot.x);
     const angle = Math.atan2(Math.sin(raw), Math.cos(raw));

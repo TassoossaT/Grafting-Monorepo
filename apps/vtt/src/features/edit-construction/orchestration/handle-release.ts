@@ -5,7 +5,7 @@ import { hasTrait, isGroundType, isSolidType } from "../structure-types/index.ts
 import { faceKey, surfaceKeyText } from "../topology/plan-geometry.ts";
 import { releaseFromSolid } from "./detach.ts";
 import { collectLinks, type RulerLinks } from "../ruler/index.ts";
-import type { SnapAnchor } from "./outline-snap.ts";
+import type { SnapAnchor } from "../ruler/index.ts";
 import { joinedStructures } from "./rigid-carry.ts";
 import { rejoinNodes, endJoinsOf } from "./weld-pause.ts";
 

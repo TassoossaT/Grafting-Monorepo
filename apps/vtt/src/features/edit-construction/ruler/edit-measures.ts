@@ -22,6 +22,21 @@ export type EditMeasureKind =
   /** Turned about its pivot, by `angle` radians. */
   | { readonly kind: "turn"; readonly angle: number };
 
+/** The kinds of measurement, by name: what a handle declares it measures. */
+export type EditMeasureName = EditMeasureKind["kind"];
+
+/** The measurement named `name`, with what it needs: the direction a side or a radius is pushed along, the base a height is above, the angle turned. */
+export function editMeasureOf(name: EditMeasureName, using: { readonly direction: PlanVector; readonly base: number; readonly angle: number }): EditMeasureKind {
+  switch (name) {
+    case "move": return { kind: "move" };
+    case "side": return { kind: "side", direction: using.direction };
+    case "height": return { kind: "height", base: using.base };
+    case "slope": return { kind: "slope" };
+    case "radius": return { kind: "radius", direction: using.direction };
+    case "turn": return { kind: "turn", angle: using.angle };
+  }
+}
+
 const EPSILON = 1e-4;
 const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
 

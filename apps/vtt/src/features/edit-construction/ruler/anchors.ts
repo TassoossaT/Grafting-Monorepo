@@ -1,8 +1,9 @@
 import type { ConstructionPosition } from "@/ports";
 
 import type { HandleMotion } from "../global-handles/index.ts";
-import { RULER_REACH, resolveRuler, type RulerGuide, type RulerKind, type RulerLinks, type RulerMeasure, type RulerMotion, type RulerResult } from "../ruler/index.ts";
 import { segmentGap } from "../topology/plan-geometry.ts";
+import type { RulerLinks } from "./links.ts";
+import { RULER_REACH, resolveRuler, type RulerGuide, type RulerKind, type RulerMeasure, type RulerMotion, type RulerResult } from "./resolve.ts";
 
 /**
  * A structure dragged by a handle is joined to, lined up with and measured

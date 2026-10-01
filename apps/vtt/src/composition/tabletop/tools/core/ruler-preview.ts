@@ -213,7 +213,7 @@ function guideLabel(guide: RulerGuide, unit: MeasureUnitId): string | undefined 
     case "length": return `= ${formatLength(guide.meters, unit)}`;
     case "step": return `${formatLength(guide.meters, unit)} fechado`;
     case "angle": return guide.relation === "parallel" ? "∥ paralelo" : "⊥ perpendicular";
-    case "polar": return `${guide.degrees.toFixed(0)}° ${guide.from === "edge" ? "da aresta" : "do mundo"}`;
+    case "polar": return `${guide.degrees.toFixed(0)}° ${guide.from === "edge" ? "da aresta" : guide.from === "start" ? "do início" : "do mundo"}`;
     case "level": return `altura ${formatLength(guide.y, unit)}`;
   }
 }

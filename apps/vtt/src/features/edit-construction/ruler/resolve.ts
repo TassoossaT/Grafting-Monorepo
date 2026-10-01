@@ -79,7 +79,7 @@ export type RulerGuide =
   /** Running the same way as a standing side, or square to it. */
   | { readonly kind: "angle"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly relation: "parallel" | "perpendicular" }
   /** On one of the protractor's steps from where the line began; `degrees` is the heading from the nearest side, or from the world's x axis when none is near. */
-  | { readonly kind: "polar"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly degrees: number; readonly from: "edge" | "world"; /** The direction the count starts from, in radians: where the protractor's zero stands. */ readonly zero: number }
+  | { readonly kind: "polar"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly degrees: number; readonly from: "edge" | "world" | "start"; /** The direction the count starts from, in radians: where the protractor's zero stands. */ readonly zero: number }
   /** As long as a round number: `meters` is that number, and the line ends at `at`. */
   | { readonly kind: "step"; readonly at: ConstructionPosition; readonly meters: number }
   /** At the height of a standing level. */
@@ -530,4 +530,17 @@ export function roundWithin(value: number, step: number, reach: number): number 
   if (!(step > 0)) return undefined;
   const rounded = Math.round(value / step) * step;
   return Math.abs(rounded - value) <= reach ? rounded : undefined;
+}
+
+/**
+ * `angle` -- a turn, in radians -- landed on the nearest multiple of `step` when
+ * within a few pixels of one, seen from `radius` away: the same reach as every
+ * other catch, so a wide turn is held to a finer angle than a tight one.
+ * `undefined` when it is near none, or there is no step.
+ */
+export function snapTurn(angle: number, step: number, reach: number, radius: number): { readonly angle: number; readonly turns: number } | undefined {
+  if (!(step > 0) || !(radius > 0)) return undefined;
+  const turns = Math.round(angle / step);
+  const target = turns * step;
+  return Math.abs(angle - target) <= angularReach(reach, radius, Math.min(ANGLE_REACH, step / 3)) ? { angle: target, turns } : undefined;
 }

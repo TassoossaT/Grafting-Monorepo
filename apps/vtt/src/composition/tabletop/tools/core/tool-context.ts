@@ -98,6 +98,8 @@ export interface ToolContext {
   readonly rulerDisabled?: ReadonlySet<RulerKind>;
   /** The round number, in metres, a length or a height lands on when near one; none when the table chose none. */
   readonly rulerLengthStep?: number;
+  /** The angular step, in radians, the protractor offers now: the table's, or the finer one while Shift is held. None until the dispatcher knows. */
+  readonly rulerAngleStep?: number;
   /** Shows what the ruler caught for a point a tool ruled itself -- a handle dragged onto a corner -- until the gesture ends; `undefined` clears it. */
   readonly showRuler?: (feedback: import("./ruler-session.ts").RulerFeedback | undefined) => void;
   /**

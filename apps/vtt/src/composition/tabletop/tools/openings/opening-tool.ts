@@ -34,6 +34,7 @@ import {
   type RunFrame,
   type RunRect,
 } from "./opening-shared.ts";
+import { rulerOf } from "../core/ruler.ts";
 import { rectFeedback, settleAligned, type Moving } from "./opening-ruler.ts";
 
 const OVERLAP_COLOR = 0xef4444;
@@ -411,7 +412,7 @@ function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: Open
   const pieces = run.pieces(rect, shape);
   if (pieces === undefined || pieces.length === 0) return undefined;
   // What the ruler says of it: what it lines up with, how big it is, and the room on either side.
-  ctx.showRuler?.(rectFeedback(ctx, run, rect, excluded));
+  rulerOf(ctx).show(rectFeedback(ctx, run, rect, excluded));
   return piecesPreview(pieces, overlapsOther(ctx, run, rect, excluded) ? OVERLAP_COLOR : color);
 }
 
@@ -683,7 +684,7 @@ export const openingTool: ConstructionTool<"opening"> = {
   ...openingToolBase,
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
     const ghost = openingToolBase.previewFor?.(gesture, params, ctx);
-    if (ghost === undefined) ctx.showRuler?.(undefined);
+    if (ghost === undefined) rulerOf(ctx).show(undefined);
     return ghost;
   },
 };

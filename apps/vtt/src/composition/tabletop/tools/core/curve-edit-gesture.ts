@@ -17,12 +17,13 @@ import {
   spineOwnerAt,
   structureTypeFor,
 } from "../../../../features/edit-construction/index.ts";
-import { measuresOfEdit, type AtomicEditOp, type StructureEditParams } from "../../../../features/edit-construction/index.ts";
+import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { commitSpineRegeneration } from "./spine-commit.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
+import { rulerOf } from "./ruler.ts";
 import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 
 /**
@@ -203,7 +204,8 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       }
 
       // What the drag measures, in the table's unit: a road's width, or how far a point went and how high it stands.
-      ctx.showRuler?.({ guides: [], measures: isWidthDrag ? [{ kind: "size", name: "largura", meters: currentWidth }] : measuresOfEdit({ kind: "move" }, sample.point, target) });
+      const ruler = rulerOf(ctx);
+      ruler.show({ guides: [], measures: isWidthDrag ? [{ kind: "size", name: "largura", meters: currentWidth }] : ruler.measure({ kind: "move" }, sample.point, target) });
 
       try {
         if (isWidthDrag && resolvedCurve) {

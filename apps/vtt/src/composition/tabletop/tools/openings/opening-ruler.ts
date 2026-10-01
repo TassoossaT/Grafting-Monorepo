@@ -1,26 +1,14 @@
-import {
-  LEVEL_REACH,
-  RULER_REACH,
-  catchOnAxis,
-  gapCenter,
-  gapsAround,
-  hasTrait,
-  holdsOnAxis,
-  type AxisMoving,
-  type AxisTarget,
-  type RulerGuide,
-  type RulerMeasure,
-} from "../../../../features/edit-construction/index.ts";
+import { hasTrait } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { reachFor, type RulerFeedback } from "../core/ruler-session.ts";
+import { rulerOf, type AxisMoving, type AxisTarget, type Ruler, type RulerFeedback, type RulerGuide, type RulerMeasure } from "../core/ruler.ts";
 import type { ToolContext } from "../core/tool-context.ts";
 import { MARGIN, openingSpansOn, settleRect, type RunFrame, type RunRect } from "./opening-shared.ts";
 
 /**
  * The ruler for an opening laid out on its wall. The wall is its own frame
  * -- how far along it, how high up -- so the plan ruler cannot see it; this
- * hands the opening's edges and centre to the ruler's axis resolver
- * (`features/edit-construction/ruler/axis.ts`) with what stands on the wall
+ * hands the opening's edges and centre to the ruler's axis (`Ruler.axis`,
+ * the same door every tool uses) with what stands on the wall
  * and above the ground: the wall's ends and middle, the openings already
  * there, the room left between them, and the heights other openings -- on any
  * wall -- stand at. All it adds is the translation between frames.
@@ -37,7 +25,7 @@ type Mid = { readonly s: number; readonly v: number };
 const mid = (rect: RunRect): Mid => ({ s: (rect.s0 + rect.s1) / 2, v: (rect.v0 + rect.v1) / 2 });
 
 /** Where along the wall, in its own coordinate, an opening can be lined up with. */
-function alongTargets(run: RunFrame, rect: RunRect, spans: readonly RunRect[]): readonly AxisTarget[] {
+function alongTargets(ruler: Ruler, run: RunFrame, rect: RunRect, spans: readonly RunRect[]): readonly AxisTarget[] {
   const targets: AxisTarget[] = [];
   const at = (s: number, v = 0.5) => ({ s, v });
   if (!run.closed) {
@@ -51,7 +39,7 @@ function alongTargets(run: RunFrame, rect: RunRect, spans: readonly RunRect[]): 
   }
   // Centred in the room left between what stands on either side: the same gap each way.
   if (!run.closed) {
-    const centred = gapCenter(rect.s0, rect.s1, spans.map((span) => [span.s0, span.s1] as const), [run.start, run.end]);
+    const centred = ruler.axis.center(rect.s0, rect.s1, spans.map((span) => [span.s0, span.s1] as const), [run.start, run.end]);
     if (centred !== undefined) targets.push({ value: centred, part: "center", at: at(centred) });
   }
   return targets;
@@ -88,7 +76,8 @@ export function alignRect(ctx: ToolContext, run: RunFrame, rect: RunRect, moving
   if (!ctx.rulerSnap) return rect;
   const spans = openingSpansOn(ctx, run, excluded);
   let { s0, s1, v0, v1 } = rect;
-  const along = catchOnAxis(s0, s1, moving.s, alongTargets(run, rect, spans), reachFor(ctx, 14, RULER_REACH));
+  const ruler = rulerOf(ctx);
+  const along = ruler.axis.catch(s0, s1, moving.s, alongTargets(ruler, run, rect, spans), "along");
   if (along) {
     if (moving.s === "both") { s0 += along.shift; s1 += along.shift; }
     else if (moving.s === "start") s0 += along.shift;
@@ -97,7 +86,7 @@ export function alignRect(ctx: ToolContext, run: RunFrame, rect: RunRect, moving
   const middle = (s0 + s1) / 2;
   const height = run.heightAt(Math.max(run.start, Math.min(run.end, middle)));
   if (!(height > 0)) return { s0, s1, v0, v1 };
-  const up = catchOnAxis(run.resolveAt(middle, v0).y, run.resolveAt(middle, v1).y, moving.v, upTargets(ctx, run, spans, excluded), reachFor(ctx, 10, LEVEL_REACH));
+  const up = ruler.axis.catch(run.resolveAt(middle, v0).y, run.resolveAt(middle, v1).y, moving.v, upTargets(ctx, run, spans, excluded), "up");
   if (up) {
     const dv = up.shift / height;
     if (moving.v === "both") { v0 += dv; v1 += dv; }
@@ -121,11 +110,12 @@ export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, exc
     if (target.at === undefined) return;
     guides.push({ kind: "align", from: run.resolveAt(target.at.s, target.at.v), to: run.resolveAt(mine.s, mine.v), node: "opening" });
   };
-  for (const { part, target } of holdsOnAxis(rect.s0, rect.s1, alongTargets(run, rect, spans))) {
+  const ruler = rulerOf(ctx);
+  for (const { part, target } of ruler.axis.holds(rect.s0, rect.s1, alongTargets(ruler, run, rect, spans))) {
     draw(target, { s: part === "start" ? rect.s0 : part === "end" ? rect.s1 : m.s, v: m.v });
   }
   const yOf = (v: number) => run.resolveAt(m.s, v).y;
-  for (const { part, target } of holdsOnAxis(yOf(rect.v0), yOf(rect.v1), upTargets(ctx, run, spans, excluded))) {
+  for (const { part, target } of ruler.axis.holds(yOf(rect.v0), yOf(rect.v1), upTargets(ctx, run, spans, excluded))) {
     const v = part === "start" ? rect.v0 : part === "end" ? rect.v1 : m.v;
     if (target.at !== undefined) draw(target, { s: m.s, v });
     else guides.push({ kind: "level", y: target.value, at: run.resolveAt(m.s, v) });
@@ -139,7 +129,7 @@ export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, exc
     ...(sill > 1e-4 ? [{ kind: "size" as const, name: "peitoril", meters: sill }] : []),
   ];
   if (!run.closed) {
-    const room = gapsAround(rect.s0, rect.s1, spans.map((span) => [span.s0, span.s1] as const), [run.start, run.end]);
+    const room = ruler.axis.gaps(rect.s0, rect.s1, spans.map((span) => [span.s0, span.s1] as const), [run.start, run.end]);
     measures.push({ kind: "size", name: "à esquerda", meters: room.before }, { kind: "size", name: "à direita", meters: room.after });
   }
   return { guides, measures };
