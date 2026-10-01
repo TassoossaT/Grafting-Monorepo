@@ -37,6 +37,8 @@ export {
   type IconButtonProps,
   Popover,
   type PopoverProps,
+  UiThemeProvider,
+  type UiThemeProviderProps,
   SelectableChip,
   type SelectableChipProps,
   SlidingPanel,

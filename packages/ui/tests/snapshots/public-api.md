@@ -89,6 +89,25 @@ export interface StatusBadgeProps {
  */
 export declare function StatusBadge(props: StatusBadgeProps): ReactElement;
 
+import type { ReactElement, ReactNode } from "react";
+/** Public inputs for {@link UiThemeProvider}. */
+export interface UiThemeProviderProps {
+    /**
+     * The UI below, whose components take the dark theme.
+     * @example "<ActionDock ... />"
+     */
+    readonly children: ReactNode;
+}
+/**
+ * Gives every component of this package below it a dark theme with white
+ * text, for an application whose page is dark. Wrap the UI once, near its
+ * root; a component outside it keeps the default light theme.
+ *
+ * @layer atom
+ * @status stable
+ */
+export declare function UiThemeProvider(props: UiThemeProviderProps): ReactElement;
+
 import type { ReactElement } from "react";
 /** Public inputs for a compact, clickable action. */
 export interface ButtonProps {

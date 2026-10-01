@@ -93,7 +93,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             </div>
           </div>
         ) : (
-          <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
+          <p style={{ margin: 0, fontSize: "0.75rem", color: "#ffffff" }}>
             Clique em uma alça de node (esfera amarela) de uma estrutura já existente, com a ferramenta que a criou
             ativa, para inspecionar.
           </p>
@@ -164,7 +164,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <span>{RULER_KIND_LABELS[kind]}</span>
             </label>
           ))}
-          <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: "0.72rem" }}>
+          <p style={{ margin: "0.2rem 0 0", color: "#ffffff", fontSize: "0.72rem" }}>
             Ctrl: posiciona sem encaixe. Shift: marcas de 5°. Digite um número ao desenhar para fixar o comprimento.
           </p>
         </div>

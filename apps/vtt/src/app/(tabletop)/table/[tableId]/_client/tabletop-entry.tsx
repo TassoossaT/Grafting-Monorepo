@@ -21,7 +21,7 @@ import {
   type TabletopRuntimeStatus,
   type ToolParamsByTool,
 } from "@/composition/tabletop";
-import { StatusBadge } from "@/ui";
+import { StatusBadge, UiThemeProvider } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
@@ -247,6 +247,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   });
 
   return (
+    <UiThemeProvider>
     <div className="gm-studio-app">
       {/* Header Bar -- thin, crops the map on purpose */}
       <header className="gm-header">
@@ -396,5 +397,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         </div>
       </footer>
     </div>
+    </UiThemeProvider>
   );
 }

@@ -120,7 +120,7 @@ h1 {
 
 .gm-subtitle {
   font-size: 0.7rem;
-  color: #64748b;
+  color: #ffffff;
 }
 
 .gm-header-actions {
@@ -135,7 +135,7 @@ h1 {
   font-size: 0.7rem;
   font-weight: 600;
   border: 1px solid #334155;
-  color: #94a3b8;
+  color: #ffffff;
 }
 
 .gm-badge--ready {
@@ -157,7 +157,7 @@ h1 {
   border: none;
   border-radius: 0.3rem;
   background: transparent;
-  color: #94a3b8;
+  color: #ffffff;
   font-size: 0.7rem;
   font-weight: 600;
   cursor: pointer;
@@ -200,7 +200,7 @@ h1 {
   background: rgba(15, 23, 42, 0.78);
   backdrop-filter: blur(10px);
   font-size: 0.72rem;
-  color: #94a3b8;
+  color: #ffffff;
   pointer-events: auto;
   user-select: text;
 }
@@ -241,7 +241,7 @@ h1 {
   border: 1px solid transparent;
   border-radius: 0.5rem;
   background: transparent;
-  color: #94a3b8;
+  color: #ffffff;
   cursor: pointer;
   font-size: 0.95rem;
   transition: all 0.15s ease;
@@ -292,7 +292,7 @@ h1 {
   border: 1px solid #1e293b;
   border-radius: 0.6rem;
   background: #182234;
-  color: #cbd5e1;
+  color: #ffffff;
   font-size: 0.68rem;
   font-weight: 500;
   cursor: pointer;
@@ -336,7 +336,7 @@ h1 {
   border-radius: 0.5rem;
   background: rgba(15, 23, 42, 0.78);
   backdrop-filter: blur(10px);
-  color: #94a3b8;
+  color: #ffffff;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -418,7 +418,7 @@ h1 {
   border: none;
   border-radius: 0.35rem;
   background: transparent;
-  color: #94a3b8;
+  color: #ffffff;
   cursor: pointer;
   font-size: 0.9rem;
 }
@@ -448,7 +448,7 @@ h1 {
   flex-direction: column;
   gap: 0.2rem;
   font-size: 0.68rem;
-  color: #94a3b8;
+  color: #ffffff;
 }
 
 .gm-terrain-picker-slider input[type="range"] {
@@ -457,7 +457,7 @@ h1 {
 
 .gm-terrain-picker-value {
   font-family: monospace;
-  color: #cbd5e1;
+  color: #ffffff;
 }
 
 .gm-terrain-popover-actions {
@@ -471,7 +471,7 @@ h1 {
   border: 1px solid #334155;
   border-radius: 0.4rem;
   background: #1e293b;
-  color: #cbd5e1;
+  color: #ffffff;
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
@@ -528,7 +528,7 @@ h1 {
   border: 1px solid #1e293b;
   border-radius: 0.5rem;
   background: #0f172a;
-  color: #cbd5e1;
+  color: #ffffff;
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -563,7 +563,7 @@ h1 {
   align-items: center;
   justify-content: space-between;
   font-size: 0.78rem;
-  color: #94a3b8;
+  color: #ffffff;
 }
 
 .gm-stat-value {
@@ -582,7 +582,7 @@ h1 {
   border-top: 1px solid #1e293b;
   background: #0f172a;
   font-size: 0.7rem;
-  color: #94a3b8;
+  color: #ffffff;
   flex: none;
 }
 
@@ -664,7 +664,7 @@ h1 {
   border-radius: 0.45rem;
   background: rgba(18, 24, 38, 0.78);
   border: 1.5px solid rgba(255, 255, 255, 0.13);
-  color: rgba(200, 210, 225, 0.75);
+  color: #ffffff;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   cursor: pointer;
   backdrop-filter: blur(10px);
@@ -731,7 +731,7 @@ h1 {
   right: 0.2rem;
   font-size: 0.48rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
   line-height: 1;
 }
 

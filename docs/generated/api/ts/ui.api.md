@@ -1899,6 +1899,14 @@ Unmounts the component and releases the owned UI root.
 
 Re-renders the mounted component with complete next inputs.
 
+### `interface ui.UiThemeProviderProps`
+
+Public inputs for UiThemeProvider.
+
+### `property ui.UiThemeProviderProps.children: ReactNode`
+
+The UI below, whose components take the dark theme.
+
 ### `type ui.CanvasConnectionDecision = { accepted: false; reason?: string } | { accepted: true; edge: CanvasEdge }`
 
 A consumer's answer to a connection request.
@@ -2155,3 +2163,9 @@ Semantic status marker with Grafting-owned status names.
 ### `function ui.Text(props: TextProps): ReactElement`
 
 Bounded text with semantic tone and optional truncation.
+
+### `function ui.UiThemeProvider(props: UiThemeProviderProps): ReactElement`
+
+Gives every component of this package below it a dark theme with white
+text, for an application whose page is dark. Wrap the UI once, near its
+root; a component outside it keeps the default light theme.
