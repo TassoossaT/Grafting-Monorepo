@@ -118,6 +118,17 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setRulerSettings(next);
     try { window.localStorage.setItem(rulerKey, JSON.stringify(serializeRulerSettings(next))); } catch { /* the choice lasts this session only */ }
   }, [rulerKey]);
+  // The dots drawn on the graph's nodes are a debug view with no function: shown or hidden, no tool changes. Kept per table, on by default as it has always been.
+  const [graphOverlay, setGraphOverlay] = useState(true);
+  const graphOverlayKey = `grafting:table:${tableId}:graph-overlay`;
+  useEffect(() => {
+    try { setGraphOverlay(window.localStorage.getItem(graphOverlayKey) !== "off"); } catch { /* storage blocked: the default stands */ }
+  }, [graphOverlayKey]);
+  const handleGraphOverlayChange = useCallback((visible: boolean) => {
+    setGraphOverlay(visible);
+    try { window.localStorage.setItem(graphOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
+  }, [graphOverlayKey]);
+  useEffect(() => { runtime.setGraphOverlay?.(graphOverlay); }, [runtime, graphOverlay]);
   const [rulerReadout, setRulerReadout] = useState<RulerReadoutState | undefined>(undefined);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
@@ -359,6 +370,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onMeasureUnitChange={handleMeasureUnitChange}
           rulerSettings={rulerSettings}
           onRulerSettingsChange={handleRulerSettingsChange}
+          graphOverlay={graphOverlay}
+          onGraphOverlayChange={handleGraphOverlayChange}
         />
 
         {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}

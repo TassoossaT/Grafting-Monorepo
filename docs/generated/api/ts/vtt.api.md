@@ -13165,9 +13165,15 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.SettingsDrawerProps.activeTool: ConstructionToolId`
 
+### `property vtt.widgets.SettingsDrawerProps.graphOverlay: boolean`
+
+Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool.
+
 ### `property vtt.widgets.SettingsDrawerProps.measureUnit: MeasureUnitId`
 
 The unit the table writes every distance in.
+
+### `property vtt.widgets.SettingsDrawerProps.onGraphOverlayChange: (visible: boolean) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onMeasureUnitChange: (unit: MeasureUnitId) => void`
 

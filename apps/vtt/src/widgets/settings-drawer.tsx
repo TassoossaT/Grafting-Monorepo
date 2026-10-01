@@ -45,6 +45,9 @@ export interface SettingsDrawerProps {
   /** What the table asks of its ruler: what catches, the angle's step and the round number a length lands on. */
   readonly rulerSettings: RulerSettings;
   readonly onRulerSettingsChange: (settings: RulerSettings) => void;
+  /** Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool. */
+  readonly graphOverlay: boolean;
+  readonly onGraphOverlayChange: (visible: boolean) => void;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
 }
@@ -116,6 +119,14 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           >
             {Object.values(MEASURE_UNITS).map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
           </select>
+        </label>
+      </Card>
+
+      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
+        <span className="gm-panel-card-title">Depuração</span>
+        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.78rem" }}>
+          <input type="checkbox" checked={props.graphOverlay} onChange={(event) => props.onGraphOverlayChange(event.target.checked)} />
+          <span>Pontos do grafo (só visualização)</span>
         </label>
       </Card>
 
