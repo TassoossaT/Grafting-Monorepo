@@ -34,7 +34,7 @@ import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./too
 function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
   const graph = runtime.getGraphSnapshot();
   const scene = { graph, topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
-  const motion = handleMotionAt(scene, id);
+  const motion = handleMotionOf(runtime, id);
   if (!motion || !carriesArrows(motion)) return undefined;
   if (globalHandleOf(id)) {
     const handle = shownGlobalHandleAt(scene, id);
@@ -42,6 +42,12 @@ function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getA
   }
   const node = graph.nodes.find((n) => n.id === id);
   return node && { id: node.id, position: node.position };
+}
+
+/** How the handle `id` may move, as the scene stands. */
+function handleMotionOf(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): ReturnType<typeof handleMotionAt> {
+  const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
+  return handleMotionAt(scene, id);
 }
 
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
@@ -94,6 +100,8 @@ interface ActiveGesture {
   readonly pointerId: number;
   readonly captureTarget: HTMLElement;
   readonly start: PointerSample;
+  /** Whether the ruler counts from where this gesture began: yes for a line drawn, and for a handle that moves freely; no for one held to a line. */
+  readonly rulesFrom: boolean;
   last: PointerSample;
   readonly samples: PointerSample[];
 }
@@ -319,7 +327,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
       // While a line is being drawn, digits are its length -- and come before the tool's own keys.
-      if (gestureRef.current !== null && typeKeyRef.current(event)) return;
+      // (A line begun by a click is as much under way as one dragged: the tool says so by giving its anchor.)
+      if ((gestureRef.current !== null || tool.rulerAnchor?.(ownedContext, optionsRef.current.toolParams[optionsRef.current.activeTool] as never) !== undefined) && typeKeyRef.current(event)) return;
       if (event.key === "Escape" && tool.onCancel) {
         tool.onCancel(ownedContext); release(); event.preventDefault(); return;
       }
@@ -407,9 +416,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       angleStepRef.current = (event.shiftKey ? FINE_ANGLE_STEP : settings.angleStep) * DEGREE;
       metersPerPixelRef.current = metersPerPixelAt(placed, event.currentTarget.getBoundingClientRect().height, VIEW_FOV_DEGREES);
       // A tool that lays itself out on a surface, or in a frame of its own, is not ruled by position here.
-      // The line being drawn runs from where the gesture began -- unless it began on a handle, which is moved, not drawn from.
+      // The line being drawn runs from where the tool says it begins -- the last corner or end it was given, so the line that follows
+      // the pointer between clicks is ruled like one dragged -- else from where the gesture began. A handle is moved, not drawn from:
+      // only one that moves freely is ruled from where it was grabbed, for how far and which way it goes.
       const drawing = gestureRef.current;
-      const origin = drawing && drawing.start.nodeId === undefined ? drawing.start.point : undefined;
+      const anchor = tool.rulerAnchor?.(ctx, optionsRef.current.toolParams[activeTool] as never);
+      const origin = anchor ?? (drawing && drawing.rulesFrom ? drawing.start.point : undefined);
       let ruled = tool.snapsToSurface || tool.usesRuler === false
         ? { sample: placed, feedback: NO_FEEDBACK }
         : ruler.ruleSample(placed, {
@@ -425,7 +437,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       pointerAtRef.current = { clientX: event.clientX, clientY: event.clientY };
       return { ...ruled.sample, screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
-    [ruler, typedLengthAt],
+    [ruler, typedLengthAt, ctx],
   );
 
   /**
@@ -473,7 +485,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // Only tools that actually react to a drag capture the pointer --
       // a click-only tool leaves the native click gesture alone.
       if (tool.onPointerMove !== undefined || tool.onPointerUp !== undefined) {
-        gestureRef.current = { pointerId: event.pointerId, captureTarget: event.currentTarget, start: sample, last: sample, samples: [sample] };
+        const motion = sample.nodeId === undefined ? undefined : handleMotionOf(optionsRef.current.runtime, sample.nodeId);
+        const rulesFrom = sample.nodeId === undefined || motion?.kind === "free" || motion?.kind === "plane";
+        gestureRef.current = { pointerId: event.pointerId, captureTarget: event.currentTarget, start: sample, rulesFrom, last: sample, samples: [sample] };
         event.currentTarget.setPointerCapture(event.pointerId);
       }
       tool.onPointerDown?.(ctx, sample, params);

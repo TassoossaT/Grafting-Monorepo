@@ -144,6 +144,14 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
   /** `false` for a tool the ruler leaves alone: terrain is what is built on, and a tool laying itself out in a frame of its own rules its points itself. */
   readonly usesRuler?: boolean;
+  /**
+   * Where the line this tool is drawing begins, while it waits for its next
+   * point: the last corner clicked, the last end of a draft. The ruler counts
+   * from it -- its length, its angle, the teeth and the protractor round it --
+   * whether or not a button is down, so the line that follows the pointer
+   * between clicks is ruled like one dragged. Absent while nothing is begun.
+   */
+  readonly rulerAnchor?: (ctx: ToolContext, params: ToolParamsFor<Id>) => ConstructionPosition | undefined;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);

@@ -26,7 +26,7 @@ const FOV = 38;
 const metersPerPixel = (camera) => (2 * camera * Math.tan((FOV * Math.PI) / 360)) / HEIGHT;
 
 /** A table with one floor 0..4 by 0..3, a probe tool that records what it is handed, and the real hook over them. */
-function table({ camera = 10, ...options } = {}) {
+function table({ camera = 10, anchor, ...options } = {}) {
   const mpp = metersPerPixel(camera);
   const fixture = sessionFixture();
   const { runtime, session } = fixture;
@@ -34,13 +34,18 @@ function table({ camera = 10, ...options } = {}) {
     { id: "f:0", position: { x: 0, y: 0, z: 0 } }, { id: "f:1", position: { x: 4, y: 0, z: 0 } },
     { id: "f:2", position: { x: 4, y: 0, z: 3 } }, { id: "f:3", position: { x: 0, y: 0, z: 3 } },
   ]);
-  const effects = [], listeners = new Map(), seen = { down: [], up: [], cancelled: 0, scale: [] };
+  const effects = [], listeners = new Map(), seen = { down: [], up: [], hover: [], shown: [], cancelled: 0, scale: [] };
+  // Where the tool's own line begins while it waits for its next point; settable, like a draft growing.
+  const state = { anchor };
   const oldWindow = globalThis.window, oldHTMLElement = globalThis.HTMLElement;
   globalThis.HTMLElement = class {};
   globalThis.window = { addEventListener: (k, f) => listeners.set(k, f), removeEventListener: (k) => listeners.delete(k) };
   const tool = {
     id: "probe",
     defaultParams: () => ({}),
+    previewOnHover: true,
+    rulerAnchor: () => state.anchor,
+    previewFor(gesture) { seen.hover.push(gesture.current); return undefined; },
     onPointerDown(ctx, sample) { seen.down.push(sample); seen.scale.push(ctx.rulerMetersPerPixel); seen.snap = ctx.rulerSnap; },
     onPointerMove() {},
     onPointerUp(_ctx, gesture) { seen.up.push(gesture.current); },
@@ -52,9 +57,10 @@ function table({ camera = 10, ...options } = {}) {
     subscribe: () => () => {},
     // The ground under a camera `camera` metres straight above the pointer: a pixel is as many metres as the lens makes it.
     pick: (_view, x, z) => ({ point: { x: x * mpp, y: 0, z: z * mpp }, ray: { origin: { x: x * mpp, y: camera, z: z * mpp }, direction: { x: 0, y: -1, z: 0 } } }),
-    clearPreview() {}, showPreview() {},
+    clearPreview() {}, showPreview(descriptor, channel) { seen.shown.push({ descriptor, channel }); },
   });
   const target = {
+    style: {},
     getBoundingClientRect: () => ({ left: 0, top: 0, height: HEIGHT }),
     setPointerCapture() {}, hasPointerCapture: () => false, releasePointerCapture() {},
   };
@@ -73,7 +79,7 @@ function table({ camera = 10, ...options } = {}) {
     globalThis.window = oldWindow; globalThis.HTMLElement = oldHTMLElement; delete globalThis.__rulerHook;
     session.free();
   };
-  return { handlers, event, key, seen, readouts, done, mpp };
+  return { handlers, event, key, seen, readouts, done, mpp, state };
 }
 
 const near = (a, b, message) => assert.ok(Math.abs(a - b) < 1e-6, `${message ?? ""} ${a} != ${b}`);
@@ -241,4 +247,55 @@ test("a round number chosen by the table is what a length lands on: whole units,
     off.handlers.onPointerUp(off.event(16.04, 10));
     near(off.seen.up[0].point.x, 16.04);
   } finally { off.done(); }
+});
+
+test("the line that follows the pointer between clicks is ruled like one dragged: counted from the tool's own anchor, no button down", () => {
+  const t = table({ anchor: { x: 10, y: 0, z: 10 } });
+  try {
+    const heading = (44 * Math.PI) / 180;
+    // No press: the pointer only moves, 10 m out and 44 degrees round from the anchor.
+    t.handlers.onPointerMove(t.event(10 + 10 * Math.cos(heading), 10 + 10 * Math.sin(heading)));
+    const seen = t.seen.hover.at(-1).point;
+    near(Math.atan2(seen.z - 10, seen.x - 10), Math.PI / 4, "on the 45 degree step of the line from the anchor");
+    near(Math.hypot(seen.x - 10, seen.z - 10), 10, "as long as it was");
+  } finally { t.done(); }
+});
+
+test("that line has its teeth and its protractor, drawn on the ruler's own channel", () => {
+  const t = table({ anchor: { x: 10, y: 0, z: 10 }, rulerSettings: { ...DEFAULT_RULER_SETTINGS, lengthStep: 1 } });
+  try {
+    t.handlers.onPointerMove(t.event(16.5, 10));
+    const drawn = t.seen.shown.filter((entry) => entry.channel === "ruler-guides").at(-1);
+    assert.ok(drawn, "the ruler drew");
+    // Six teeth along 6.5 m, whole metres, and the protractor's marks round the anchor: well over the teeth alone.
+    assert.ok(drawn.descriptor.positions.length / 6 > 6 + 18, `segments: ${drawn.descriptor.positions.length / 6}`);
+    assert.ok(t.readouts.filter(Boolean).some((r) => r.labels.some((label) => label.includes("6.50 m"))), JSON.stringify(t.readouts));
+  } finally { t.done(); }
+});
+
+test("a length typed between clicks shapes the line to the pointer, and the click that follows lands exactly there", () => {
+  const t = table({ anchor: { x: 10, y: 0, z: 10 } });
+  try {
+    t.handlers.onPointerMove(t.event(13, 10));
+    // No gesture: the tool's anchor is what says a line is under way, and the digit is its length.
+    assert.equal(t.key("5"), true, "taken as the length of the line");
+    near(t.seen.hover.at(-1).point.x, 15, "applied at once, with the pointer still");
+    t.handlers.onPointerDown(t.event(13, 10));
+    near(t.seen.down.at(-1).point.x, 15, "the click lands where the typed length put it");
+    t.handlers.onPointerUp(t.event(13, 10));
+    // The number is spent with the click: the next line is free again.
+    t.handlers.onPointerDown(t.event(13, 10));
+    near(t.seen.down.at(-1).point.x, 13);
+  } finally { t.done(); }
+});
+
+test("with the tool's anchor gone, the line is no longer counted from it, and digits are left alone", () => {
+  const t = table({ anchor: { x: 10, y: 0, z: 10 } });
+  try {
+    t.state.anchor = undefined;
+    const heading = (44 * Math.PI) / 180;
+    t.handlers.onPointerMove(t.event(10 + 10 * Math.cos(heading), 10 + 10 * Math.sin(heading)));
+    near(Math.atan2(t.seen.hover.at(-1).point.z - 10, t.seen.hover.at(-1).point.x - 10), heading, "no step: nothing to count from");
+    assert.equal(t.key("5"), false);
+  } finally { t.done(); }
 });

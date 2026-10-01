@@ -263,6 +263,8 @@ export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: 
     previewOnHover: true,
     defaultParams: options.defaultParams,
     drafting: (ctx) => (drafts.get(ctx.runtime)?.ends.length ?? 0) > 0,
+    // The next stretch runs from the last end clicked.
+    rulerAnchor: (ctx) => drafts.get(ctx.runtime)?.ends.at(-1)?.point,
     previewFor(gesture, params, ctx) {
       if (presses.has(ctx.runtime)) return undefined;
       const draft = draftOf(ctx, params);

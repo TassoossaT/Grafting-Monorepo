@@ -40,7 +40,7 @@ export interface ContourStrokeOptions<P extends ContourStrokeParams> {
  * looks (`build-frame.ts`) -- never the world's fixed axes. What the
  * outline becomes is the tool's own business.
  */
-export function contourStroke<K extends ConstructionToolId, P extends ContourStrokeParams>(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel"> {
+export function contourStroke<K extends ConstructionToolId, P extends ContourStrokeParams>(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel" | "rulerAnchor"> {
   const drafts = new WeakMap<object, { key: string; points: PointerSample[]; frame?: BuildFrame }>();
   const frames = new WeakMap<PointerSample, BuildFrame>();
   const draftOf = (ctx: ToolContext, params: P) => {
@@ -84,6 +84,13 @@ export function contourStroke<K extends ConstructionToolId, P extends ContourStr
     return points.map((start, i) => ({ start, end: points[(i + 1) % points.length]!, geometry: { kind: "line" } }));
   };
   return {
+    // A polygon's next side runs from the last corner clicked. Asked often, so it only looks: it never starts a draft.
+    rulerAnchor(ctx, params) {
+      const own = params as unknown as P;
+      if ((own.shape ?? "rectangle") !== "polygon") return undefined;
+      const current = drafts.get(ctx.runtime);
+      return current && current.key === JSON.stringify(own) ? current.points.at(-1)?.point : undefined;
+    },
     onCancel(ctx) {
       drafts.delete(ctx.runtime);
     },
