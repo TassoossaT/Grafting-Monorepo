@@ -173,6 +173,8 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
 
   /** What the drag joined on its last move: shown with its measures. */
   let joined: RulerGuide[] = [];
+  /** What the lift caught on its last move. */
+  let lifted: RulerGuide[] = [];
 
   return {
     move(gesture) {
@@ -191,6 +193,13 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
         params.snap.show(ctx, snap);
         // What it joined is named, like everything else the ruler catches: the road's node, or a place along its span.
         if (snap) joined = [{ kind: "point", at: snap.point, node: snap.nodeId ?? "", role: snap.span ? "span" : "node" }];
+      }
+      // Raised or lowered, a point lands on the heights other structures stand at, or on a round number above the ground -- the ruler's lift, as every height handle has.
+      lifted = [];
+      if (!isWidthDrag && Math.abs(target.y - sample.point.y) > 1e-4) {
+        const lift = rulerOf(ctx).lift({ dragged: target, standing: target.y, base: 0, links: rulerOf(ctx).linksWithout(new Set()), rounds: true });
+        target = { ...target, y: lift.y };
+        lifted = [...lift.guides];
       }
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
@@ -217,7 +226,12 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
 
       // What the drag measures, in the table's unit: a road's width, or how far a point went and how high it stands.
       const ruler = rulerOf(ctx);
-      ruler.show({ guides: joined, measures: isWidthDrag ? [{ kind: "size", name: "largura", meters: currentWidth }] : ruler.measure({ kind: "move" }, sample.point, target) });
+      const rose = !isWidthDrag && Math.abs(target.y - sample.point.y) > 1e-4;
+      ruler.show({
+        guides: [...joined, ...lifted],
+        measures: isWidthDrag ? [{ kind: "size", name: "largura", meters: currentWidth }]
+          : [...ruler.measure({ kind: "move" }, sample.point, target), ...(rose ? ruler.measure({ kind: "height", base: 0 }, sample.point, target) : [])],
+      });
 
       try {
         if (isWidthDrag && resolvedCurve) {

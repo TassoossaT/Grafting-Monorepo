@@ -271,6 +271,7 @@ function measureLabel(measure: RulerMeasure, unit: MeasureUnitId): string {
       const degreesOf = (Math.atan2(Math.abs(measure.rise), measure.run) * 180) / Math.PI;
       return `inclinação ${percent >= 0 ? "+" : "−"}${Math.abs(percent).toFixed(1)}% · ${degreesOf.toFixed(1)}°`;
     }
+    case "was": return `${measure.name} ${formatLength(measure.was, unit)} → ${formatLength(measure.now, unit)} (${signed(measure.now - measure.was, (v) => formatLength(v, unit))})`;
     case "change": return `${measure.name} ${signed(measure.meters, (v) => formatLength(v, unit))}`;
     case "angle": {
       const value = `${measure.name ?? "∠"} ${measure.degrees < 0 ? "−" : ""}${degrees(measure.degrees)}`;

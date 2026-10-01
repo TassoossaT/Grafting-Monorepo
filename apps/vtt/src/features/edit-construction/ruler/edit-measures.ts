@@ -54,7 +54,7 @@ export function measuresOfEdit(what: EditMeasureKind, from: ConstructionPosition
     case "side":
       return [{ kind: "change", name: "lado", meters: delta.x * what.direction.x + delta.z * what.direction.z }];
     case "height":
-      return [{ kind: "height", meters: at.y - what.base, level: at.y }, { kind: "change", name: "Δ", meters: delta.y }];
+      return [{ kind: "height", meters: at.y - what.base, level: at.y }, { kind: "was", name: "altura", was: from.y - what.base, now: at.y - what.base }, { kind: "change", name: "Δ", meters: delta.y }];
     case "slope":
       return [{ kind: "change", name: "inclinação", meters: delta.y }];
     case "radius":

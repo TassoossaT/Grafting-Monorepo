@@ -101,6 +101,8 @@ export type RulerMeasure =
   | { readonly kind: "grade"; readonly rise: number; readonly run: number }
   /** How big something is now -- a road's width, say; `name` says what. */
   | { readonly kind: "size"; readonly name: string; readonly meters: number }
+  /** What a size or a distance was before the edit and is now: the difference from where the edit began. */
+  | { readonly kind: "was"; readonly name: string; readonly was: number; readonly now: number }
   /** How much an edit changes a size or a distance, with its sign; `name` says which. */
   | { readonly kind: "change"; readonly name: string; readonly meters: number }
   /** An angle, in degrees: how far a line runs from the nearest standing side's direction, or a turn. `name` says which. */

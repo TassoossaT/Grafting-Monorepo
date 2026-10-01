@@ -346,3 +346,33 @@ test("dragging a wall's top shows the grade of the run beside it", () => {
     assert.ok(grade && grade.rise > 0 && grade.run > 0, JSON.stringify(shown.filter(Boolean).at(-1).measures));
   } finally { f.session.free(); }
 });
+
+test("dragging a wall's foot also says what its side was and what it is now, and how far the vertex went", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const [left, right] = posts(f.runtime).map((p) => p.foot);
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, right.x));
+    drag(f, handle, { x: 0.3, y: 0, z: 2 });
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const was = measures.find((m) => m.kind === "was");
+    assert.ok(was, JSON.stringify(measures));
+    assert.ok(close(was.was, Math.hypot(right.x - left.x, right.z - left.z), 1e-4), "what the side was before the edit");
+    assert.ok(was.now > was.was, "and what it is now");
+    assert.ok(measures.some((m) => m.kind === "change" && m.name === "desloc." && m.meters > 0));
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's top says the height it was and the height it is", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const standing = posts(f.runtime)[1];
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    drag(f, handle, { x: 0, y: 1, z: 0 }, 1);
+    const was = shown.filter(Boolean).at(-1).measures.find((m) => m.kind === "was");
+    assert.ok(was && close(was.now - was.was, 1, 0.2), JSON.stringify(shown.filter(Boolean).at(-1).measures));
+  } finally { f.session.free(); }
+});

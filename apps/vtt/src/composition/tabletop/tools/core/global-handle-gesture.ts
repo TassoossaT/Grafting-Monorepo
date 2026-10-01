@@ -379,16 +379,18 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   const snap = handle.snaps === true && handle.faces !== undefined && params?.mode !== "elevation"
     ? { anchors: snapAnchorsOf(scene, handle), links: snapLinksOf(scene, handle) }
     : undefined;
+  /** What this kind of handle measures: declared with the kind, so no gesture carries its own list. */
+  const measurement = HANDLE_MEASUREMENT[handle.kind];
   // Lifting lands on the heights other structures stand at -- the ruler's levels -- whatever lifts: a top, a ridge, an end.
-  const lifting = handle.faces !== undefined && (handle.motion.kind === "vertical" || params?.mode === "elevation") ? snapLinksOf(scene, handle) : undefined;
+  // A handle declared as a height lifts whether or not it belongs to faces: a road's end, a ramp's rise.
+  const lifts = measurement === "height" || handle.motion.kind === "vertical" || params?.mode === "elevation";
+  const lifting = lifts ? (handle.faces !== undefined ? snapLinksOf(scene, handle) : ruler.linksWithout(new Set())) : undefined;
   let snapped: OutlineSnap | undefined;
   // The height the structure rises from, as it stood when the drag began: the lowest of its nodes.
   const base = ruler.base(
     (handle.faces ? scene.topologies.filter((topology) => handle.faces!.includes(faceKey(topology))).flatMap((topology) => topology.nodes.map((node) => node.position.y)) : scene.graph.nodes.filter((node) => handle.nodeIds.includes(node.id)).map((node) => node.position.y)),
     handle.pivot.y,
   );
-  /** What this kind of handle measures: declared with the kind, so no gesture carries its own list. */
-  const measurement = HANDLE_MEASUREMENT[handle.kind];
   /** What it is read against, declared the same way: where it was grabbed, the sides it edits, the runs beside it, or nothing. */
   const reference = HANDLE_REFERENCE[handle.kind];
   // The sides it edits are read from their far ends -- which stay -- never from where the vertex began, which is gone as soon as it moves.
@@ -410,7 +412,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
     const dragged = orbit && turn?.turns !== undefined ? rotateInPlan(handle!.position, orbit.center, angle) : raw.position;
     // Read where the structure stands -- its pivot -- not where the handle is drawn, which stands off it.
     const standing = handle!.pivot.y + (dragged.y - handle!.position.y);
-    const lifted = ruler.lift({ dragged, standing, base, ...(lifting ? { links: lifting } : {}), rounds: measurement === "height" && (handle!.motion.kind === "vertical" || params?.mode === "elevation") });
+    const lifted = ruler.lift({ dragged, standing, base, ...(lifting ? { links: lifting } : {}), rounds: measurement === "height" });
     const free = { ...dragged, y: lifted.y };
     snapped = snap ? ruler.drag(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links) : undefined;
     let at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
@@ -424,7 +426,10 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       // The vertex against the sides it edits: ruled from their fixed ends to where it now stands, unless something already joined it.
       const ruled = ruler.edge({ at: standingAt(at), fixed: neighbours.fixed, own: neighbours.own, links: edgeLinks, rule: !snapped?.joins });
       at = { x: handle!.position.x + ruled.position.x - pivot.x, y: at.y, z: handle!.position.z + ruled.position.z - pivot.z };
-      made = ruled.measures;
+      // And what each side was, so the edit reads as a difference from where it began, not only as what it left.
+      const was = neighbours.fixed.map((n) => ({ kind: "was" as const, name: "lado", was: Math.hypot(pivot.x - n.position.x, pivot.z - n.position.z), now: Math.hypot(ruled.position.x - n.position.x, ruled.position.z - n.position.z) }));
+      const moved = Math.hypot(ruled.position.x - pivot.x, ruled.position.z - pivot.z);
+      made = [...ruled.measures, ...was, ...(moved > 1e-4 ? [{ kind: "change" as const, name: "desloc.", meters: moved }] : [])];
       edgeGuides = ruled.guides;
     } else if (reference === "grade" && neighbours) {
       // A top against the runs beside it: how high it stands, and how steeply each run climbs to it.

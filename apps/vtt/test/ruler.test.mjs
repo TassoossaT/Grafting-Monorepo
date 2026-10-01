@@ -154,7 +154,8 @@ test("units convert both ways and write themselves", () => {
 
 test("an edit measures the exact size it leaves, not only the change", () => {
   const from = at(0, 0, 3), to = at(0, 0, 4.5);
-  const [height, change] = measuresOfEdit({ kind: "height", base: 0 }, from, to);
+  const [height, was, change] = measuresOfEdit({ kind: "height", base: 0 }, from, to);
+  assert.deepEqual(was, { kind: "was", name: "altura", was: 3, now: 4.5 }, "and what it was, so the edit reads as a difference");
   assert.deepEqual(height, { kind: "height", meters: 4.5, level: 4.5 });
   assert.deepEqual(change, { kind: "change", name: "Δ", meters: 1.5 });
   // A side pushed out reads along its own direction, signed.

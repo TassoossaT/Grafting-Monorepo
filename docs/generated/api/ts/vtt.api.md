@@ -6544,7 +6544,7 @@ Where the point stands: snapped when `snap` was asked for and something caught, 
 
 ### `type vtt.resolve.RulerKind = typeof RULER_KINDS[number]`
 
-### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { kind: "height"; level: number; meters: number } | { kind: "grade"; rise: number; run: number } | { kind: "size"; meters: number; name: string } | { kind: "change"; meters: number; name: string } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
+### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { kind: "height"; level: number; meters: number } | { kind: "grade"; rise: number; run: number } | { kind: "size"; meters: number; name: string } | { kind: "was"; name: string; now: number; was: number } | { kind: "change"; meters: number; name: string } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
 
 Something worth saying about what is built or edited. Distances are always
 in metres -- `formatLength` writes them in the table's unit.
