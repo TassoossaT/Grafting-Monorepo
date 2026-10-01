@@ -25,5 +25,6 @@
       "dependsOn": ["^build"]
     }
   },
-  "analytics": true
+  "analytics": true,
+  "maxCacheSize": "2GB"
 }

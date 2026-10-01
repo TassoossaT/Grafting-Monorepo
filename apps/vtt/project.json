@@ -22,6 +22,7 @@
     "dev": {
       "executor": "nx:run-commands",
       "dependsOn": ["render-3d:build", "construction-wasm:build", "generation-wasm:build", "ui:compile"],
+      "continuous": true,
       "options": { "command": "pnpm --filter @grafting/vtt dev" },
       "cache": false
     },
