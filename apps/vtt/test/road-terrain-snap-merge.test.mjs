@@ -53,7 +53,7 @@ function drawRoad(f, samples, operationId) {
     { operationId, tableId: "test", initiatedBy: "path-brush" }
   );
   const plan = planPathCloudMutation({
-    bezier: f.runtime, field: f.runtime, tableId: "test", snapToGrid: false,
+    bezier: f.runtime, field: f.runtime, tableId: "test", rulerSnap: false,
     graphSnapshot: f.runtime.getGraphSnapshot(),
     regionTopologies: f.runtime.getAllRegionTopologies(),
     coverageFor: () => [], effect, tolerance: 0.025,

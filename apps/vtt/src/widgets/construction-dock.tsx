@@ -15,8 +15,8 @@ export interface ConstructionDockProps {
   readonly canRedo: boolean;
   readonly onUndo: () => void;
   readonly onRedo: () => void;
-  readonly snapToGrid: boolean;
-  readonly onSnapToGridChange: (snap: boolean) => void;
+  readonly rulerSnap: boolean;
+  readonly onRulerSnapChange: (snap: boolean) => void;
   readonly onToggleSettings?: () => void;
   readonly settingsOpen?: boolean;
 }
@@ -51,8 +51,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
     canRedo,
     onUndo,
     onRedo,
-    snapToGrid,
-    onSnapToGridChange,
+    rulerSnap,
+    onRulerSnapChange,
     onToggleSettings,
     settingsOpen,
   } = props;

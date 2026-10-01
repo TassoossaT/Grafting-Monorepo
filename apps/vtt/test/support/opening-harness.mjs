@@ -48,7 +48,7 @@ export async function harness() {
   const feedback = [];
   const paramUpdates = [];
   const ctx = {
-    runtime, history: createEditHistoryStack(), tableId: "t", snapToGrid: false, structureEditParams: { mode: "shape" },
+    runtime, history: createEditHistoryStack(), tableId: "t", rulerSnap: false, structureEditParams: { mode: "shape" },
     nextSequence: () => ++seq, reportSelection() {}, reportFeedback: (f) => f && feedback.push(f),
     updateToolParams: (toolId, update) => paramUpdates.push({ toolId, update }),
   };

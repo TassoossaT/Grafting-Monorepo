@@ -82,19 +82,18 @@ export interface ToolContext {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   /**
-   * Whether the grid magnet is on. A fact about the session, not a
-   * behaviour: the dispatcher has already rounded every ground point to a
-   * grid intersection by the time a tool sees it, and this only says so, so
-   * a tool that reads meaning into where its samples came from can. What
-   * any tool does with it is that tool's own business.
+   * Whether the ruler's snap is on. The ruler itself is always there while
+   * building -- its guides and measures show either way; this only says
+   * whether what it catches is taken. The dispatcher has already ruled every
+   * ground point by the time a tool sees it, and a tool that rules a point of
+   * its own (a build frame's corner, a far side) asks `ruler-session.ts`
+   * rather than re-deriving a link.
    */
-  readonly snapToGrid: boolean;
-  /** The grid's step, when snapping; 1 when absent. */
-  readonly gridUnit?: number;
+  readonly rulerSnap: boolean;
   /**
    * How a grab on an existing structure behaves -- shape/elevation mode and
    * the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
-   * Ambient like `snapToGrid`: every construction tool can grab and edit
+   * Ambient like `rulerSnap`: every construction tool can grab and edit
    * whatever it owns (`structure-edit-behavior.ts`), so this is no longer
    * one tool's own params.
    */
@@ -133,7 +132,7 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly handlesOnHover?: boolean;
   /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
   readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
-  readonly useGridSnap?: boolean;
+  readonly usesRuler?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);

@@ -26,7 +26,7 @@ const WALL = panelTopology("wall-1", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } 
  */
 let sequence = 0;
 
-function contextFor(topologies, snapToGrid = false) {
+function contextFor(topologies, rulerSnap = false) {
   const weldCalls = [];
   const patches = [];
   return {
@@ -65,7 +65,7 @@ function contextFor(topologies, snapToGrid = false) {
       },
       history: undefined,
       tableId: TABLE_ID,
-      snapToGrid,
+      rulerSnap,
       nextSequence: () => (sequence += 1),
       reportSelection: () => {},
       reportFeedback: () => {},

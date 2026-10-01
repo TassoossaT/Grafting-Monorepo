@@ -8,8 +8,8 @@ import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
 
-import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
+import { createRulerSession, NO_FEEDBACK, type RulerFeedback } from "./tools/core/ruler-session.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
@@ -54,27 +54,14 @@ export interface UseConstructionPointerOptions {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   readonly viewId: RenderViewId | undefined;
-  /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
-  readonly snapToGrid: boolean;
+  /** Whether what the ruler catches is taken: a resolved point (other than an existing node handle -- those stay precise) lands on the corner, side or line-up it is near before any tool sees it. The ruler's guides and measures show either way. */
+  readonly rulerSnap: boolean;
   /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
   readonly structureEditParams: StructureEditParams;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
   readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
   /** Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel. */
   readonly onToolParamsUpdate?: <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => void;
-}
-
-function snappedTo(value: number, unit: number): number {
-  return Math.round(value / unit) * unit;
-}
-
-/** A node-handle hit is never snapped -- moving an existing node stays precise; only newly-resolved ground points snap. */
-function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
-  if (!snapToGrid || sample.nodeId !== undefined) return sample;
-  return {
-    ...sample,
-    point: { x: snappedTo(sample.point.x, GRID_SNAP_UNIT), y: sample.point.y, z: snappedTo(sample.point.z, GRID_SNAP_UNIT) },
-  };
 }
 
 export interface ConstructionPointerHandlers {
@@ -122,6 +109,11 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const lastFocusAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  /** What stands, as links -- read once until the table changes. */
+  const ruler = useMemo(() => createRulerSession(() => optionsRef.current.runtime.getAllRegionTopologies()), []);
+  /** What the ruler shows for the point it last ruled. */
+  const feedbackRef = useRef<RulerFeedback>(NO_FEEDBACK);
+  useEffect(() => ruler.invalidate(), [ruler, options.runtime]);
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
@@ -151,9 +143,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       get tableId() {
         return optionsRef.current.tableId;
       },
-      gridUnit: GRID_SNAP_UNIT,
-      get snapToGrid() {
-        return optionsRef.current.snapToGrid;
+      get rulerSnap() {
+        return optionsRef.current.rulerSnap;
       },
       get structureEditParams() {
         return optionsRef.current.structureEditParams;
@@ -292,6 +283,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     refreshEdgeOverlay();
     let drawn = runtime.getSnapshot().status === "ready";
     const unsubscribe = runtime.subscribe(() => {
+      ruler.invalidate();
       if (selectedPoint.current && !manipulatorGesture.current) {
         const node = spineHandleAt(runtime, selectedPoint.current);
         ctx.reportSelection(node ? { id: node.id, point: node.position } : undefined);
@@ -301,19 +293,25 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       refreshEdgeOverlay();
     });
     return unsubscribe;
-  }, [options.runtime, refreshEdgeOverlay, ctx]);
+  }, [options.runtime, refreshEdgeOverlay, ctx, ruler]);
 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean }): PointerSample | undefined => {
-      const { viewId, runtime, snapToGrid, activeTool } = optionsRef.current;
+      const { viewId, runtime, rulerSnap, activeTool } = optionsRef.current;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
       if (hit === undefined) return undefined;
-      const snap = snapToGrid && !toolFor(activeTool).snapsToSurface && toolFor(activeTool).useGridSnap !== false;
-      return { ...applySnap(withFacePlane(hit, runtime.getAllRegionTopologies()), snap), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
+      const tool = toolFor(activeTool);
+      const placed = withFacePlane(hit, runtime.getAllRegionTopologies());
+      // A tool that lays itself out on a surface, or in a frame of its own, is not ruled by position here.
+      const ruled = tool.snapsToSurface || tool.usesRuler === false
+        ? { sample: placed, feedback: NO_FEEDBACK }
+        : ruler.ruleSample(placed, { snap: rulerSnap, ...(gestureRef.current ? { origin: gestureRef.current.start.point } : {}) });
+      feedbackRef.current = ruled.feedback;
+      return { ...ruled.sample, screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
-    [],
+    [ruler],
   );
 
   /**

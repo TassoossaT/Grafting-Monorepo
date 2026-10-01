@@ -82,7 +82,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [tool, setTool] = useState<EditTool>("navigate");
   const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
   const [structureEditParams, setStructureEditParams] = useState<StructureEditParams>(DEFAULT_STRUCTURE_EDIT_PARAMS);
-  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [rulerSnap, setRulerSnap] = useState(true);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -181,7 +181,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     history,
     tableId,
     viewId: viewIdRef.current,
-    snapToGrid,
+    rulerSnap,
     structureEditParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
@@ -195,8 +195,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     onRedo: handleRedo,
     onToolChange: setTool,
     ready: current.status === "ready",
-    snapToGrid,
-    onSnapToGridChange: setSnapToGrid,
+    rulerSnap,
+    onRulerSnapChange: setRulerSnap,
   });
 
   return (
@@ -291,8 +291,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           canRedo={historyState.canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          snapToGrid={snapToGrid}
-          onSnapToGridChange={setSnapToGrid}
+          rulerSnap={rulerSnap}
+          onRulerSnapChange={setRulerSnap}
         />
 
         <ConstructionDock
@@ -305,8 +305,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           canRedo={historyState.canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          snapToGrid={snapToGrid}
-          onSnapToGridChange={setSnapToGrid}
+          rulerSnap={rulerSnap}
+          onRulerSnapChange={setRulerSnap}
           onToggleSettings={() => setSettingsOpen((prev) => !prev)}
           settingsOpen={settingsOpen}
         />

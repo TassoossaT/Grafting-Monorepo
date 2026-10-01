@@ -554,11 +554,11 @@ test("a roof holding a subroof keeps it when a wing is fused onto it, and loses 
 });
 
 for (const camera of [{ x: 4, y: 14, z: -10 }, { x: 4, y: 8, z: -8 }, { x: -4, y: 10, z: -6 }]) {
-  test(`a roof drawn over a leaf lands under the cursor, snapped as on the ground, whatever the camera (${JSON.stringify(camera)})`, () => {
+  test(`a roof drawn over a leaf lands exactly under the cursor, whatever the camera (${JSON.stringify(camera)})`, () => {
     const value = roofed(2);
     const { ctx, runtime, session } = value;
-    // As the table plays: grid snapping on, one-metre cells; the pointer's hit snapped, its ray not.
-    Object.assign(ctx, { snapToGrid: true, gridUnit: 1 });
+    // As the table plays: the ruler has nothing near to catch, so the pointer is as it is.
+    Object.assign(ctx, { rulerSnap: true });
     try {
       const leaf = roofs(runtime).find((face) => !face.props.roofFace.upright && face.nodes.some((node) => node.position.z < 1e-6));
       const over = (x, z) => {
@@ -578,7 +578,7 @@ for (const camera of [{ x: 4, y: 14, z: -10 }, { x: 4, y: 8, z: -8 }, { x: -4, y
       assert.equal(groups(runtime).size, 1, "a roof on the roof, never a wing slid out behind it");
       const outline = roofs(runtime)[0].props.roof.subroofs?.[0]?.footprints[0].outer ?? [];
       const xs = outline.map(([x]) => x), zs = outline.map(([, z]) => z);
-      assert.deepEqual([Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)].map((v) => Math.round(v * 1e6) / 1e6), [3, 6, 1, 3], `drawn where the cursor was: ${JSON.stringify(outline)}`);
+      assert.deepEqual([Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)].map((v) => Math.round(v * 1e6) / 1e6), [3, 6, 1, 2.9], `drawn where the cursor was: ${JSON.stringify(outline)}`);
     } finally { session.free(); }
   });
 }

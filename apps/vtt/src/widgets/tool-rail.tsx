@@ -13,8 +13,8 @@ export interface ToolRailProps {
   readonly canRedo: boolean;
   readonly onUndo: () => void;
   readonly onRedo: () => void;
-  readonly snapToGrid: boolean;
-  readonly onSnapToGridChange: (snap: boolean) => void;
+  readonly rulerSnap: boolean;
+  readonly onRulerSnapChange: (snap: boolean) => void;
 }
 
 /**
@@ -45,11 +45,11 @@ export function ToolRail(props: ToolRailProps) {
           onClick: () => props.onToolChange("navigate"),
         },
         {
-          key: "snap-to-grid",
+          key: "ruler-snap",
           icon: "🧲",
-          tooltip: props.snapToGrid ? "Ímã do Grid: Ativado (tecla G)" : "Ímã do Grid: Desativado (tecla G)",
-          tone: props.snapToGrid ? "primary" : "default",
-          onClick: () => props.onSnapToGridChange(!props.snapToGrid),
+          tooltip: props.rulerSnap ? "Régua: encaixe ligado (tecla G)" : "Régua: encaixe desligado (tecla G)",
+          tone: props.rulerSnap ? "primary" : "default",
+          onClick: () => props.onRulerSnapChange(!props.rulerSnap),
         },
         {
           key: "undo",

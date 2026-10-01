@@ -2,6 +2,7 @@ import { hasTrait, nearestOnSegment } from "../../../../features/edit-constructi
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
+import { rulePointFor } from "./ruler-session.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
@@ -27,7 +28,6 @@ const SIDE_REACH = 0.6;
 const CORNER_REACH = 0.35;
 /** The camera's heading is taken in steps of this much, so shapes drawn apart from each other still line up. */
 const HEADING_STEP = Math.PI / 12;
-const WORLD_UNIT = 1;
 
 const frameAlong = (origin: ConstructionPosition, dx: number, dz: number, start?: ConstructionPosition): BuildFrame => {
   const length = Math.hypot(dx, dz) || 1;
@@ -74,14 +74,9 @@ export function buildFrameAt(ctx: ToolContext, sample: PointerSample): BuildFram
   return frameAlong({ x: 0, y: 0, z: 0 }, Math.cos(heading), Math.sin(heading));
 }
 
-/** `p` on the frame's grid, when the table snaps to one; unchanged otherwise. */
+/** `p` ruled along the frame's own directions -- on a corner, a side, or in line with one -- when the ruler's snap is on; unchanged otherwise. */
 export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition {
-  if (!ctx.snapToGrid) return p;
-  const unit = ctx.gridUnit ?? WORLD_UNIT;
-  const dx = p.x - frame.origin.x, dz = p.z - frame.origin.z;
-  const along = Math.round((dx * frame.u.x + dz * frame.u.z) / unit) * unit;
-  const across = Math.round((dx * frame.v.x + dz * frame.v.z) / unit) * unit;
-  return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
+  return rulePointFor(ctx, p, { axes: [frame.u, frame.v] });
 }
 
 /** Where the pointer is on the level `y` a shape is drawn at -- see {@link pointerAtHeight}. */
@@ -126,13 +121,11 @@ function limitsNear(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition
   return { along, across };
 }
 
-/** `length` landed on the nearest limit within reach, else on the grid when the table snaps. */
-function landed(ctx: ToolContext, length: number, limits: readonly number[]): number {
+/** `length` landed on the nearest built side within reach -- flush with what stands, whatever the ruler's snap says -- else as it is. */
+function landed(length: number, limits: readonly number[]): number {
   let best: number | undefined;
   for (const limit of limits) if (Math.abs(limit - length) <= LIMIT_REACH && Math.abs(limit) > 1e-6 && (best === undefined || Math.abs(limit - length) < Math.abs(best - length))) best = limit;
-  if (best !== undefined) return best;
-  const unit = ctx.gridUnit ?? WORLD_UNIT;
-  return ctx.snapToGrid ? Math.round(length / unit) * unit : length;
+  return best ?? length;
 }
 
 /**
@@ -145,7 +138,7 @@ function landed(ctx: ToolContext, length: number, limits: readonly number[]): nu
 export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
   const dx = b.x - a.x, dz = b.z - a.z;
   const limits = limitsNear(ctx, frame, a, b);
-  const along = landed(ctx, dx * frame.u.x + dz * frame.u.z, limits.along), across = landed(ctx, dx * frame.v.x + dz * frame.v.z, limits.across);
+  const along = landed(dx * frame.u.x + dz * frame.u.z, limits.along), across = landed(dx * frame.v.x + dz * frame.v.z, limits.across);
   if (Math.abs(along) < 1e-5 || Math.abs(across) < 1e-5) return undefined;
   const at = (s: number, t: number) => ({ x: a.x + frame.u.x * s + frame.v.x * t, y: elevation, z: a.z + frame.u.z * s + frame.v.z * t });
   return [at(0, 0), at(along, 0), at(along, across), at(0, across)];
