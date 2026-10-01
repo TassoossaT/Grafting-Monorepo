@@ -129,6 +129,16 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     try { window.localStorage.setItem(graphOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
   }, [graphOverlayKey]);
   useEffect(() => { runtime.setGraphOverlay?.(graphOverlay); }, [runtime, graphOverlay]);
+  // The lines drawn along the edges, by role, are the other half of the same topology view: shown or hidden, no tool changes. Kept per table, on by default.
+  const [edgeOverlay, setEdgeOverlay] = useState(true);
+  const edgeOverlayKey = `grafting:table:${tableId}:edge-overlay`;
+  useEffect(() => {
+    try { setEdgeOverlay(window.localStorage.getItem(edgeOverlayKey) !== "off"); } catch { /* storage blocked: the default stands */ }
+  }, [edgeOverlayKey]);
+  const handleEdgeOverlayChange = useCallback((visible: boolean) => {
+    setEdgeOverlay(visible);
+    try { window.localStorage.setItem(edgeOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
+  }, [edgeOverlayKey]);
   // The height cut is a view of the table, not a setting kept with it: it starts off every visit, so a table never opens with part of its map hidden.
   const [heightCut, setHeightCut] = useState<number | undefined>(undefined);
   useEffect(() => { runtime.setHeightCut?.(heightCut); }, [runtime, heightCut]);
@@ -235,6 +245,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     rulerSettings,
     onRulerReadout: setRulerReadout,
     structureEditParams,
+    edgeOverlay,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
     onToolParamsUpdate: handleToolParamsUpdate,
@@ -376,6 +387,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onRulerSettingsChange={handleRulerSettingsChange}
           graphOverlay={graphOverlay}
           onGraphOverlayChange={handleGraphOverlayChange}
+          edgeOverlay={edgeOverlay}
+          onEdgeOverlayChange={handleEdgeOverlayChange}
           heightCut={heightCut}
           onHeightCutChange={setHeightCut}
         />

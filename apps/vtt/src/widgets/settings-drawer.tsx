@@ -53,6 +53,9 @@ export interface SettingsDrawerProps {
   /** Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool. */
   readonly graphOverlay: boolean;
   readonly onGraphOverlayChange: (visible: boolean) => void;
+  /** Whether the lines drawn along the edges, by role, are shown: the other half of the topology view. */
+  readonly edgeOverlay: boolean;
+  readonly onEdgeOverlayChange: (visible: boolean) => void;
   /** The height above which the map is hidden, to see and edit inside roofed or upper-floored structures; `undefined` shows it all. */
   readonly heightCut: number | undefined;
   readonly onHeightCutChange: (height: number | undefined) => void;
@@ -164,10 +167,14 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       </Card>
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
-        <span className="gm-panel-card-title">Depuração</span>
+        <span className="gm-panel-card-title">Topologia (só visualização)</span>
         <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.78rem" }}>
           <input type="checkbox" checked={props.graphOverlay} onChange={(event) => props.onGraphOverlayChange(event.target.checked)} />
-          <span>Pontos do grafo (só visualização)</span>
+          <span>Pontos dos vértices</span>
+        </label>
+        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.78rem" }}>
+          <input type="checkbox" checked={props.edgeOverlay} onChange={(event) => props.onEdgeOverlayChange(event.target.checked)} />
+          <span>Linhas das arestas, por papel</span>
         </label>
       </Card>
 

@@ -95,6 +95,8 @@ export interface UseConstructionPointerOptions {
   readonly onRulerReadout?: (readout: RulerReadout | undefined) => void;
   /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
   readonly structureEditParams: StructureEditParams;
+  /** Whether the table's edges are drawn, role by role: a view for reading the topology, which changes no tool. Drawn when absent. */
+  readonly edgeOverlay?: boolean;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
   readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
   /** Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel. */
@@ -333,6 +335,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     else if (!focusRef.current) { focusRef.current = NO_FOCUS; runtime.setHandleFocus?.(NO_FOCUS); }
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
+    if (optionsRef.current.edgeOverlay === false) return;
     for (const group of edgeOverlayOf(runtime, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime)) {
       if (group.positions.length === 0 || (presentation === "spine-points" && group.role !== "path-spine-edge")) continue;
       const channel = edgeOverlayChannel(group.role);
@@ -391,6 +394,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       release();
     };
   }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, ctx, refreshEdgeOverlay]);
+
+  // Switching the edge view on or off draws or clears it at once, not at the next commit.
+  useEffect(() => { refreshEdgeOverlay(); }, [options.edgeOverlay, refreshEdgeOverlay]);
 
   // Draw what is already standing as soon as the table is live, not only
   // after the first commit -- an edge that was there before this session

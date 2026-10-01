@@ -4781,6 +4781,10 @@ The ruler's words for the point under the pointer, with where the pointer is on 
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.activeTool: ConstructionToolId`
 
+### `property vtt.use-construction-pointer.UseConstructionPointerOptions.edgeOverlay?: boolean`
+
+Whether the table's edges are drawn, role by role: a view for reading the topology, which changes no tool. Drawn when absent.
+
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.history: EditHistoryStack`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.measureUnit: MeasureUnitId`
@@ -13189,6 +13193,10 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.SettingsDrawerProps.activeTool: ConstructionToolId`
 
+### `property vtt.widgets.SettingsDrawerProps.edgeOverlay: boolean`
+
+Whether the lines drawn along the edges, by role, are shown: the other half of the topology view.
+
 ### `property vtt.widgets.SettingsDrawerProps.graphOverlay: boolean`
 
 Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool.
@@ -13200,6 +13208,8 @@ The height above which the map is hidden, to see and edit inside roofed or upper
 ### `property vtt.widgets.SettingsDrawerProps.measureUnit: MeasureUnitId`
 
 The unit the table writes every distance in.
+
+### `property vtt.widgets.SettingsDrawerProps.onEdgeOverlayChange: (visible: boolean) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onGraphOverlayChange: (visible: boolean) => void`
 
