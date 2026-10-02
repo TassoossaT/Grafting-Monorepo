@@ -1,28 +1,29 @@
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 /**
- * The handles of an opening laid on a wall: one on each corner -- which
- * resizes it in width and height at once, keeping its shape -- and one on the
- * middle of each side, which moves that side alone. Read off the nodes the
- * opening's pieces are pinned with, on the wall they are pinned to: where
- * along it, and how high -- never off what shape the opening is. A door
- * stands on the floor, so its bottom has none.
+ * The handles of an opening laid on a wall, the only way it is edited: one in
+ * its middle, which moves it whole; one on each corner, which resizes it in
+ * width and height at once, keeping its shape; and one on the middle of each
+ * side, which moves that side alone. Read off the nodes the opening's pieces
+ * are pinned with, on the wall they are pinned to: where along it, and how
+ * high -- never off what shape the opening is. A door stands on the floor, so
+ * its bottom has none.
  */
 
-export type OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type OpeningHandlePart = "center" | "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export interface OpeningHandle {
   readonly id: string;
   readonly part: OpeningHandlePart;
-  /** A corner moves two sides at once; a side, one. */
-  readonly kind: "corner" | "side";
+  /** The middle moves the whole opening; a corner moves two sides at once; a side, one. */
+  readonly kind: "pivot" | "corner" | "side";
   readonly position: ConstructionPosition;
   /** The node the handle is named after -- one of the opening's own -- by which the opening is found again. */
   readonly nodeId: string;
 }
 
 const PREFIX = "opening-handle:";
-const PARTS: readonly OpeningHandlePart[] = ["left", "right", "top", "bottom", "top-left", "top-right", "bottom-left", "bottom-right"];
+const PARTS: readonly OpeningHandlePart[] = ["center", "left", "right", "top", "bottom", "top-left", "top-right", "bottom-left", "bottom-right"];
 
 export const openingHandleId = (part: OpeningHandlePart, nodeId: string): string => `${PREFIX}${part}:${nodeId}`;
 
@@ -73,9 +74,10 @@ export function openingHandles(
       y: lerp(low.position.y, high.position.y, fv),
     });
     const name = pinned[0]!.id;
-    const place = (part: OpeningHandlePart, kind: "corner" | "side", fu: number, fv: number): void => {
+    const place = (part: OpeningHandlePart, kind: OpeningHandle["kind"], fu: number, fv: number): void => {
       handles.push({ id: openingHandleId(part, name), part, kind, position: at(fu, fv), nodeId: name });
     };
+    place("center", "pivot", 0.5, 0.5);
     place("left", "side", 0, 0.5);
     place("right", "side", 1, 0.5);
     place("top", "side", 0.5, 1);

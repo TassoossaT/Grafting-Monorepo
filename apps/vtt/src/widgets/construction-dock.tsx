@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionDock, type ActionDockItem } from "@/ui";
-import type { ConstructionToolId, OpeningParams } from "@/features/edit-construction";
+import type { ConstructionToolId, OpeningParams, TerrainSculptMode } from "@/features/edit-construction";
 
 export interface ConstructionDockProps {
   readonly ready: boolean;
@@ -11,6 +11,10 @@ export interface ConstructionDockProps {
   readonly openingKind: OpeningParams["openingKind"];
   /** Picks the opening preset and activates the opening tool. */
   readonly onOpeningKindChange: (kind: OpeningParams["openingKind"]) => void;
+  /** Which terrain stroke the Terreno blocks show as picked. */
+  readonly terrainMode: TerrainSculptMode;
+  /** Picks the terrain stroke and activates the terrain tool. */
+  readonly onTerrainModeChange: (mode: TerrainSculptMode) => void;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly onUndo: () => void;
@@ -45,6 +49,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
     onToolChange,
     openingKind,
     onOpeningKindChange,
+    terrainMode,
+    onTerrainModeChange,
     canUndo,
     canRedo,
     onUndo,
@@ -54,6 +60,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
   } = props;
 
   const isTerrainSculptActive = activeTool === "terrain-sculpt";
+  // "elevate" and "lower" are the older names of the same two strokes.
+  const terrainStroke = terrainMode === "elevate" ? "add" : terrainMode === "lower" ? "dig" : terrainMode;
 
   const isWallBrushActive = activeTool === "wall-brush";
   const isWallLineActive = activeTool === "wall-line";
@@ -114,7 +122,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "openings",
       label: "Aberturas",
       icon: "🚪",
-      tooltip: "Portas & Janelas -- clique numa parede para abrir uma nova, clique numa existente para selecionar e editar (mover/redimensionar clicando na parede de novo, Delete apaga)",
+      tooltip: "Portas & Janelas -- clique numa parede para abrir uma nova; numa existente, arraste as alças para mover ou redimensionar, clique para selecionar e Delete apaga",
       active: isOpeningActive,
       childActive: isOpeningActive,
       disabled: !ready,
@@ -155,8 +163,14 @@ export function ConstructionDock(props: ConstructionDockProps) {
       tooltip: "Escultura de Terreno (tecla I)",
       shortcut: "I",
       active: isTerrainSculptActive,
+      childActive: isTerrainSculptActive,
       disabled: !ready,
       onClick: () => onToolChange("terrain-sculpt"),
+      subItems: [
+        { key: "terrain-add", label: "Adicionar", icon: "⛰️", tooltip: "Adicionar terreno: arraste para erguer o chão", active: isTerrainSculptActive && terrainStroke === "add", disabled: !ready, onClick: () => onTerrainModeChange("add") },
+        { key: "terrain-dig", label: "Remover", icon: "⛏️", tooltip: "Remover terreno: arraste para cavar", active: isTerrainSculptActive && terrainStroke === "dig", disabled: !ready, onClick: () => onTerrainModeChange("dig") },
+        { key: "terrain-flatten", label: "Aplainar", icon: "▬", tooltip: "Aplainar: arraste para nivelar o chão", active: isTerrainSculptActive && terrainStroke === "flatten", disabled: !ready, onClick: () => onTerrainModeChange("flatten") },
+      ],
     },
     {
       key: "foliage",

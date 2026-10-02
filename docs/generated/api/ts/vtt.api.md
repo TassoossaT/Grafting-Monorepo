@@ -10579,9 +10579,9 @@ deleted high over the ground is none of these.
 
 ### `property vtt.opening-handles.OpeningHandle.id: string`
 
-### `property vtt.opening-handles.OpeningHandle.kind: "side" | "corner"`
+### `property vtt.opening-handles.OpeningHandle.kind: "side" | "corner" | "pivot"`
 
-A corner moves two sides at once; a side, one.
+The middle moves the whole opening; a corner moves two sides at once; a side, one.
 
 ### `property vtt.opening-handles.OpeningHandle.nodeId: string`
 
@@ -10591,14 +10591,15 @@ The node the handle is named after -- one of the opening's own -- by which the o
 
 ### `property vtt.opening-handles.OpeningHandle.position: ConstructionPosition`
 
-### `type vtt.opening-handles.OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right"`
+### `type vtt.opening-handles.OpeningHandlePart = "center" | "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right"`
 
-The handles of an opening laid on a wall: one on each corner -- which
-resizes it in width and height at once, keeping its shape -- and one on the
-middle of each side, which moves that side alone. Read off the nodes the
-opening's pieces are pinned with, on the wall they are pinned to: where
-along it, and how high -- never off what shape the opening is. A door
-stands on the floor, so its bottom has none.
+The handles of an opening laid on a wall, the only way it is edited: one in
+its middle, which moves it whole; one on each corner, which resizes it in
+width and height at once, keeping its shape; and one on the middle of each
+side, which moves that side alone. Read off the nodes the opening's pieces
+are pinned with, on the wall they are pinned to: where along it, and how
+high -- never off what shape the opening is. A door stands on the floor, so
+its bottom has none.
 
 ### `function vtt.opening-handles.openingHandleId(part: OpeningHandlePart, nodeId: string): string`
 
@@ -13448,6 +13449,10 @@ Picks the opening preset and activates the opening tool.
 
 ### `property vtt.widgets.ConstructionDockProps.onRedo: () => void`
 
+### `property vtt.widgets.ConstructionDockProps.onTerrainModeChange: (mode: TerrainSculptMode) => void`
+
+Picks the terrain stroke and activates the terrain tool.
+
 ### `property vtt.widgets.ConstructionDockProps.onToggleSettings?: () => void`
 
 ### `property vtt.widgets.ConstructionDockProps.onToolChange: (tool: ConstructionToolId) => void`
@@ -13461,6 +13466,10 @@ Which opening preset the Aberturas blocks show as picked.
 ### `property vtt.widgets.ConstructionDockProps.ready: boolean`
 
 ### `property vtt.widgets.ConstructionDockProps.settingsOpen?: boolean`
+
+### `property vtt.widgets.ConstructionDockProps.terrainMode: TerrainSculptMode`
+
+Which terrain stroke the Terreno blocks show as picked.
 
 ### `interface vtt.widgets.ConstructionHotbarProps`
 

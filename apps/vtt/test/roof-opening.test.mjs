@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { dispatchGesture, harness, press, ref } from "./support/opening-harness.mjs";
+import { dispatchGesture, dragHandle, harness, press, ref } from "./support/opening-harness.mjs";
 import { DEFAULT_TOOL_PARAMS, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { roofTool } from "../src/composition/tabletop/tools/roof/roof-tool.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
@@ -156,7 +156,7 @@ test("resizing a roof window past the roof stops it there instead of refusing", 
   try {
     const b = openingBox(h);
     const top = { x: (b.x0 + b.x1) / 2, y: b.y1, z: b.z };
-    press(h, window, top, { ...top, y: top.y + 5 });
+    dragHandle(h, window, "top", top, { ...top, y: top.y + 5 });
     assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
     const grown = openingBox(h);
     assert.ok(grown.y1 > b.y1 + 0.5 && grown.y1 < 4, `grown up to the stop: ${JSON.stringify(grown)}`);
@@ -170,7 +170,7 @@ test("dragging the window moves its cut over the leaf", async () => {
     const was = dormers(runtime)[0];
     const b = openingBox(h);
     const middle = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, z: b.z };
-    press(h, window, middle, { ...middle, x: middle.x + 1 });
+    dragHandle(h, window, "center", middle, { ...middle, x: middle.x + 1 });
     assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
     const now = dormers(runtime)[0];
     assert.ok(near((now.along - was.along) * 8, 1, 1e-6), `it moved a metre along the eave: ${was.along} -> ${now.along}`);
@@ -185,7 +185,7 @@ test("widening the window widens its cut", async () => {
   try {
     const b = openingBox(h);
     const edge = { x: b.x1, y: (b.y0 + b.y1) / 2, z: b.z };
-    press(h, window, edge, { ...edge, x: edge.x + 0.6 });
+    dragHandle(h, window, "right", edge, { ...edge, x: edge.x + 0.6 });
     assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
     const grown = openingBox(h);
     assert.ok(near(grown.x1 - grown.x0, 1.4), `the window is wider: ${JSON.stringify(grown)}`);

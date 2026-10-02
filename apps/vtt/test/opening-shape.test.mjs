@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { curvyBrushWall, harness, hitMesh, inPoly, line, openingRefAt, press, ref } from "./support/opening-harness.mjs";
+import { curvyBrushWall, dragHandle, harness, hitMesh, inPoly, line, openingRefAt, press, ref } from "./support/opening-harness.mjs";
 import { DEFAULT_TOOL_PARAMS, OPENING_SHAPE_PROP, openingPath, pointAt, segmentExtremes, shapeFromProps, sideArc } from "../src/features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
@@ -231,7 +231,7 @@ test("moving a shaped window keeps its shape, and undo/redo bring the shape back
   const [placed] = h.openings();
 
   const grab = { x: 3, y: 1.5, z: 0 };
-  press(h, WINDOW, grab, { x: 5, y: 1.5, z: 0 });
+  dragHandle(h, WINDOW, "center", grab, { x: 5, y: 1.5, z: 0 });
   const [moved] = h.openings();
   assert.notEqual(ref(moved), ref(placed), "replaced by a new group");
   assert.deepEqual(shapeOf(moved), ARCH, "the move keeps the arch");
@@ -257,7 +257,7 @@ test("resizing a shaped window keeps its radii in meters, re-fitted to the new b
   const run = runFrame(h.runtime, wall.surfaceKey);
   const before = groupRunSpan(run, h.openings());
   const edge = { x: before.s1, y: 1.2, z: 0 };
-  press(h, WINDOW, edge, { x: before.s1 + 0.8, y: 1.2, z: 0 }, { surfaceRef: openingRefAt(h.openings(), { x: before.s1 - 0.01, y: 1.2, z: 0 }) });
+  dragHandle(h, WINDOW, "right", edge, { x: before.s1 + 0.8, y: 1.2, z: 0 });
   const resized = h.openings();
   const after = groupRunSpan(run, resized);
   assert.ok(near(after.s1 - after.s0, 2, 1e-6), `wider: ${after.s1 - after.s0}`);
@@ -283,7 +283,7 @@ test("a round door stands on the floor", async () => {
   assert.ok(shapeOf(door).ellipse);
 
   const grab = { x: 4, y: 1.1, z: 0 };
-  press(h, DOOR, grab, { x: 5.5, y: 1.6, z: 0 });
+  dragHandle(h, DOOR, "center", grab, { x: 5.5, y: 1.6, z: 0 });
   const [moved] = h.openings();
   assert.ok(near(groupRunSpan(run, [moved]).v0, 0, 1e-9), "still on the floor after a move");
   assert.ok(shapeOf(moved).ellipse);
@@ -419,7 +419,7 @@ test("move, resize and undo keep a circle's shape and never add nodes", async ()
   assert.deepEqual(counts(placed), [4, 4]);
 
   const grab = { x: 3, y: 1.5, z: 0 };
-  press(h, CIRCLE, grab, { x: 5, y: 1.5, z: 0 });
+  dragHandle(h, CIRCLE, "center", grab, { x: 5, y: 1.5, z: 0 });
   const [moved] = h.openings();
   assert.notEqual(ref(moved), ref(placed));
   assert.deepEqual(counts(moved), [4, 4], "moved");
@@ -427,7 +427,7 @@ test("move, resize and undo keep a circle's shape and never add nodes", async ()
   const run = runFrame(h.runtime, wall.surfaceKey);
   const before = groupRunSpan(run, [moved]);
   const mid = (before.v0 + before.v1) / 2 * 3;
-  press(h, CIRCLE, { x: before.s1, y: mid, z: 0 }, { x: before.s1 + 0.6, y: mid, z: 0 }, { surfaceRef: openingRefAt(h.openings(), { x: before.s1 - 0.01, y: mid, z: 0 }) });
+  dragHandle(h, CIRCLE, "right", { x: before.s1, y: mid, z: 0 }, { x: before.s1 + 0.6, y: mid, z: 0 });
   const [resized] = h.openings();
   const after = groupRunSpan(run, [resized]);
   assert.ok(near(after.s1 - after.s0, 1.8, 1e-6), `wider: ${after.s1 - after.s0}`);

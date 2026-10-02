@@ -4,8 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { curvyBrushWall, groupOf, harness, hitMesh, line, press, ref } from "./support/opening-harness.mjs";
-import { DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/index.ts";
+import { curvyBrushWall, dragHandle, groupOf, harness, hitMesh, line, openingHandleAt, openingRefAt, press, ref } from "./support/opening-harness.mjs";
+import { DEFAULT_TOOL_PARAMS, openingHandles } from "../src/features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
 
@@ -109,17 +109,44 @@ test("dragging a window across a seam splits it over both faces, and dragging it
   clickOnWall(h, { ...WINDOW, width: 1 }, { x: 2, y: 1, z: 0 }, a); // [1.5, 2.5] x [1, 2]
   assert.equal(h.openings().length, 1);
 
-  press(h, WINDOW, { x: 2, y: 1.5, z: 0 }, { x: 4.3, y: 1.5, z: 0 });
+  dragHandle(h, WINDOW, "center", { x: 2, y: 1.5, z: 0 }, { x: 4.3, y: 1.5, z: 0 });
   let pieces = h.openings();
   assert.equal(pieces.length, 2, "straddles the seam now");
   let rect = assertOneRect(h.runtime, pieces);
   assert.ok(Math.abs(rect.s0 - 3.8) < 1e-6 && Math.abs(rect.s1 - 4.8) < 1e-6, `moved as one: [${rect.s0}, ${rect.s1}]`);
 
-  press(h, WINDOW, { x: 4.3, y: 1.5, z: 0 }, { x: 2, y: 1.5, z: 0 });
+  dragHandle(h, WINDOW, "center", { x: 4.3, y: 1.5, z: 0 }, { x: 2, y: 1.5, z: 0 });
   pieces = h.openings();
   assert.equal(pieces.length, 1, "back on one face");
   rect = assertOneRect(h.runtime, pieces);
   assert.ok(Math.abs(rect.s0 - 1.5) < 1e-6 && Math.abs(rect.s1 - 2.5) < 1e-6, `moved back: [${rect.s0}, ${rect.s1}]`);
+});
+
+test("an opening is never dragged by its body or its rim: only its handles move or resize it", async () => {
+  const h = await harness();
+  twoPanelWall(h.ctx);
+  const [a] = h.walls();
+  clickOnWall(h, { ...WINDOW, width: 1 }, { x: 2, y: 1, z: 0 }, a); // [1.5, 2.5] x [1, 2]
+  const before = assertOneRect(h.runtime, h.openings());
+
+  press(h, WINDOW, { x: 2, y: 1.5, z: 0 }, { x: 4.3, y: 1.5, z: 0 });
+  press(h, WINDOW, { x: 2.5, y: 1.5, z: 0 }, { x: 3.5, y: 1.5, z: 0 });
+  const after = assertOneRect(h.runtime, h.openings());
+  assert.ok(Math.abs(after.s0 - before.s0) < 1e-9 && Math.abs(after.s1 - before.s1) < 1e-9, `the body and the rim leave it where it was: [${after.s0}, ${after.s1}]`);
+  assert.equal(h.feedback.at(-1)?.tone, "info", "and the tool says to use its handles");
+});
+
+test("an opening's handles: one in the middle to move it, one on each side and corner to resize it, none under a door", async () => {
+  const h = await harness();
+  line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
+  const [wall] = h.walls();
+  clickOnWall(h, { ...WINDOW, width: 1 }, { x: 2, y: 1, z: 0 }, wall);
+  const parts = (at) => openingHandles(h.runtime.getAllRegionTopologies(), new Set(h.openings().filter((o) => ref(o) === openingRefAt(h.openings(), at)).map((o) => o.surfaceKey.join("\u0000"))), (type) => type === h.openings()[0].surfaceType).map((handle) => handle.part).sort();
+  assert.deepEqual(parts({ x: 2, y: 1.5, z: 0 }), ["bottom", "bottom-left", "bottom-right", "center", "left", "right", "top", "top-left", "top-right"]);
+  assert.equal(openingHandleAt(h, "center", { x: 2, y: 1.5, z: 0 }).kind, "pivot", "the middle one is drawn as a move handle");
+
+  clickOnWall(h, { ...WINDOW, openingKind: "door", width: 1 }, { x: 6, y: 1, z: 0 }, wall);
+  assert.deepEqual(parts({ x: 6, y: 1, z: 0 }), ["center", "left", "right", "top", "top-left", "top-right"]);
 });
 
 test("resizing a window's edge across a seam grows a second piece on the next face", async () => {
@@ -128,7 +155,7 @@ test("resizing a window's edge across a seam grows a second piece on the next fa
   const [a] = h.walls();
   clickOnWall(h, { ...WINDOW, width: 1 }, { x: 2, y: 1, z: 0 }, a); // [1.5, 2.5] x [1, 2]
 
-  press(h, WINDOW, { x: 2.5, y: 1.5, z: 0 }, { x: 5, y: 1.5, z: 0 });
+  dragHandle(h, WINDOW, "right", { x: 2.5, y: 1.5, z: 0 }, { x: 5, y: 1.5, z: 0 });
   const pieces = h.openings();
   assert.equal(pieces.length, 2);
   const rect = assertOneRect(h.runtime, pieces);
@@ -136,7 +163,7 @@ test("resizing a window's edge across a seam grows a second piece on the next fa
   assert.ok(Math.abs(rect.s1 - 5) < 1e-6, "the right edge follows onto the next face");
 
   // And the left edge of the straddling group back past the seam: one piece again.
-  press(h, WINDOW, { x: 1.5, y: 1.5, z: 0 }, { x: 4.4, y: 1.5, z: 0 });
+  dragHandle(h, WINDOW, "left", { x: 1.5, y: 1.5, z: 0 }, { x: 4.4, y: 1.5, z: 0 });
   const after = h.openings();
   assert.equal(after.length, 1);
   const shrunk = assertOneRect(h.runtime, after);
@@ -185,7 +212,7 @@ test("undo after moving a straddling window restores its two pieces as one group
   const groupBefore = groupOf(before[0]);
   const spansBefore = assertOneRect(h.runtime, before);
 
-  press(h, WINDOW, { x: 4, y: 2, z: 0 }, { x: 6, y: 2, z: 0 });
+  dragHandle(h, WINDOW, "center", { x: 4, y: 2, z: 0 }, { x: 6, y: 2, z: 0 });
   assert.equal(h.openings().length, 1, "moved wholly onto the second face");
 
   const entry = h.ctx.history.undo();

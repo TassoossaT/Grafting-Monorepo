@@ -215,28 +215,9 @@ function TerrainSculptFields(props: {
       ? "Profundidade do corte (-m)"
       : "Intensidade do nivelamento";
 
+  // Which stroke -- add, remove, flatten -- is picked in the dock below the map; here only how it acts.
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-        <SelectableChip
-          label="Adicionar (+)"
-          swatchColor="#22c55e"
-          selected={isAdd}
-          onSelect={() => onChange({ ...params, mode: "add" })}
-        />
-        <SelectableChip
-          label="Cavar (-)"
-          swatchColor="#ef4444"
-          selected={isDig}
-          onSelect={() => onChange({ ...params, mode: "dig" })}
-        />
-        <SelectableChip
-          label="Nivelar (=)"
-          swatchColor="#3b82f6"
-          selected={currentMode === "flatten"}
-          onSelect={() => onChange({ ...params, mode: "flatten" })}
-        />
-      </div>
       {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}

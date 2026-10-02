@@ -16,6 +16,7 @@ import {
   type ConstructionToolId,
   type EditHistoryStack,
   type OpeningParams,
+  type TerrainSculptMode,
   type RenderViewId,
   type RulerReadout as RulerReadoutState,
   type StructureEditParams,
@@ -215,6 +216,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setToolParams((previous) => ({ ...previous, opening: withOpeningKind(previous.opening, kind) }));
     setTool("opening");
   }, []);
+  const handleTerrainModeChange = useCallback((mode: TerrainSculptMode) => {
+    setToolParams((previous) => ({ ...previous, "terrain-sculpt": { ...previous["terrain-sculpt"], mode } }));
+    setTool("terrain-sculpt");
+  }, []);
   const handleToolParamsUpdate = useCallback(
     <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => {
       setToolParams((previous) => ({ ...previous, [toolId]: update(previous[toolId]) }));
@@ -375,6 +380,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onToolChange={setTool}
           openingKind={toolParams.opening.openingKind}
           onOpeningKindChange={handleOpeningKindChange}
+          terrainMode={toolParams["terrain-sculpt"].mode ?? "add"}
+          onTerrainModeChange={handleTerrainModeChange}
           canUndo={historyState.canUndo}
           canRedo={historyState.canRedo}
           onUndo={handleUndo}

@@ -3872,7 +3872,7 @@ export type {
   RegionEditHistoryEntry,
   } from "../../features/edit-construction/index.ts";
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
-export type { ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+export type { ConstructionToolId, OpeningParams, StructureEditParams, TerrainSculptMode, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
@@ -4956,8 +4956,9 @@ export interface OpeningStand {
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
   ...openingToolBase,
-  // Its selected opening shows corner and side handles, drawn like every other handle's.
+  // The opening under the pointer shows its handles -- middle, sides and corners -- drawn like every other handle's.
   editsType: (surfaceType) => surfaceType === openingStructureType.surfaceType,
+  handlesOnHover: true,
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
   const ghost = openingToolBase.previewFor?.(gesture, params, ctx);
 
@@ -8159,12 +8160,12 @@ export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldC
 export type { OpeningHandle, OpeningHandlePart } from "./opening-handles.ts";
 
 // src/features/edit-construction/topology/opening-handles.ts
-export type OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type OpeningHandlePart = "center" | "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export interface OpeningHandle {
   readonly id: string;
   readonly part: OpeningHandlePart;
-  /** A corner moves two sides at once; a side, one. */
-  readonly kind: "corner" | "side";
+  /** The middle moves the whole opening; a corner moves two sides at once; a side, one. */
+  readonly kind: "pivot" | "corner" | "side";
   readonly position: ConstructionPosition;
   /** The node the handle is named after -- one of the opening's own -- by which the opening is found again. */
   readonly nodeId: string;
