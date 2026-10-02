@@ -29,6 +29,7 @@ import {
   ConstructionHotbar,
   DebugPanel,
   DEFAULT_MEASURE_UNIT,
+  HeightCutMarker,
   DEFAULT_RULER_SETTINGS,
   isMeasureUnitId,
   parseRulerSettings,
@@ -398,9 +399,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onMeasureUnitChange={handleMeasureUnitChange}
           rulerSettings={rulerSettings}
           onRulerSettingsChange={handleRulerSettingsChange}
-          heightCut={heightCut}
-          onHeightCutChange={setHeightCut}
         />
+
+        <HeightCutMarker height={heightCut} onHeightChange={setHeightCut} measureUnit={measureUnit} />
 
         {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}
       </section>

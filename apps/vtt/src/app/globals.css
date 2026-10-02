@@ -747,6 +747,86 @@ h1 {
 }
 
 
+/* Height cut -- a marker on the map's right side, clear of the settings drawer's handle at the very edge.
+   The top of the track is "no cut"; the marker dragged down hides what is above it. */
+.gm-height-cut {
+  position: absolute;
+  top: 4rem;
+  bottom: 4rem;
+  right: 2.6rem;
+  z-index: 14;
+  display: flex;
+  width: 2rem;
+  pointer-events: none;
+}
+
+.gm-height-cut-track {
+  position: relative;
+  flex: 1;
+  margin: 0.5rem 0;
+  cursor: ns-resize;
+  pointer-events: auto;
+  touch-action: none;
+  outline: none;
+}
+
+/* The rail itself: a thin line down the middle of the wider grab area. */
+.gm-height-cut-track::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: rgba(15, 23, 42, 0.78);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.gm-height-cut-track:focus-visible::before {
+  box-shadow: 0 0 0 2px #34d399;
+}
+
+/* The part of the rail above the cut: what is hidden. */
+.gm-height-cut-hidden {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: rgba(52, 211, 153, 0.35);
+}
+
+.gm-height-cut-marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0.5rem;
+  transform: translateY(50%);
+  border-radius: 0.25rem;
+  background: #94a3b8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.gm-height-cut-marker--on {
+  background: #34d399;
+}
+
+.gm-height-cut-label {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 0.4rem);
+  transform: translateY(-50%);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.3rem;
+  background: rgba(15, 23, 42, 0.86);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-family: monospace;
+  white-space: nowrap;
+}
 
 /* Developer panel -- always on the map, folds to its title bar. Floats to the right of the left rail. */
 .gm-debug-panel {

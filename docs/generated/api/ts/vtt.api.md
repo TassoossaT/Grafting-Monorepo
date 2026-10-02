@@ -13514,6 +13514,18 @@ The panel's numbers, as plain values: this widget draws them and knows nothing o
 
 ### `property vtt.widgets.DebugPanelStats.readMs?: number`
 
+### `interface vtt.widgets.HeightCutMarkerProps`
+
+### `property vtt.widgets.HeightCutMarkerProps.height: number | undefined`
+
+The height above which the map is hidden; `undefined` shows it all.
+
+### `property vtt.widgets.HeightCutMarkerProps.measureUnit: MeasureUnitId`
+
+The unit the height is written in.
+
+### `property vtt.widgets.HeightCutMarkerProps.onHeightChange: (height: number | undefined) => void`
+
 ### `interface vtt.widgets.RulerReadoutProps`
 
 ### `property vtt.widgets.RulerReadoutProps.labels: readonly string[]`
@@ -13538,15 +13550,9 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.SettingsDrawerProps.activeTool: ConstructionToolId`
 
-### `property vtt.widgets.SettingsDrawerProps.heightCut: number | undefined`
-
-The height above which the map is hidden, to see and edit inside roofed or upper-floored structures; `undefined` shows it all.
-
 ### `property vtt.widgets.SettingsDrawerProps.measureUnit: MeasureUnitId`
 
 The unit the table writes every distance in.
-
-### `property vtt.widgets.SettingsDrawerProps.onHeightCutChange: (height: number | undefined) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onMeasureUnitChange: (unit: MeasureUnitId) => void`
 
@@ -13634,6 +13640,16 @@ knows how a tool turns its own parameters into geometry, that lives in
 The always-visible developer panel: frame rate, what the map is made of,
 what each recent change cost and did to it, and the switches that draw the topology. It
 floats over the map and folds to its title bar.
+
+### `function vtt.widgets.HeightCutMarker(props: HeightCutMarkerProps): Element`
+
+The height cut as a marker on the side of the map, as in TaleSpire: a
+vertical track whose top is "no cut" and whose foot is the ground. Drag the
+marker down and everything above it hides, to see and edit inside roofed
+or upper-floored structures; drag it back to the top, or double-click it,
+and the whole map shows again. The wheel over the track and the arrow keys
+move it a step at a time. Only the view changes: nothing reaches the
+construction or the history.
 
 ### `function vtt.widgets.RulerReadout(props: RulerReadoutProps): Element`
 
