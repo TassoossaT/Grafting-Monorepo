@@ -3605,6 +3605,18 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
 // src/composition/tabletop/commit-timing.ts
 export function timeCommit<T>(label: string, run: () => T): T {
   if (current !== undefined) return timePhase(label, run);
+export interface CommitRecord {
+  readonly label: string;
+  readonly ms: number;
+  /** The slowest phase, by its own time; absent when the commit ran no timed phase. */
+  readonly slowest?: { readonly label: string; readonly ms: number };
+export const RECENT_COMMITS = 8;
+export function recentCommits(): readonly CommitRecord[] {
+  return [...recent];
+  }
+export function clearRecentCommits(): void {
+  recent.length = 0;
+  }
 export function timePhase<T>(label: string, run: () => T): T {
   const trace = current;
   if (trace === undefined) return run();
@@ -3624,6 +3636,44 @@ export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
   ): TabletopRuntime {
   const tableId = input.tableId.trim();
+
+// src/composition/tabletop/debug-stats.ts
+export interface FrameStats {
+  /** Frames drawn per second over the window. */
+  readonly fps: number;
+  /** The mean time one frame took, in milliseconds. */
+  readonly meanMs: number;
+  /** The longest single frame in the window, in milliseconds -- where a stutter shows. */
+  readonly worstMs: number;
+  }
+export const FRAME_WINDOW_MS = 500;
+export function createFrameMeter(windowMs: number = FRAME_WINDOW_MS): (now: number) => FrameStats | undefined {
+  let last: number | undefined;
+  let windowStart = 0;
+  let frames = 0;
+  let total = 0;
+  let worst = 0;
+  return (now) => {
+  if (last === undefined) {
+export interface TypeCount {
+  readonly type: string;
+  readonly count: number;
+  }
+export interface MapCounts {
+  readonly vertices: number;
+  readonly edges: number;
+  readonly faces: number;
+  /** Faces by structure type, the most numerous first. */
+  readonly byType: readonly TypeCount[];
+  }
+export function countMap(
+  graph: { readonly nodes: readonly unknown[]; readonly edges: readonly unknown[] },
+  faces: readonly { readonly surfaceType: string }[],
+  ): MapCounts {
+  const byType = new Map<string, number>();
+export function formatMegabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
 // src/composition/tabletop/effects/change-area.ts
 export const REALLY_MOVED = 0.05;
@@ -5474,6 +5524,18 @@ export interface ConstructionPointerHandlers {
   }
 export function useConstructionPointer(options: UseConstructionPointerOptions): ConstructionPointerHandlers {
   const gestureRef = useRef<ActiveGesture | null>(null);
+
+// src/composition/tabletop/use-debug-stats.ts
+export interface DebugStats {
+  /** The last full window of frames; absent until one has passed. */
+  readonly frame?: FrameStats;
+  /** What the map is made of; absent until the table is live. */
+  readonly counts?: MapCounts;
+  /** How long reading those counts took, in milliseconds: what looking at the map costs. */
+  readonly readMs?: number;
+  /** Bytes of JavaScript heap in use, where the browser says. */
+export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats {
+  const [frame, setFrame] = useState<FrameStats | undefined>(undefined);
 
 // src/entities/map/index.ts
 export type {

@@ -1,5 +1,6 @@
 export { createTabletopRuntime } from "./create-tabletop-runtime.ts";
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
+export { useDebugStats, type DebugStats } from "./use-debug-stats.ts";
 export type {
   ConfirmedTokenDeltaEnvelope,
   TabletopRuntime,

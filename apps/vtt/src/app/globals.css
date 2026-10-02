@@ -747,3 +747,70 @@ h1 {
 }
 
 
+
+/* Developer panel -- always on the map, folds to its title bar. Floats to the right of the left rail. */
+.gm-debug-panel {
+  position: absolute;
+  top: 0.75rem;
+  left: 4.25rem;
+  z-index: 16;
+  width: 16rem;
+  max-height: calc(100% - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.6rem;
+  background: rgba(15, 23, 42, 0.86);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: #ffffff;
+  font-size: 0.72rem;
+}
+
+.gm-debug-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gm-debug-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.2rem 0.7rem 0.7rem;
+  overflow-y: auto;
+}
+
+.gm-debug-panel-body section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.gm-debug-panel-heading {
+  margin-bottom: 0.1rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.gm-debug-panel .gm-stat-row {
+  font-size: 0.72rem;
+}
+
+.gm-debug-panel-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}

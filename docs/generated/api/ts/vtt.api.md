@@ -426,9 +426,33 @@ How wide a written text is against its height: the one rule the sprite's size an
 
 ### `function vtt.token-scene-item.tokenTransform(token: RenderToken): Transform`
 
+### `interface vtt.commit-timing.CommitRecord`
+
+One finished commit: what it was, how long it took, and the slowest phase inside it.
+
+### `property vtt.commit-timing.CommitRecord.label: string`
+
+### `property vtt.commit-timing.CommitRecord.ms: number`
+
+### `property vtt.commit-timing.CommitRecord.slowest?: { label: string; ms: number }`
+
+The slowest phase, by its own time; absent when the commit ran no timed phase.
+
+### `variable vtt.commit-timing.RECENT_COMMITS: 8`
+
+How many finished commits are remembered for the debug panel.
+
+### `function vtt.commit-timing.clearRecentCommits(): void`
+
+Forgets the remembered commits.
+
 ### `function vtt.commit-timing.countInCommit(label: string, by: number): void`
 
 Adds to a named counter of the running commit; nothing outside one.
+
+### `function vtt.commit-timing.recentCommits(): readonly CommitRecord[]`
+
+The most recent finished commits, oldest first -- always kept, slow or not, so the panel can show what generation costs as it happens.
 
 ### `function vtt.commit-timing.timeCommit(label: string, run: () => T): T`
 
@@ -452,6 +476,62 @@ Times `run` as a phase of the running commit; untimed outside one.
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.terrainNoisePort?: TerrainNoisePort`
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
+
+### `interface vtt.debug-stats.FrameStats`
+
+What the frame meter reports for a window of frames.
+
+### `property vtt.debug-stats.FrameStats.fps: number`
+
+Frames drawn per second over the window.
+
+### `property vtt.debug-stats.FrameStats.meanMs: number`
+
+The mean time one frame took, in milliseconds.
+
+### `property vtt.debug-stats.FrameStats.worstMs: number`
+
+The longest single frame in the window, in milliseconds -- where a stutter shows.
+
+### `interface vtt.debug-stats.MapCounts`
+
+What the map is made of, counted.
+
+### `property vtt.debug-stats.MapCounts.byType: readonly TypeCount[]`
+
+Faces by structure type, the most numerous first.
+
+### `property vtt.debug-stats.MapCounts.edges: number`
+
+### `property vtt.debug-stats.MapCounts.faces: number`
+
+### `property vtt.debug-stats.MapCounts.vertices: number`
+
+### `interface vtt.debug-stats.TypeCount`
+
+How many faces of one structure type there are.
+
+### `property vtt.debug-stats.TypeCount.count: number`
+
+### `property vtt.debug-stats.TypeCount.type: string`
+
+### `variable vtt.debug-stats.FRAME_WINDOW_MS: 500`
+
+How long a window of frames lasts before it is reported and a new one begins.
+
+### `function vtt.debug-stats.countMap(graph: { edges: readonly unknown[]; nodes: readonly unknown[] }, faces: readonly { surfaceType: string }[]): MapCounts`
+
+Counts a graph's vertices and edges and the faces standing on it, with the faces told apart by type.
+
+### `function vtt.debug-stats.createFrameMeter(windowMs: number): (now: number) => FrameStats | undefined`
+
+Measures frames as they arrive: give it each frame's timestamp and it
+answers with the stats of the window that just closed, or `undefined` while
+the window is still filling.
+
+### `function vtt.debug-stats.formatMegabytes(bytes: number): string`
+
+A byte count as megabytes, one decimal.
 
 ### `interface vtt.change-area.ChangeArea`
 
@@ -4827,6 +4907,37 @@ branches on *which* tool is active -- it only resolves what the pointer
 hit, looks the active tool up in `tools/tool-registry.ts`, and calls
 whichever lifecycle hook that tool defines. Per-tool behavior (what a
 stroke or a click actually generates) lives entirely in `tools/*.ts`.
+
+### `interface vtt.use-debug-stats.DebugStats`
+
+Everything the debug panel shows, gathered.
+
+### `property vtt.use-debug-stats.DebugStats.commits: readonly CommitRecord[]`
+
+The most recent finished commits, oldest first.
+
+### `property vtt.use-debug-stats.DebugStats.counts?: MapCounts`
+
+What the map is made of; absent until the table is live.
+
+### `property vtt.use-debug-stats.DebugStats.frame?: FrameStats`
+
+The last full window of frames; absent until one has passed.
+
+### `property vtt.use-debug-stats.DebugStats.heapBytes?: number`
+
+Bytes of JavaScript heap in use, where the browser says.
+
+### `property vtt.use-debug-stats.DebugStats.readMs?: number`
+
+How long reading those counts took, in milliseconds: what looking at the map costs.
+
+### `function vtt.use-debug-stats.useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats`
+
+Gathers the debug panel's numbers. Frames are timed on the page's own
+animation frame, so a stutter from anywhere shows; the map is counted once
+a second and only when it, or a commit, has changed -- looking at the map
+is a read of the graph and must not become a cost of its own.
 
 ### `interface vtt.map-projection.MapProjection`
 
@@ -13169,6 +13280,36 @@ Which opening preset the Aberturas blocks show as picked.
 
 How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns.
 
+### `interface vtt.widgets.DebugPanelProps`
+
+### `property vtt.widgets.DebugPanelProps.edgeOverlay: boolean`
+
+Whether the lines along the edges, by role, are drawn.
+
+### `property vtt.widgets.DebugPanelProps.graphOverlay: boolean`
+
+Whether the dots on the graph's vertices are drawn.
+
+### `property vtt.widgets.DebugPanelProps.onEdgeOverlayChange: (visible: boolean) => void`
+
+### `property vtt.widgets.DebugPanelProps.onGraphOverlayChange: (visible: boolean) => void`
+
+### `property vtt.widgets.DebugPanelProps.stats: DebugPanelStats`
+
+### `interface vtt.widgets.DebugPanelStats`
+
+The panel's numbers, as plain values: this widget draws them and knows nothing of where they come from.
+
+### `property vtt.widgets.DebugPanelStats.commits: readonly { label: string; ms: number; slowest?: { label: string; ms: number } }[]`
+
+### `property vtt.widgets.DebugPanelStats.counts?: { byType: readonly { count: number; type: string }[]; edges: number; faces: number; vertices: number }`
+
+### `property vtt.widgets.DebugPanelStats.frame?: { fps: number; meanMs: number; worstMs: number }`
+
+### `property vtt.widgets.DebugPanelStats.heapBytes?: number`
+
+### `property vtt.widgets.DebugPanelStats.readMs?: number`
+
 ### `interface vtt.widgets.RulerReadoutProps`
 
 ### `property vtt.widgets.RulerReadoutProps.labels: readonly string[]`
@@ -13193,14 +13334,6 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.SettingsDrawerProps.activeTool: ConstructionToolId`
 
-### `property vtt.widgets.SettingsDrawerProps.edgeOverlay: boolean`
-
-Whether the lines drawn along the edges, by role, are shown: the other half of the topology view.
-
-### `property vtt.widgets.SettingsDrawerProps.graphOverlay: boolean`
-
-Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool.
-
 ### `property vtt.widgets.SettingsDrawerProps.heightCut: number | undefined`
 
 The height above which the map is hidden, to see and edit inside roofed or upper-floored structures; `undefined` shows it all.
@@ -13208,10 +13341,6 @@ The height above which the map is hidden, to see and edit inside roofed or upper
 ### `property vtt.widgets.SettingsDrawerProps.measureUnit: MeasureUnitId`
 
 The unit the table writes every distance in.
-
-### `property vtt.widgets.SettingsDrawerProps.onEdgeOverlayChange: (visible: boolean) => void`
-
-### `property vtt.widgets.SettingsDrawerProps.onGraphOverlayChange: (visible: boolean) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onHeightCutChange: (height: number | undefined) => void`
 
@@ -13295,6 +13424,12 @@ entirely by `activeTool` (set by `ConstructionHotbar`/`ToolRail`), and
 editing a field here only ever updates `params[activeTool]` -- it never
 knows how a tool turns its own parameters into geometry, that lives in
 `composition/tabletop/tools/*.ts`.
+
+### `function vtt.widgets.DebugPanel(props: DebugPanelProps): Element`
+
+The always-visible developer panel: frame rate, what the map is made of,
+what the last commits cost, and the switches that draw the topology. It
+floats over the map and folds to its title bar.
 
 ### `function vtt.widgets.RulerReadout(props: RulerReadoutProps): Element`
 

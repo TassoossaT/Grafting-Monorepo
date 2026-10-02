@@ -44,8 +44,38 @@ export function timeCommit<T>(label: string, run: () => T): T {
   } finally {
     current = undefined;
     const total = performance.now() - started;
+    recordCommit(label, total, trace);
     if (total >= SLOW_COMMIT_MS) report(label, total, trace);
   }
+}
+
+/** One finished commit: what it was, how long it took, and the slowest phase inside it. */
+export interface CommitRecord {
+  readonly label: string;
+  readonly ms: number;
+  /** The slowest phase, by its own time; absent when the commit ran no timed phase. */
+  readonly slowest?: { readonly label: string; readonly ms: number };
+}
+
+/** How many finished commits are remembered for the debug panel. */
+export const RECENT_COMMITS = 8;
+
+const recent: CommitRecord[] = [];
+
+function recordCommit(label: string, ms: number, trace: Trace): void {
+  const slowest = trace.phases.reduce<Phase | undefined>((worst, phase) => (worst === undefined || phase.ms > worst.ms ? phase : worst), undefined);
+  recent.push(slowest === undefined ? { label, ms } : { label, ms, slowest: { label: slowest.label, ms: slowest.ms } });
+  if (recent.length > RECENT_COMMITS) recent.shift();
+}
+
+/** The most recent finished commits, oldest first -- always kept, slow or not, so the panel can show what generation costs as it happens. */
+export function recentCommits(): readonly CommitRecord[] {
+  return [...recent];
+}
+
+/** Forgets the remembered commits. */
+export function clearRecentCommits(): void {
+  recent.length = 0;
 }
 
 /** Times `run` as a phase of the running commit; untimed outside one. */

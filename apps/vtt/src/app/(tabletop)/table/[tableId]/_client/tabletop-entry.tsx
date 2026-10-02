@@ -6,6 +6,7 @@ import {
   attachCameraNavigation,
   createEditHistoryStack,
   createTabletopRuntime,
+  useDebugStats,
   DEFAULT_STRUCTURE_EDIT_PARAMS,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
@@ -25,6 +26,7 @@ import { StatusBadge, UiThemeProvider } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
+  DebugPanel,
   DEFAULT_MEASURE_UNIT,
   DEFAULT_RULER_SETTINGS,
   isMeasureUnitId,
@@ -139,6 +141,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setEdgeOverlay(visible);
     try { window.localStorage.setItem(edgeOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
   }, [edgeOverlayKey]);
+  // The developer panel's numbers: frames, what the map is made of, what the last commits cost.
+  const debugStats = useDebugStats(runtime, true);
   // The height cut is a view of the table, not a setting kept with it: it starts off every visit, so a table never opens with part of its map hidden.
   const [heightCut, setHeightCut] = useState<number | undefined>(undefined);
   useEffect(() => { runtime.setHeightCut?.(heightCut); }, [runtime, heightCut]);
@@ -308,6 +312,14 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onContextMenu={(event) => event.preventDefault()}
         />
 
+        <DebugPanel
+          stats={debugStats}
+          graphOverlay={graphOverlay}
+          onGraphOverlayChange={handleGraphOverlayChange}
+          edgeOverlay={edgeOverlay}
+          onEdgeOverlayChange={handleEdgeOverlayChange}
+        />
+
         <div className="gm-stage-overlay-info" role="status" aria-live="polite">
           <strong>{current.tokens.byId.size} Token Activo</strong>
           <span>| Modo: {TOOL_LABEL[tool]}</span>
@@ -385,10 +397,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onMeasureUnitChange={handleMeasureUnitChange}
           rulerSettings={rulerSettings}
           onRulerSettingsChange={handleRulerSettingsChange}
-          graphOverlay={graphOverlay}
-          onGraphOverlayChange={handleGraphOverlayChange}
-          edgeOverlay={edgeOverlay}
-          onEdgeOverlayChange={handleEdgeOverlayChange}
           heightCut={heightCut}
           onHeightCutChange={setHeightCut}
         />

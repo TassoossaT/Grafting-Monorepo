@@ -50,12 +50,6 @@ export interface SettingsDrawerProps {
   /** What the table asks of its ruler: what catches, the angle's step and the round number a length lands on. */
   readonly rulerSettings: RulerSettings;
   readonly onRulerSettingsChange: (settings: RulerSettings) => void;
-  /** Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool. */
-  readonly graphOverlay: boolean;
-  readonly onGraphOverlayChange: (visible: boolean) => void;
-  /** Whether the lines drawn along the edges, by role, are shown: the other half of the topology view. */
-  readonly edgeOverlay: boolean;
-  readonly onEdgeOverlayChange: (visible: boolean) => void;
   /** The height above which the map is hidden, to see and edit inside roofed or upper-floored structures; `undefined` shows it all. */
   readonly heightCut: number | undefined;
   readonly onHeightCutChange: (height: number | undefined) => void;
@@ -164,18 +158,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             Só a visão: esconde telhados e andares de cima para editar dentro. Não muda a construção.
           </p>
         </div>
-      </Card>
-
-      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
-        <span className="gm-panel-card-title">Topologia (só visualização)</span>
-        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.78rem" }}>
-          <input type="checkbox" checked={props.graphOverlay} onChange={(event) => props.onGraphOverlayChange(event.target.checked)} />
-          <span>Pontos dos vértices</span>
-        </label>
-        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.78rem" }}>
-          <input type="checkbox" checked={props.edgeOverlay} onChange={(event) => props.onEdgeOverlayChange(event.target.checked)} />
-          <span>Linhas das arestas, por papel</span>
-        </label>
       </Card>
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
