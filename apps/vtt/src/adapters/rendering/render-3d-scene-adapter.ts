@@ -223,6 +223,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
           // Cut with the surface it stands for, so a surface the height cut
           // hides cannot be picked through the cut.
           clippable: true,
+          // One proxy per surface: drawn, even at opacity 0, they were a draw
+          // call each on every frame the view moved -- 743 on a map of 743
+          // faces, on top of the chunks that actually show the ground.
+          pickOnly: true,
         },
       }),
       equals: (left, right) => left.mesh === right.mesh,
