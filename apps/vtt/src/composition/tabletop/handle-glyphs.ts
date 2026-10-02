@@ -9,9 +9,7 @@ import type { RenderHandleGlyph } from "../../ports/index.ts";
  * Changing how a kind of handle looks is changing its line here or its
  * glyph's image there, never the code that places it.
  */
-export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>> = {
-  /** A point of a structure's own outline -- the graph's own node dots. */
-  vertex: "point",
+export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>> = {
   /** A control point of a spine. */
   anchor: "point",
   /** A span's midpoint: bend it, or double-click to insert a point. */

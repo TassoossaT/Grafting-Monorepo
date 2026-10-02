@@ -16,7 +16,7 @@ export function nodeHandleSceneItemId(nodeId: string): string {
 }
 
 /** Large enough to stay a comfortable pointer/touch target at typical table-view camera distances, small enough not to obscure the geometry it marks. */
-const HANDLE_SCALE = 0.32;
+export const HANDLE_SCALE = 0.32;
 /** A control for a whole structure reads a little larger than a point on it. */
 const GLYPH_SCALE = 0.44;
 

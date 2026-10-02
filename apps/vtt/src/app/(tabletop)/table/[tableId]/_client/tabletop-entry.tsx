@@ -6,14 +6,17 @@ import {
   attachCameraNavigation,
   createEditHistoryStack,
   createTabletopRuntime,
+  useDebugStats,
   DEFAULT_STRUCTURE_EDIT_PARAMS,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
+  useTopologyOverlay,
   withOpeningKind,
   type ConstructionToolFeedback,
   type ConstructionToolId,
   type EditHistoryStack,
   type OpeningParams,
+  type TerrainSculptMode,
   type RenderViewId,
   type RulerReadout as RulerReadoutState,
   type StructureEditParams,
@@ -21,11 +24,13 @@ import {
   type TabletopRuntimeStatus,
   type ToolParamsByTool,
 } from "@/composition/tabletop";
-import { StatusBadge } from "@/ui";
+import { StatusBadge, UiThemeProvider } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
+  DebugPanel,
   DEFAULT_MEASURE_UNIT,
+  HeightCutMarker,
   DEFAULT_RULER_SETTINGS,
   isMeasureUnitId,
   parseRulerSettings,
@@ -118,7 +123,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setRulerSettings(next);
     try { window.localStorage.setItem(rulerKey, JSON.stringify(serializeRulerSettings(next))); } catch { /* the choice lasts this session only */ }
   }, [rulerKey]);
-  // The dots drawn on the graph's nodes are a debug view with no function: shown or hidden, no tool changes. Kept per table, on by default as it has always been.
+  // The dots on the graph's vertices are a debug view with no function: shown or hidden, no tool changes. Kept per table, on by default as it has always been.
   const [graphOverlay, setGraphOverlay] = useState(true);
   const graphOverlayKey = `grafting:table:${tableId}:graph-overlay`;
   useEffect(() => {
@@ -128,7 +133,23 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setGraphOverlay(visible);
     try { window.localStorage.setItem(graphOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
   }, [graphOverlayKey]);
-  useEffect(() => { runtime.setGraphOverlay?.(graphOverlay); }, [runtime, graphOverlay]);
+  // The lines drawn along the edges, by role, are the other half of the same topology view: shown or hidden, no tool changes. Kept per table, on by default.
+  const [edgeOverlay, setEdgeOverlay] = useState(true);
+  const edgeOverlayKey = `grafting:table:${tableId}:edge-overlay`;
+  useEffect(() => {
+    try { setEdgeOverlay(window.localStorage.getItem(edgeOverlayKey) !== "off"); } catch { /* storage blocked: the default stands */ }
+  }, [edgeOverlayKey]);
+  const handleEdgeOverlayChange = useCallback((visible: boolean) => {
+    setEdgeOverlay(visible);
+    try { window.localStorage.setItem(edgeOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
+  }, [edgeOverlayKey]);
+  // Both are drawn by the topology overlay alone: no tool shows, hides or picks them.
+  useTopologyOverlay(runtime, { vertices: graphOverlay, edges: edgeOverlay });
+  // The developer panel's numbers: frames, what the map is made of, what the last commits cost.
+  const debugStats = useDebugStats(runtime, true);
+  // The height cut is a view of the table, not a setting kept with it: it starts off every visit, so a table never opens with part of its map hidden.
+  const [heightCut, setHeightCut] = useState<number | undefined>(undefined);
+  useEffect(() => { runtime.setHeightCut?.(heightCut); }, [runtime, heightCut]);
   const [rulerReadout, setRulerReadout] = useState<RulerReadoutState | undefined>(undefined);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
@@ -195,6 +216,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setToolParams((previous) => ({ ...previous, opening: withOpeningKind(previous.opening, kind) }));
     setTool("opening");
   }, []);
+  const handleTerrainModeChange = useCallback((mode: TerrainSculptMode) => {
+    setToolParams((previous) => ({ ...previous, "terrain-sculpt": { ...previous["terrain-sculpt"], mode } }));
+    setTool("terrain-sculpt");
+  }, []);
   const handleToolParamsUpdate = useCallback(
     <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => {
       setToolParams((previous) => ({ ...previous, [toolId]: update(previous[toolId]) }));
@@ -247,6 +272,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   });
 
   return (
+    <UiThemeProvider>
     <div className="gm-studio-app">
       {/* Header Bar -- thin, crops the map on purpose */}
       <header className="gm-header">
@@ -291,6 +317,14 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onPointerCancel={pointerHandlers.onPointerCancel}
           onClick={pointerHandlers.onClick}
           onContextMenu={(event) => event.preventDefault()}
+        />
+
+        <DebugPanel
+          stats={debugStats}
+          graphOverlay={graphOverlay}
+          onGraphOverlayChange={handleGraphOverlayChange}
+          edgeOverlay={edgeOverlay}
+          onEdgeOverlayChange={handleEdgeOverlayChange}
         />
 
         <div className="gm-stage-overlay-info" role="status" aria-live="polite">
@@ -346,6 +380,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onToolChange={setTool}
           openingKind={toolParams.opening.openingKind}
           onOpeningKindChange={handleOpeningKindChange}
+          terrainMode={toolParams["terrain-sculpt"].mode ?? "add"}
+          onTerrainModeChange={handleTerrainModeChange}
           canUndo={historyState.canUndo}
           canRedo={historyState.canRedo}
           onUndo={handleUndo}
@@ -370,9 +406,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onMeasureUnitChange={handleMeasureUnitChange}
           rulerSettings={rulerSettings}
           onRulerSettingsChange={handleRulerSettingsChange}
-          graphOverlay={graphOverlay}
-          onGraphOverlayChange={handleGraphOverlayChange}
         />
+
+        <HeightCutMarker height={heightCut} onHeightChange={setHeightCut} measureUnit={measureUnit} />
 
         {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}
       </section>
@@ -396,5 +432,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         </div>
       </footer>
     </div>
+    </UiThemeProvider>
   );
 }

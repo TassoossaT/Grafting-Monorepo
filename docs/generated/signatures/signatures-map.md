@@ -2530,6 +2530,11 @@ export function applyTransform(object: THREE.Object3D, transform: Transform | un
 export function toVec3(vector: THREE.Vector3): Vec3 {
   return { x: vector.x, y: vector.y, z: vector.z };
 
+// src/backend/three/clip-hit.ts
+export function cutAwayByClip(plane: THREE.Plane, enabled: boolean, object: THREE.Object3D, point: THREE.Vector3): boolean {
+  return enabled && object.userData.clippable === true && plane.distanceToPoint(point) < 0;
+  }
+
 // src/backend/three/create-backend.ts
 export interface ThreeBackendOptions {
   readonly maxPixelRatio?: number;
@@ -3393,7 +3398,8 @@ export interface ConstructionPreviewVisualParams {
   readonly indices?: Uint16Array | Uint32Array;
   readonly color: number;
   readonly opacity: number;
-  readonly filled: boolean;
+  /** Faces filled, lines along the segments, or a dot at each position. */
+  readonly shape: "faces" | "lines" | "points";
   }
 export function constructionPreviewSceneItem(
   descriptor: RenderPreviewDescriptor,
@@ -3536,6 +3542,7 @@ export interface NodeHandlePickData {
 export function nodeHandleSceneItemId(nodeId: string): string {
   return `construction-node-handle:${nodeId}`;
   }
+export const HANDLE_SCALE = 0.32;
 export interface NodeHandleVisualParams {
   readonly glyph: RenderHandleGlyph;
   }
@@ -3600,6 +3607,20 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
 // src/composition/tabletop/commit-timing.ts
 export function timeCommit<T>(label: string, run: () => T): T {
   if (current !== undefined) return timePhase(label, run);
+export interface CommitRecord {
+  /** Counts up with every commit ever finished, so a reader can tell the commits it has not seen yet. */
+  readonly seq: number;
+  readonly label: string;
+  readonly ms: number;
+  /** The slowest phase, by its own time; absent when the commit ran no timed phase. */
+  readonly slowest?: { readonly label: string; readonly ms: number };
+export const RECENT_COMMITS = 32;
+export function recentCommits(): readonly CommitRecord[] {
+  return [...recent];
+  }
+export function clearRecentCommits(): void {
+  recent.length = 0;
+  }
 export function timePhase<T>(label: string, run: () => T): T {
   const trace = current;
   if (trace === undefined) return run();
@@ -3619,6 +3640,82 @@ export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
   ): TabletopRuntime {
   const tableId = input.tableId.trim();
+
+// src/composition/tabletop/debug-stats.ts
+export interface FrameStats {
+  /** Frames drawn per second over the window. */
+  readonly fps: number;
+  /** The mean time one frame took, in milliseconds. */
+  readonly meanMs: number;
+  /** The longest single frame in the window, in milliseconds -- where a stutter shows. */
+  readonly worstMs: number;
+  }
+export const FRAME_WINDOW_MS = 500;
+export function createFrameMeter(windowMs: number = FRAME_WINDOW_MS): (now: number) => FrameStats | undefined {
+  let last: number | undefined;
+  let windowStart = 0;
+  let frames = 0;
+  let total = 0;
+  let worst = 0;
+  return (now) => {
+  if (last === undefined) {
+export interface TypeCount {
+  readonly type: string;
+  readonly count: number;
+  }
+export interface MapCounts {
+  readonly vertices: number;
+  /** Every distinct edge: the ones faces are bounded by, and the graph's own durable ones (a spine segment) that no face bounds. */
+  readonly edges: number;
+  /** Of those, the edges that bound two or more faces: the seams where structures are joined. */
+  readonly sharedEdges: number;
+  readonly faces: number;
+  /** Faces by structure type, the most numerous first. */
+export interface CountedFace {
+  readonly surfaceType: string;
+  readonly outerLoops: readonly (readonly { readonly edgeId: string }[])[];
+  readonly holes: readonly (readonly { readonly edgeId: string }[])[];
+  }
+export function countMap(
+  graph: { readonly nodes: readonly unknown[]; readonly edges: readonly { readonly edgeId: string }[] },
+  faces: readonly CountedFace[],
+  ): MapCounts {
+  const byType = new Map<string, number>();
+export interface PrintedEdgeUse {
+  readonly edgeId: string;
+  readonly reversed: boolean;
+  readonly startNodeId: string;
+  readonly endNodeId: string;
+  readonly geometry: unknown;
+  }
+export interface PrintedFace {
+  readonly surfaceKey: readonly string[];
+  readonly surfaceType: string;
+  readonly outerLoops: readonly (readonly PrintedEdgeUse[])[];
+  readonly holes: readonly (readonly PrintedEdgeUse[])[];
+  readonly nodes: readonly { readonly id: string; readonly position: PrintedPoint }[];
+  readonly props?: unknown;
+  readonly profile?: unknown;
+export interface PrintedGraph {
+  readonly nodes: readonly { readonly id: string; readonly position: PrintedPoint; readonly pin?: unknown }[];
+  readonly edges: readonly { readonly edgeId: string; readonly startNodeId: string; readonly endNodeId: string; readonly curve?: unknown }[];
+  }
+export interface MapFingerprint {
+  readonly vertices: ReadonlyMap<string, string>;
+  readonly edges: ReadonlyMap<string, string>;
+  readonly faces: ReadonlyMap<string, { readonly type: string; readonly print: string }>;
+  }
+export const EMPTY_FINGERPRINT: MapFingerprint = { vertices: new Map(), edges: new Map(), faces: new Map() };
+export function fingerprintMap(graph: PrintedGraph, faces: readonly PrintedFace[]): MapFingerprint {
+  const positions = new Map<string, string>();
+export interface ElementChange {
+  readonly added: number;
+  readonly removed: number;
+  readonly changed: number;
+  }
+export interface TypeChange extends ElementChange {
+  readonly type: string;
+  }
 
 // src/composition/tabletop/effects/change-area.ts
 export const REALLY_MOVED = 0.05;
@@ -3742,14 +3839,14 @@ export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopolog
   return { surfaceType, before: removed, after: [], removedNodeIds, declaredPositions: [] };
 
 // src/composition/tabletop/handle-glyphs.ts
-export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>> = {
-  /** A point of a structure's own outline -- the graph's own node dots. */
-  vertex: "point",
+export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>> = {
   /** A control point of a spine. */
   anchor: "point",
   /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
   /** On the edge of a span's band: push it out or in. */
+  width: "side",
+  /** A wall run's own height widget. */
 export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
   radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
@@ -3775,7 +3872,7 @@ export type {
   RegionEditHistoryEntry,
   } from "../../features/edit-construction/index.ts";
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
-export type { ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+export type { ConstructionToolId, OpeningParams, StructureEditParams, TerrainSculptMode, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
@@ -4304,36 +4401,6 @@ export function beginCurveGesture(
   ): CurveGesture | undefined {
   const ownsType = typeof ownsTypeOrParams === "function" ? ownsTypeOrParams : () => true;
   const actualParams = typeof ownsTypeOrParams === "function" ? params : ownsTypeOrParams;
-
-// src/composition/tabletop/tools/core/edge-overlay.ts
-export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
-  "path-spine-edge": 0xfacc15,
-  "path-contour-edge": 0x22d3ee,
-  "path-rib-edge": 0xf472b6,
-  "panel-bottom-edge": 0x34d399,
-  "panel-top-edge": 0x818cf8,
-  "panel-post": 0xfb923c,
-  "organic-boundary-edge": 0x94a3b8,
-export const RIM_ROLES: ReadonlySet<string> = new Set([
-export const INTERIOR_EDGE_ROLE = "interior-edge";
-export const EDGE_FALLBACK_COLOR = 0x64748b;
-export function edgeOverlayChannel(role: string): string {
-  return `edges:${role}`;
-  }
-export interface EdgeOverlayGroup {
-  readonly role: string;
-  readonly color: number;
-  readonly positions: Float32Array;
-  }
-export function edgeOverlayOf(
-  port: ContourPort,
-  topologies: readonly ConstructionRegionTopology[],
-  graphSnapshot?: ConstructionGraphSnapshot,
-  curves?: import("../../../../ports/bezier-port.ts").BezierPort,
-  ): readonly EdgeOverlayGroup[] {
-  const byRole = new Map<string, number[]>();
-export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
-  return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
 // src/composition/tabletop/tools/core/face-props.ts
 export interface FacePropsRuntime {
@@ -4889,8 +4956,9 @@ export interface OpeningStand {
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
   ...openingToolBase,
-  // Its selected opening shows corner and side handles, drawn like every other handle's.
+  // The opening under the pointer shows its handles -- middle, sides and corners -- drawn like every other handle's.
   editsType: (surfaceType) => surfaceType === openingStructureType.surfaceType,
+  handlesOnHover: true,
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
   const ghost = openingToolBase.previewFor?.(gesture, params, ctx);
 
@@ -5446,6 +5514,56 @@ export function wallSpans(ctx: ToolContext): readonly WallSpan[] {
   .map(spanOf)
   .filter((span): span is WallSpan => span !== undefined);
 
+// src/composition/tabletop/topology-overlay/edge-overlay.ts
+export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
+  "path-spine-edge": 0xfacc15,
+  "path-contour-edge": 0x22d3ee,
+  "path-rib-edge": 0xf472b6,
+  "panel-bottom-edge": 0x34d399,
+  "panel-top-edge": 0x818cf8,
+  "panel-post": 0xfb923c,
+  "organic-boundary-edge": 0x94a3b8,
+export const RIM_ROLES: ReadonlySet<string> = new Set([
+export const INTERIOR_EDGE_ROLE = "interior-edge";
+export const EDGE_FALLBACK_COLOR = 0x64748b;
+export function edgeOverlayChannel(role: string): string {
+  return `edges:${role}`;
+  }
+export interface EdgeOverlayGroup {
+  readonly role: string;
+  readonly color: number;
+  readonly positions: Float32Array;
+  }
+export function edgeOverlayOf(
+  port: ContourPort,
+  topologies: readonly ConstructionRegionTopology[],
+  graphSnapshot?: ConstructionGraphSnapshot,
+  curves?: BezierPort,
+  ): readonly EdgeOverlayGroup[] {
+  const byRole = new Map<string, number[]>();
+export function edgeOverlayDescriptor(group: EdgeOverlayGroup): RenderPreviewDescriptor {
+  return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
+
+// src/composition/tabletop/topology-overlay/use-topology-overlay.ts
+export interface TopologyOverlayOptions {
+  /** A dot on every vertex. */
+  readonly vertices: boolean;
+  /** Every edge, coloured by its role. */
+  readonly edges: boolean;
+  }
+export function useTopologyOverlay(runtime: TabletopRuntime, options: TopologyOverlayOptions): void {
+  const { vertices, edges } = options;
+  useEffect(() => {
+  if (!vertices && !edges) return;
+  let shown = new Set<string>();
+
+// src/composition/tabletop/topology-overlay/vertex-overlay.ts
+export const VERTEX_OVERLAY_CHANNEL = "topology:vertices";
+export function vertexOverlayOf(graph: Pick<ConstructionGraphSnapshot, "nodes">): Float32Array {
+  const positions = new Float32Array(graph.nodes.length * 3);
+export function vertexOverlayDescriptor(positions: Float32Array): RenderPreviewDescriptor {
+  return { kind: "points", positions, color: VERTEX_OVERLAY_COLOR, opacity: 1 };
+
 // src/composition/tabletop/use-construction-pointer.ts
 export interface RulerReadout {
   readonly labels: readonly string[];
@@ -5469,6 +5587,27 @@ export interface ConstructionPointerHandlers {
   }
 export function useConstructionPointer(options: UseConstructionPointerOptions): ConstructionPointerHandlers {
   const gestureRef = useRef<ActiveGesture | null>(null);
+
+// src/composition/tabletop/use-debug-stats.ts
+export const RECENT_CHANGES = 8;
+export interface ChangeRecord {
+  /** The map's revision once the change was read. */
+  readonly revision: number;
+  /** What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads. */
+  readonly label: string;
+  /** The commits' time together, in milliseconds; absent when no timed commit made it. */
+  readonly ms?: number;
+  /** The slowest phase of any of those commits. */
+export interface DebugStats {
+  /** The last full window of frames; absent until one has passed. */
+  readonly frame?: FrameStats;
+  /** What the map is made of; absent until the table is live. */
+  readonly counts?: MapCounts;
+  /** How long reading the map took, in milliseconds: what looking at the map costs. */
+  readonly readMs?: number;
+  /** Bytes of JavaScript heap in use, where the browser says. */
+export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats {
+  const [frame, setFrame] = useState<FrameStats | undefined>(undefined);
 
 // src/entities/map/index.ts
 export type {
@@ -6167,7 +6306,7 @@ export interface SceneHandleInput {
   readonly contour: readonly ConstructionCurvedEdge[];
   /** Absent without the curve engine: then no curve has a handle. */
   readonly port?: Pick<BezierPort, "curveBatch">;
-  readonly cloudFor: (request: { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }) => { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
+  /** Places an opening's handles on its whole box along the walls it crosses; absent, on the part on its first wall. */
 export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
   const handles: SceneHandle[] = [];
   if (input.port) {
@@ -8021,12 +8160,12 @@ export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldC
 export type { OpeningHandle, OpeningHandlePart } from "./opening-handles.ts";
 
 // src/features/edit-construction/topology/opening-handles.ts
-export type OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type OpeningHandlePart = "center" | "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export interface OpeningHandle {
   readonly id: string;
   readonly part: OpeningHandlePart;
-  /** A corner moves two sides at once; a side, one. */
-  readonly kind: "corner" | "side";
+  /** The middle moves the whole opening; a corner moves two sides at once; a side, one. */
+  readonly kind: "pivot" | "corner" | "side";
   readonly position: ConstructionPosition;
   /** The node the handle is named after -- one of the opening's own -- by which the opening is found again. */
   readonly nodeId: string;
@@ -8034,10 +8173,12 @@ export const openingHandleId = (part: OpeningHandlePart, nodeId: string): string
 export function openingHandlePick(id: string): { readonly part: OpeningHandlePart; readonly nodeId: string } | undefined {
   if (!id.startsWith(PREFIX)) return undefined;
   const rest = id.slice(PREFIX.length);
+export type OpeningRunPort = Pick<ConstructionSessionPort, "panelRun" | "resolveOnHost">;
 export function openingHandles(
   topologies: readonly ConstructionRegionTopology[],
   focus: ReadonlySet<string> | undefined,
   isOpening: (surfaceType: string) => boolean,
+  runs?: OpeningRunPort,
   ): readonly OpeningHandle[] {
   if (!focus) return [];
   const groups = new Map<string, ConstructionRegionTopology[]>();

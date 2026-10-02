@@ -52,5 +52,5 @@ export function nodeByGeometry(hit: Pick<PointerSample, "point" | "ray">, nodes:
   return best?.node;
 }
 
-/** The graph node `sample` is on: the one geometry finds, else the one a picked dot named. */
+/** The graph node `sample` is on: the one geometry finds, else the one a picked handle named. */
 export const graphNodeOf = (sample: Pick<PointerSample, "node" | "nodeId">): string | undefined => sample.node?.id ?? sample.nodeId;

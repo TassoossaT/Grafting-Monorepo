@@ -45,9 +45,6 @@ export interface SettingsDrawerProps {
   /** What the table asks of its ruler: what catches, the angle's step and the round number a length lands on. */
   readonly rulerSettings: RulerSettings;
   readonly onRulerSettingsChange: (settings: RulerSettings) => void;
-  /** Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool. */
-  readonly graphOverlay: boolean;
-  readonly onGraphOverlayChange: (visible: boolean) => void;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
 }
@@ -93,7 +90,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             </div>
           </div>
         ) : (
-          <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
+          <p style={{ margin: 0, fontSize: "0.75rem", color: "#ffffff" }}>
             Clique em uma alça de node (esfera amarela) de uma estrutura já existente, com a ferramenta que a criou
             ativa, para inspecionar.
           </p>
@@ -119,14 +116,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           >
             {Object.values(MEASURE_UNITS).map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
           </select>
-        </label>
-      </Card>
-
-      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
-        <span className="gm-panel-card-title">Depuração</span>
-        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.78rem" }}>
-          <input type="checkbox" checked={props.graphOverlay} onChange={(event) => props.onGraphOverlayChange(event.target.checked)} />
-          <span>Pontos do grafo (só visualização)</span>
         </label>
       </Card>
 
@@ -164,7 +153,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               <span>{RULER_KIND_LABELS[kind]}</span>
             </label>
           ))}
-          <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: "0.72rem" }}>
+          <p style={{ margin: "0.2rem 0 0", color: "#ffffff", fontSize: "0.72rem" }}>
             Ctrl: posiciona sem encaixe. Shift: marcas de 5°. Digite um número ao desenhar para fixar o comprimento.
           </p>
         </div>

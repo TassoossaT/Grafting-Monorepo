@@ -22,7 +22,14 @@ export interface ConstructionPreviewVisualParams {
   readonly indices?: Uint16Array | Uint32Array;
   readonly color: number;
   readonly opacity: number;
-  readonly filled: boolean;
+  /** Faces filled, lines along the segments, or a dot at each position. */
+  readonly shape: "faces" | "lines" | "points";
+}
+
+function shapeOf(descriptor: RenderPreviewDescriptor): ConstructionPreviewVisualParams["shape"] {
+  if (descriptor.kind === "segments") return "lines";
+  if (descriptor.kind === "points") return "points";
+  return "faces";
 }
 
 /**
@@ -44,7 +51,7 @@ export function constructionPreviewSceneItem(
         indices: descriptor.kind === "mesh" ? descriptor.indices : undefined,
         color: descriptor.color,
         opacity: descriptor.opacity ?? 0.5,
-        filled: descriptor.kind !== "segments",
+        shape: shapeOf(descriptor),
       },
     },
     data: Object.freeze({ entity: "construction-preview" }),

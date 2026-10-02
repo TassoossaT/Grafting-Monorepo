@@ -298,4 +298,5 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
 export type PreviewDescriptor =
   | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
   | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
-  | { readonly kind: "mesh"; readonly positions: Float32Array; readonly indices: Uint16Array | Uint32Array; readonly color: number; readonly opacity?: number };
+  | { readonly kind: "mesh"; readonly positions: Float32Array; readonly indices: Uint16Array | Uint32Array; readonly color: number; readonly opacity?: number }
+  | { readonly kind: "points"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number };

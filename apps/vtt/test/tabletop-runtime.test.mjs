@@ -39,6 +39,7 @@ function createTabletopRuntime(options) {
 
 function createFakeRenderPort() {
   const changes = [];
+  const clipHeights = [];
   let started = false;
   let creates = 0;
   let disposes = 0;
@@ -66,7 +67,12 @@ function createFakeRenderPort() {
     pick() {
       return undefined;
     },
-    setFloorClipHeight() {},
+    // Like the real adapter: there is no engine to cut before `start`.
+    clipHeights,
+    setFloorClipHeight(height) {
+      if (!started) throw new Error("scene renderer is not started");
+      clipHeights.push(height);
+    },
     getMetrics() {
       return {
         rendererCreates: creates,
@@ -311,6 +317,27 @@ test("keeps a cached immutable snapshot and publishes lifecycle transitions", as
   assert.deepEqual(observed, ["starting", "ready"]);
   assert.equal(runtime.getSnapshot().status, "ready");
   await assert.rejects(runtime.start(), /already ready/);
+});
+
+test("a height cut asked for before the renderer starts is kept and applied once it has", async () => {
+  const renderPort = createFakeRenderPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-1",
+    renderPort,
+    constructionPort: createFakeConstructionPort(),
+  });
+
+  // What the view does on mount, before `start` has finished: nothing may reach the renderer yet.
+  runtime.setHeightCut(undefined);
+  runtime.setHeightCut(4);
+  assert.deepEqual(renderPort.clipHeights, []);
+
+  await runtime.start();
+  assert.deepEqual(renderPort.clipHeights, [4]);
+
+  runtime.setHeightCut(4);
+  runtime.setHeightCut(undefined);
+  assert.deepEqual(renderPort.clipHeights, [4, undefined]);
 });
 
 test("by default, starting a tabletop runtime initializes a clean, empty board", async () => {
@@ -1102,7 +1129,8 @@ test("road presentation exposes only spine anchors, insertion points and width h
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
-    assert.ok(shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
+    // A plain vertex is no handle: only the topology overlay draws it, so nothing comes back for it here.
+    assert.ok(!shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
     // The active tool edits sloped platforms: their whole-structure handles show.
     runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
@@ -1154,7 +1182,7 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
   } finally { session.free(); }
 });
 
-test("the graph overlay switches off and on without touching an edit handle: only the dots with no function go", async () => {
+test("the handle layer holds edit handles only: a plain vertex never gets a dot there, whatever the handle presentation", async () => {
   const { sessionFixture } = await import("./platform-session-fixture.mjs");
   const { curvePickId } = await import("../src/features/edit-construction/index.ts");
   const real = sessionFixture(), render = createFakeRenderPort(), construction = createFakeConstructionPort();
@@ -1177,13 +1205,10 @@ test("the graph overlay switches off and on without touching an edit handle: onl
   };
   try {
     await runtime.start();
+    assert.ok(!shown().has("mesh:vertex"), "no dot for a plain vertex");
     runtime.setConstructionHandlePresentation("spine-points");
     runtime.setConstructionHandlePresentation("all");
-    assert.ok(shown().has("mesh:vertex"), "the graph's dot on a plain vertex is drawn");
-    runtime.setGraphOverlay(false);
-    assert.ok(!shown().has("mesh:vertex"), "off: the dot is gone");
-    assert.ok(shown().has(curvePickId("spine-edge:a", "midpoint")), "an edit handle stays");
-    runtime.setGraphOverlay(true);
-    assert.ok(shown().has("mesh:vertex"), "on: it is back");
+    assert.ok(!shown().has("mesh:vertex"), "nor after the presentation went to points and back");
+    assert.ok(shown().has(curvePickId("spine-edge:a", "midpoint")), "and the edit handle stays");
   } finally { await runtime.dispose(); real.session.free(); }
 });

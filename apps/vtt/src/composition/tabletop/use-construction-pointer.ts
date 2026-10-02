@@ -23,11 +23,6 @@ import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-con
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
 import type { HandleFocus } from "../../features/edit-construction/index.ts";
-import {
-  edgeOverlayChannel,
-  edgeOverlayDescriptor,
-  edgeOverlayOf,
-} from "./tools/core/edge-overlay.ts";
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
 /**
@@ -210,8 +205,6 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     optionsRef.current.runtime.clearPreview(RULER_LABELS_CHANNEL);
     optionsRef.current.onRulerReadout?.(undefined);
   }, [ruler]);
-  /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
-  const shownEdgeChannels = useRef(new Set<string>());
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
   const selectedPoint = useRef<string | undefined>(undefined);
 
@@ -288,7 +281,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
               // Refresh from confirmed state after success, rejection or cancellation.
               const current = spineHandleAt(runtime, node.id);
               if (selectedPoint.current === node.id) ctx.reportSelection(current ? { id: current.id, point: current.position } : undefined);
-              refreshEdgeOverlay();
+              syncToolHandles();
             }
           },
         } : undefined);
@@ -311,34 +304,20 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   }, [options.activeTool, options.toolParams, ctx]);
 
   /**
-   * Redraws the construction-edge overlay from whatever is now standing.
-   *
-   * Here rather than inside any one tool: an edge belongs to the table, not
-   * to whichever tool happened to draw it, so a wall's posts show while the
-   * path brush is selected and vice versa. Refreshed after a commit and on
-   * tool change -- nothing about the graph moves in between -- and each role
-   * gets its own channel, which leaves the tool's own ghost untouched.
+   * Sets the runtime's handles to what the active tool shows: its handle
+   * presentation, the types whose whole-structure handles it owns, and
+   * whether handles follow the hover. Run on tool change and after a commit.
    */
-  const refreshEdgeOverlay = useCallback((): void => {
+  const syncToolHandles = useCallback((): void => {
     const { runtime } = optionsRef.current;
-    // Nothing to read, and nothing to draw on, until the table is live. The
-    // mount effect below runs before the runtime finishes loading, and asking
-    // it for topologies then is an error rather than an empty answer.
+    // Nothing to set until the table is live. The mount effect below runs
+    // before the runtime finishes loading.
     if (runtime.getSnapshot().status !== "ready") return;
     const tool = toolFor(optionsRef.current.activeTool);
-    const presentation = tool.handlePresentation;
-    runtime.setConstructionHandlePresentation?.(presentation ?? "all");
+    runtime.setConstructionHandlePresentation?.(tool.handlePresentation ?? "all");
     runtime.setGlobalHandleOwners?.(tool.editsType);
     if (!tool.handlesOnHover) runtime.setHandleFocus?.(undefined);
     else if (!focusRef.current) { focusRef.current = NO_FOCUS; runtime.setHandleFocus?.(NO_FOCUS); }
-    for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
-    shownEdgeChannels.current.clear();
-    for (const group of edgeOverlayOf(runtime, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime)) {
-      if (group.positions.length === 0 || (presentation === "spine-points" && group.role !== "path-spine-edge")) continue;
-      const channel = edgeOverlayChannel(group.role);
-      runtime.showPreview(edgeOverlayDescriptor(group), channel);
-      shownEdgeChannels.current.add(channel);
-    }
   }, []);
 
   // Runs on a tool switch, never on a change of the active tool's params: a
@@ -372,10 +351,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const { toolParams, activeTool } = optionsRef.current;
       if (tool.onKeyDown?.(ownedContext, event.key, toolParams[activeTool] as never)) {
         event.preventDefault();
-        refreshEdgeOverlay();
+        syncToolHandles();
       }
     };
-    refreshEdgeOverlay();
+    syncToolHandles();
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keydown);
@@ -390,15 +369,14 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       options.runtime.setHandleFocus?.(undefined);
       release();
     };
-  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, ctx, refreshEdgeOverlay]);
+  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, ctx, syncToolHandles]);
 
-  // Draw what is already standing as soon as the table is live, not only
-  // after the first commit -- an edge that was there before this session
-  // began is exactly as worth seeing as one just drawn. The runtime is still
-  // loading at mount, so this waits for it rather than asking too early.
+  // Set the tool's handles as soon as the table is live, not only after the
+  // first commit. The runtime is still loading at mount, so this waits for
+  // it rather than asking too early.
   useEffect(() => {
     const { runtime } = optionsRef.current;
-    refreshEdgeOverlay();
+    syncToolHandles();
     let drawn = runtime.getSnapshot().status === "ready";
     const unsubscribe = runtime.subscribe(() => {
       ruler.invalidate();
@@ -408,10 +386,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       }
       if (drawn || runtime.getSnapshot().status !== "ready") return;
       drawn = true;
-      refreshEdgeOverlay();
+      syncToolHandles();
     });
     return unsubscribe;
-  }, [options.runtime, refreshEdgeOverlay, ctx, ruler]);
+  }, [options.runtime, syncToolHandles, ctx, ruler]);
 
   /**
    * `ruledSample` with the length typed so far: from where the drawing began,
@@ -649,9 +627,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       }
       optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
       clearRuler();
-      refreshEdgeOverlay();
+      syncToolHandles();
     },
-    [ctx, refreshEdgeOverlay, sampleAt, clearRuler],
+    [ctx, syncToolHandles, sampleAt, clearRuler],
   );
 
   const cancelGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -675,9 +653,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const sample = sampleAt(event);
       if (sample === undefined) return;
       tool.onClick(ctx, sample, toolParams[activeTool] as never);
-      refreshEdgeOverlay();
+      syncToolHandles();
     },
-    [ctx, refreshEdgeOverlay, sampleAt],
+    [ctx, syncToolHandles, sampleAt],
   );
 
   return {

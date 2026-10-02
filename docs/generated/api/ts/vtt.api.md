@@ -109,13 +109,15 @@ already exists.
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.color: number`
 
-### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.filled: boolean`
-
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.indices?: Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike>`
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.opacity: number`
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.positions: Float32Array`
+
+### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.shape: "points" | "faces" | "lines"`
+
+Faces filled, lines along the segments, or a dot at each position.
 
 ### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_LAYER_ID: "construction-preview"`
 
@@ -316,6 +318,10 @@ Opaque per-item data a pick result echoes back, letting the adapter recover whic
 
 ### `property vtt.node-handle-scene-item.NodeHandleVisualParams.glyph: RenderHandleGlyph`
 
+### `variable vtt.node-handle-scene-item.HANDLE_SCALE: 0.32`
+
+Large enough to stay a comfortable pointer/touch target at typical table-view camera distances, small enough not to obscure the geometry it marks.
+
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_LAYER_ID: "construction-handles"`
 
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_VISUAL_KIND: "vtt-construction-node-handle"`
@@ -426,9 +432,37 @@ How wide a written text is against its height: the one rule the sprite's size an
 
 ### `function vtt.token-scene-item.tokenTransform(token: RenderToken): Transform`
 
+### `interface vtt.commit-timing.CommitRecord`
+
+One finished commit: what it was, how long it took, and the slowest phase inside it.
+
+### `property vtt.commit-timing.CommitRecord.label: string`
+
+### `property vtt.commit-timing.CommitRecord.ms: number`
+
+### `property vtt.commit-timing.CommitRecord.seq: number`
+
+Counts up with every commit ever finished, so a reader can tell the commits it has not seen yet.
+
+### `property vtt.commit-timing.CommitRecord.slowest?: { label: string; ms: number }`
+
+The slowest phase, by its own time; absent when the commit ran no timed phase.
+
+### `variable vtt.commit-timing.RECENT_COMMITS: 32`
+
+How many finished commits are remembered for the debug panel: enough for a burst of them, like a drag, between two of its reads.
+
+### `function vtt.commit-timing.clearRecentCommits(): void`
+
+Forgets the remembered commits.
+
 ### `function vtt.commit-timing.countInCommit(label: string, by: number): void`
 
 Adds to a named counter of the running commit; nothing outside one.
+
+### `function vtt.commit-timing.recentCommits(): readonly CommitRecord[]`
+
+The most recent finished commits, oldest first -- always kept, slow or not, so the panel can show what generation costs as it happens.
 
 ### `function vtt.commit-timing.timeCommit(label: string, run: () => T): T`
 
@@ -452,6 +486,196 @@ Times `run` as a phase of the running commit; untimed outside one.
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.terrainNoisePort?: TerrainNoisePort`
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
+
+### `interface vtt.debug-stats.CountedFace`
+
+One face, as far as counting it needs: its type and the edges its loops walk.
+
+### `property vtt.debug-stats.CountedFace.holes: readonly (readonly { edgeId: string }[])[]`
+
+### `property vtt.debug-stats.CountedFace.outerLoops: readonly (readonly { edgeId: string }[])[]`
+
+### `property vtt.debug-stats.CountedFace.surfaceType: string`
+
+### `interface vtt.debug-stats.ElementChange`
+
+How many elements of one kind a change added, removed and changed in place.
+
+### `property vtt.debug-stats.ElementChange.added: number`
+
+### `property vtt.debug-stats.ElementChange.changed: number`
+
+### `property vtt.debug-stats.ElementChange.removed: number`
+
+### `interface vtt.debug-stats.FrameStats`
+
+What the frame meter reports for a window of frames.
+
+### `property vtt.debug-stats.FrameStats.fps: number`
+
+Frames drawn per second over the window.
+
+### `property vtt.debug-stats.FrameStats.meanMs: number`
+
+The mean time one frame took, in milliseconds.
+
+### `property vtt.debug-stats.FrameStats.worstMs: number`
+
+The longest single frame in the window, in milliseconds -- where a stutter shows.
+
+### `interface vtt.debug-stats.MapChange`
+
+What one change did to the map.
+
+### `property vtt.debug-stats.MapChange.edges: ElementChange`
+
+### `property vtt.debug-stats.MapChange.faces: ElementChange`
+
+A face is known by its node set, so a face that gains or loses a vertex
+reads as one removed and one added; one whose vertices only move, or
+whose type or properties change, reads as changed.
+
+### `property vtt.debug-stats.MapChange.facesByType: readonly TypeChange[]`
+
+The faces' change by type, the most touched type first; types the change left alone are not listed.
+
+### `property vtt.debug-stats.MapChange.vertices: ElementChange`
+
+### `interface vtt.debug-stats.MapCounts`
+
+What the map is made of, counted.
+
+### `property vtt.debug-stats.MapCounts.byType: readonly TypeCount[]`
+
+Faces by structure type, the most numerous first.
+
+### `property vtt.debug-stats.MapCounts.edges: number`
+
+Every distinct edge: the ones faces are bounded by, and the graph's own durable ones (a spine segment) that no face bounds.
+
+### `property vtt.debug-stats.MapCounts.faces: number`
+
+### `property vtt.debug-stats.MapCounts.sharedEdges: number`
+
+Of those, the edges that bound two or more faces: the seams where structures are joined.
+
+### `property vtt.debug-stats.MapCounts.vertices: number`
+
+### `interface vtt.debug-stats.MapFingerprint`
+
+The map reduced to one string per element, under the element's own
+identity: a vertex by its id, an edge by its id, a face by its node set.
+Two prints of the same element differ exactly when the element changed.
+
+### `property vtt.debug-stats.MapFingerprint.edges: ReadonlyMap<string, string>`
+
+### `property vtt.debug-stats.MapFingerprint.faces: ReadonlyMap<string, { print: string; type: string }>`
+
+### `property vtt.debug-stats.MapFingerprint.vertices: ReadonlyMap<string, string>`
+
+### `interface vtt.debug-stats.PrintedEdgeUse`
+
+One edge's walk along a face's loop, as far as telling it apart needs.
+
+### `property vtt.debug-stats.PrintedEdgeUse.edgeId: string`
+
+### `property vtt.debug-stats.PrintedEdgeUse.endNodeId: string`
+
+### `property vtt.debug-stats.PrintedEdgeUse.geometry: unknown`
+
+### `property vtt.debug-stats.PrintedEdgeUse.reversed: boolean`
+
+### `property vtt.debug-stats.PrintedEdgeUse.startNodeId: string`
+
+### `interface vtt.debug-stats.PrintedFace`
+
+One face, as far as telling whether it changed needs.
+
+### `property vtt.debug-stats.PrintedFace.holes: readonly (readonly PrintedEdgeUse[])[]`
+
+### `property vtt.debug-stats.PrintedFace.nodes: readonly { id: string; position: PrintedPoint }[]`
+
+### `property vtt.debug-stats.PrintedFace.outerLoops: readonly (readonly PrintedEdgeUse[])[]`
+
+### `property vtt.debug-stats.PrintedFace.profile?: unknown`
+
+### `property vtt.debug-stats.PrintedFace.props?: unknown`
+
+### `property vtt.debug-stats.PrintedFace.surfaceKey: readonly string[]`
+
+### `property vtt.debug-stats.PrintedFace.surfaceType: string`
+
+### `interface vtt.debug-stats.PrintedGraph`
+
+The graph, as far as telling whether it changed needs.
+
+### `property vtt.debug-stats.PrintedGraph.edges: readonly { curve?: unknown; edgeId: string; endNodeId: string; startNodeId: string }[]`
+
+### `property vtt.debug-stats.PrintedGraph.nodes: readonly { id: string; pin?: unknown; position: PrintedPoint }[]`
+
+### `interface vtt.debug-stats.TypeChange`
+
+The same, for the faces of one structure type.
+
+### `property vtt.debug-stats.TypeChange.added: number`
+
+### `property vtt.debug-stats.TypeChange.changed: number`
+
+### `property vtt.debug-stats.TypeChange.removed: number`
+
+### `property vtt.debug-stats.TypeChange.type: string`
+
+### `interface vtt.debug-stats.TypeCount`
+
+How many faces of one structure type there are.
+
+### `property vtt.debug-stats.TypeCount.count: number`
+
+### `property vtt.debug-stats.TypeCount.type: string`
+
+### `variable vtt.debug-stats.EMPTY_FINGERPRINT: MapFingerprint`
+
+The fingerprint of a map with nothing on it: what the first read of a table is compared with.
+
+### `variable vtt.debug-stats.FRAME_WINDOW_MS: 500`
+
+How long a window of frames lasts before it is reported and a new one begins.
+
+### `function vtt.debug-stats.countMap(graph: { edges: readonly { edgeId: string }[]; nodes: readonly unknown[] }, faces: readonly CountedFace[]): MapCounts`
+
+Counts a graph's vertices and edges and the faces standing on it, with the
+faces told apart by type. The graph's own edge list holds only its durable
+generic edges; the edges a face is bounded by live in the face's loops, so
+both are counted, each edge once.
+
+### `function vtt.debug-stats.createFrameMeter(windowMs: number): (now: number) => FrameStats | undefined`
+
+Measures frames as they arrive: give it each frame's timestamp and it
+answers with the stats of the window that just closed, or `undefined` while
+the window is still filling.
+
+### `function vtt.debug-stats.diffMaps(before: MapFingerprint, after: MapFingerprint): MapChange`
+
+Compares two prints of the map, element by element.
+
+### `function vtt.debug-stats.fingerprintMap(graph: PrintedGraph, faces: readonly PrintedFace[]): MapFingerprint`
+
+Prints every vertex, edge and face of the map. An edge or face prints the
+positions of its own vertices, so moving a vertex shows as a change of the
+edges and faces it bends, not only of the vertex.
+
+### `function vtt.debug-stats.formatMegabytes(bytes: number): string`
+
+A byte count as megabytes, one decimal.
+
+### `function vtt.debug-stats.isNoChange(change: MapChange): boolean`
+
+Whether a change left the map exactly as it was.
+
+### `function vtt.debug-stats.nameCommits(labels: readonly string[]): string`
+
+Names a run of commits in one line: each label once, in the order it first
+ran, with how many times it ran when that was more than once.
 
 ### `interface vtt.change-area.ChangeArea`
 
@@ -630,7 +854,7 @@ The faces behind `keys` that still exist. A stale key is skipped, not fatal.
 
 What each whole-structure handle reports once its edit is committed -- said here, with how it looks.
 
-### `variable vtt.handle-glyphs.HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>>`
+### `variable vtt.handle-glyphs.HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>>`
 
 Every handle the scene shows, by what it is for, and the glyph it is drawn
 with -- the one place a handle's look is chosen. Which handles exist is
@@ -847,13 +1071,14 @@ Local editing presentation; never changes the graph or persistence.
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.setGraphOverlay(visible: boolean): void`
-
-Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them.
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
 
 Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setHeightCut(height: number | undefined): void`
+
+Hides everything of the map above `height`, picking included, so what is
+inside a roofed or upper-floored structure can be seen and edited; `undefined` shows it all. A view of the table, not an edit: nothing here reaches the graph or the history.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -1049,13 +1274,14 @@ Local editing presentation; never changes the graph or persistence.
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.setGraphOverlay(visible: boolean): void`
-
-Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them.
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
 
 Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setHeightCut(height: number | undefined): void`
+
+Hides everything of the map above `height`, picking included, so what is
+inside a roofed or upper-floored structure can be seen and edited; `undefined` shows it all. A view of the table, not an edit: nothing here reaches the graph or the history.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -2342,63 +2568,6 @@ Screen coordinate used by explicit elevation gestures.
 
 Starts a curve gesture on the handle `sample` landed on, when the curve belongs to a type `ownsType` accepts.
 
-### `interface vtt.edge-overlay.EdgeOverlayGroup`
-
-One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
-
-### `property vtt.edge-overlay.EdgeOverlayGroup.color: number`
-
-### `property vtt.edge-overlay.EdgeOverlayGroup.positions: Float32Array`
-
-### `property vtt.edge-overlay.EdgeOverlayGroup.role: string`
-
-### `variable vtt.edge-overlay.EDGE_FALLBACK_COLOR: 6583435`
-
-Drawn for an edge whose role no palette entry names.
-
-### `variable vtt.edge-overlay.EDGE_ROLE_COLORS: Readonly<Record<string, number>>`
-
-A palette keyed by role, with a fallback for a role nothing has named yet.
-
-### `variable vtt.edge-overlay.INTERIOR_EDGE_ROLE: "interior-edge"`
-
-What a rim role becomes once the graph shows a face on both sides.
-
-### `variable vtt.edge-overlay.RIM_ROLES: ReadonlySet<string>`
-
-Roles that claim an edge is on the outside of something, and so are only
-true while it has a face on one side.
-
-A type names the role; whether the graph still bears it out is not the
-type's business, because a type sees one face at a time and this is a
-question about a pair. Left unchecked it produces the one drawing error
-that matters here -- a rim line running through the middle of a road, kept
-by nothing but the addresses its nodes were minted with, long after a
-junction turned it into an interior seam.
-
-Any type may add to this. It is a capability, not a rule about paths.
-
-### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
-
-The preview channel one role's edges are drawn on.
-
-### `function vtt.edge-overlay.edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor`
-
-One group as the descriptor that draws it.
-
-### `function vtt.edge-overlay.edgeOverlayOf(port: ContourPort, topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot, curves?: BezierPort): readonly EdgeOverlayGroup[]`
-
-Groups every edge of every region in `topologies` by role.
-
-An edge shared by two faces is drawn once: it is one edge, and drawing it
-twice would only make a shared boundary look heavier than a free one, which
-is the opposite of the truth worth seeing.
-
-Sharing also settles the role. A type that named an edge as some kind of
-rim named it from one face, and one face cannot see the other; if the graph
-shows two, the edge is interior whatever it was called -- see
-RIM_ROLES.
-
 ### `interface vtt.face-props.FacePropsRuntime`
 
 What keeping a regenerated structure's properties and pins needs of the runtime.
@@ -2516,7 +2685,7 @@ How near the pointer's ray must pass to a node, on the screen, for the node to b
 
 ### `function vtt.node-identity.graphNodeOf(sample: Pick<PointerSample, "node" | "nodeId">): string | undefined`
 
-The graph node `sample` is on: the one geometry finds, else the one a picked dot named.
+The graph node `sample` is on: the one geometry finds, else the one a picked handle named.
 
 ### `function vtt.node-identity.nodeByGeometry(hit: Pick<PointerSample, "point" | "ray">, nodes: readonly NodeAt[], metersPerPixel: number | undefined): NodeAt | undefined`
 
@@ -4745,6 +4914,95 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 ### `function vtt.wall-spans.wallSpans(ctx: ToolContext): readonly WallSpan[]`
 
+### `interface vtt.edge-overlay.EdgeOverlayGroup`
+
+One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.color: number`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.positions: Float32Array`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.role: string`
+
+### `variable vtt.edge-overlay.EDGE_FALLBACK_COLOR: 6583435`
+
+Drawn for an edge whose role no palette entry names.
+
+### `variable vtt.edge-overlay.EDGE_ROLE_COLORS: Readonly<Record<string, number>>`
+
+A palette keyed by role, with a fallback for a role nothing has named yet.
+
+### `variable vtt.edge-overlay.INTERIOR_EDGE_ROLE: "interior-edge"`
+
+What a rim role becomes once the graph shows a face on both sides.
+
+### `variable vtt.edge-overlay.RIM_ROLES: ReadonlySet<string>`
+
+Roles that claim an edge is on the outside of something, and so are only
+true while it has a face on one side.
+
+A type names the role; whether the graph still bears it out is not the
+type's business, because a type sees one face at a time and this is a
+question about a pair. Left unchecked it produces the one drawing error
+that matters here -- a rim line running through the middle of a road, kept
+by nothing but the addresses its nodes were minted with, long after a
+junction turned it into an interior seam.
+
+Any type may add to this. It is a capability, not a rule about paths.
+
+### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
+
+The preview channel one role's edges are drawn on.
+
+### `function vtt.edge-overlay.edgeOverlayDescriptor(group: EdgeOverlayGroup): RenderPreviewDescriptor`
+
+One group as the descriptor that draws it.
+
+### `function vtt.edge-overlay.edgeOverlayOf(port: ContourPort, topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot, curves?: BezierPort): readonly EdgeOverlayGroup[]`
+
+Groups every edge of every region in `topologies` by role.
+
+An edge shared by two faces is drawn once: it is one edge, and drawing it
+twice would only make a shared boundary look heavier than a free one, which
+is the opposite of the truth worth seeing.
+
+Sharing also settles the role. A type that named an edge as some kind of
+rim named it from one face, and one face cannot see the other; if the graph
+shows two, the edge is interior whatever it was called -- see
+RIM_ROLES.
+
+### `interface vtt.use-topology-overlay.TopologyOverlayOptions`
+
+Which parts of the topology are drawn.
+
+### `property vtt.use-topology-overlay.TopologyOverlayOptions.edges: boolean`
+
+Every edge, coloured by its role.
+
+### `property vtt.use-topology-overlay.TopologyOverlayOptions.vertices: boolean`
+
+A dot on every vertex.
+
+### `function vtt.use-topology-overlay.useTopologyOverlay(runtime: TabletopRuntime, options: TopologyOverlayOptions): void`
+
+Draws the topology over the map for the debug panel: the vertices and the
+edges of whatever stands, redrawn once a frame at most after the map
+changes. It is the only thing that draws them. No tool, handle mode or
+gesture reaches it, so what a tool shows or hides never changes it, and it
+never changes what a tool can pick.
+
+### `variable vtt.vertex-overlay.VERTEX_OVERLAY_CHANNEL: "topology:vertices"`
+
+The preview channel the vertex dots are drawn on.
+
+### `function vtt.vertex-overlay.vertexOverlayDescriptor(positions: Float32Array): RenderPreviewDescriptor`
+
+The dots as the descriptor that draws them.
+
+### `function vtt.vertex-overlay.vertexOverlayOf(graph: Pick<ConstructionGraphSnapshot, "nodes">): Float32Array`
+
+Every vertex's position, as a flat `[x, y, z, x, y, z, ...]` list.
+
 ### `interface vtt.use-construction-pointer.ConstructionPointerHandlers`
 
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onClick: (event: MouseEvent<HTMLDivElement>) => void`
@@ -4813,6 +5071,78 @@ branches on *which* tool is active -- it only resolves what the pointer
 hit, looks the active tool up in `tools/tool-registry.ts`, and calls
 whichever lifecycle hook that tool defines. Per-tool behavior (what a
 stroke or a click actually generates) lives entirely in `tools/*.ts`.
+
+### `interface vtt.use-debug-stats.ChangeRecord`
+
+One change of the map, with the commits that made it and what it did.
+
+### `property vtt.use-debug-stats.ChangeRecord.change: MapChange`
+
+What it added, removed and changed.
+
+### `property vtt.use-debug-stats.ChangeRecord.commits: readonly CommitRecord[]`
+
+The commits that made it, oldest first.
+
+### `property vtt.use-debug-stats.ChangeRecord.counts: MapCounts`
+
+What the map was made of afterwards, to read the totals the change led to.
+
+### `property vtt.use-debug-stats.ChangeRecord.diffMs: number`
+
+How long telling the change apart took, in milliseconds.
+
+### `property vtt.use-debug-stats.ChangeRecord.label: string`
+
+What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads.
+
+### `property vtt.use-debug-stats.ChangeRecord.ms?: number`
+
+The commits' time together, in milliseconds; absent when no timed commit made it.
+
+### `property vtt.use-debug-stats.ChangeRecord.revision: number`
+
+The map's revision once the change was read.
+
+### `property vtt.use-debug-stats.ChangeRecord.slowest?: { label: string; ms: number }`
+
+The slowest phase of any of those commits.
+
+### `interface vtt.use-debug-stats.DebugStats`
+
+Everything the debug panel shows, gathered.
+
+### `property vtt.use-debug-stats.DebugStats.changes: readonly ChangeRecord[]`
+
+The most recent changes, oldest first.
+
+### `property vtt.use-debug-stats.DebugStats.counts?: MapCounts`
+
+What the map is made of; absent until the table is live.
+
+### `property vtt.use-debug-stats.DebugStats.frame?: FrameStats`
+
+The last full window of frames; absent until one has passed.
+
+### `property vtt.use-debug-stats.DebugStats.heapBytes?: number`
+
+Bytes of JavaScript heap in use, where the browser says.
+
+### `property vtt.use-debug-stats.DebugStats.readMs?: number`
+
+How long reading the map took, in milliseconds: what looking at the map costs.
+
+### `variable vtt.use-debug-stats.RECENT_CHANGES: 8`
+
+How many changes the panel keeps.
+
+### `function vtt.use-debug-stats.useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats`
+
+Gathers the debug panel's numbers. Frames are timed on the page's own
+animation frame, so a stutter from anywhere shows. The map is read only
+after it says it changed, once the burst settles, and compared with the
+previous read element by element -- looking at the map is a read of the
+graph and must not become a cost of its own.
 
 ### `interface vtt.map-projection.MapProjection`
 
@@ -6243,6 +6573,10 @@ A tool editing spines by their points: only spines' points and midpoints, never 
 
 Absent without the curve engine: then no curve has a handle.
 
+### `property vtt.scene-handles.SceneHandleInput.runs?: OpeningRunPort`
+
+Places an opening's handles on its whole box along the walls it crosses; absent, on the part on its first wall.
+
 ### `property vtt.scene-handles.SceneHandleInput.topologies: readonly ConstructionRegionTopology[]`
 
 ### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | GlobalHandleKind`
@@ -6250,8 +6584,7 @@ Absent without the curve engine: then no curve has a handle.
 Every edit handle the scene shows, in one list: what each one is for --
 its kind, which is also what its look is chosen by -- and where it stands.
 The one place that says which handles exist; whatever shows them only
-draws this list. (The graph's own node dots are its debug view, not edit
-handles, and are not here.)
+draws this list.
 
 - anchor: a spine's control point;
 - midpoint: a span's midpoint -- bend it, or double-click to insert a point;
@@ -9452,7 +9785,7 @@ as its own.
 
 ### `property vtt.tool-types.StructureEditParams.curveWidth?: number`
 
-### `property vtt.tool-types.StructureEditParams.mode: "elevation" | "shape"`
+### `property vtt.tool-types.StructureEditParams.mode: "shape" | "elevation"`
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 
@@ -9512,7 +9845,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { action: "hole" | "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "points" | "arc" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
 A curved ramp, drawn in one of the shared spine creation modes. `rise` is
 its climb when the end is not on a floor; it climbs at one constant grade.
@@ -9615,7 +9948,7 @@ and differs only in the cross-section it seeds and a couple of declared
 behaviours. Adding one is adding a preset -- never a second set of type
 logic to keep in step with the first.
 
-### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
+### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array } | { color: number; kind: "points"; opacity?: number; positions: Float32Array }`
 
 A tool's not-yet-committed ghost, expressed as plain geometry -- no
 renderer type crosses this boundary (`adapters/rendering` is the only
@@ -10250,9 +10583,9 @@ deleted high over the ground is none of these.
 
 ### `property vtt.opening-handles.OpeningHandle.id: string`
 
-### `property vtt.opening-handles.OpeningHandle.kind: "side" | "corner"`
+### `property vtt.opening-handles.OpeningHandle.kind: "side" | "corner" | "pivot"`
 
-A corner moves two sides at once; a side, one.
+The middle moves the whole opening; a corner moves two sides at once; a side, one.
 
 ### `property vtt.opening-handles.OpeningHandle.nodeId: string`
 
@@ -10262,14 +10595,19 @@ The node the handle is named after -- one of the opening's own -- by which the o
 
 ### `property vtt.opening-handles.OpeningHandle.position: ConstructionPosition`
 
-### `type vtt.opening-handles.OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right"`
+### `type vtt.opening-handles.OpeningHandlePart = "center" | "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right"`
 
-The handles of an opening laid on a wall: one on each corner -- which
-resizes it in width and height at once, keeping its shape -- and one on the
-middle of each side, which moves that side alone. Read off the nodes the
-opening's pieces are pinned with, on the wall they are pinned to: where
-along it, and how high -- never off what shape the opening is. A door
-stands on the floor, so its bottom has none.
+The handles of an opening laid on a wall, the only way it is edited: one in
+its middle, which moves it whole; one on each corner, which resizes it in
+width and height at once, keeping its shape; and one on the middle of each
+side, which moves that side alone. Read off the nodes the opening's pieces
+are pinned with, on the wall they are pinned to: where along it, and how
+high -- never off what shape the opening is. A door stands on the floor, so
+its bottom has none.
+
+### `type vtt.opening-handles.OpeningRunPort = Pick<ConstructionSessionPort, "panelRun" | "resolveOnHost">`
+
+What placing the handles on the run of walls an opening crosses needs from the engine.
 
 ### `function vtt.opening-handles.openingHandleId(part: OpeningHandlePart, nodeId: string): string`
 
@@ -10277,9 +10615,11 @@ stands on the floor, so its bottom has none.
 
 Which opening handle `id` names, and after which node; `undefined` for any other id.
 
-### `function vtt.opening-handles.openingHandles(topologies: readonly ConstructionRegionTopology[], focus: ReadonlySet<string> | undefined, isOpening: (surfaceType: string) => boolean): readonly OpeningHandle[]`
+### `function vtt.opening-handles.openingHandles(topologies: readonly ConstructionRegionTopology[], focus: ReadonlySet<string> | undefined, isOpening: (surfaceType: string) => boolean, runs?: OpeningRunPort): readonly OpeningHandle[]`
 
-The handles of every opening group among `topologies` that `focus` holds a piece of; none without a focus.
+The handles of every opening group among `topologies` that `focus` holds a
+piece of; none without a focus. With `runs`, they stand on the group's
+whole box along the run of walls it crosses, as the opening tool reads it.
 
 ### `type vtt.panel-height-widget.PanelHeightWidgetZone = "group" | "single"`
 
@@ -12167,7 +12507,7 @@ handle can take any glyph.
 
 ### `type vtt.scene-render-port.RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks"`
 
-### `type vtt.scene-render-port.RenderPreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
+### `type vtt.scene-render-port.RenderPreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array } | { color: number; kind: "points"; opacity?: number; positions: Float32Array }`
 
 ### `type vtt.scene-render-port.RenderViewId = string`
 
@@ -12936,6 +13276,14 @@ Human-readable status label.
 
 Semantic state to present.
 
+### `interface vtt.ui.UiThemeProviderProps`
+
+Public inputs for UiThemeProvider.
+
+### `property vtt.ui.UiThemeProviderProps.children: ReactNode`
+
+The UI below, whose components take the dark theme.
+
 ### `type vtt.ui.FloatButtonTreeNode = FloatButtonTreeLeaf | FloatButtonTreeBranch`
 
 One node of a FloatButtonTree: either a leaf action or a branch with its own nested children.
@@ -13091,6 +13439,12 @@ its edge as the drag/toggle control.
 
 Semantic status marker with Grafting-owned status names.
 
+### `function vtt.ui.UiThemeProvider(props: UiThemeProviderProps): ReactElement`
+
+Gives every component of this package below it a dark theme with white
+text, for an application whose page is dark. Wrap the UI once, near its
+root; a component outside it keeps the default light theme.
+
 ### `interface vtt.widgets.ConstructionDockProps`
 
 ### `property vtt.widgets.ConstructionDockProps.activeTool: ConstructionToolId`
@@ -13105,6 +13459,10 @@ Picks the opening preset and activates the opening tool.
 
 ### `property vtt.widgets.ConstructionDockProps.onRedo: () => void`
 
+### `property vtt.widgets.ConstructionDockProps.onTerrainModeChange: (mode: TerrainSculptMode) => void`
+
+Picks the terrain stroke and activates the terrain tool.
+
 ### `property vtt.widgets.ConstructionDockProps.onToggleSettings?: () => void`
 
 ### `property vtt.widgets.ConstructionDockProps.onToolChange: (tool: ConstructionToolId) => void`
@@ -13118,6 +13476,10 @@ Which opening preset the Aberturas blocks show as picked.
 ### `property vtt.widgets.ConstructionDockProps.ready: boolean`
 
 ### `property vtt.widgets.ConstructionDockProps.settingsOpen?: boolean`
+
+### `property vtt.widgets.ConstructionDockProps.terrainMode: TerrainSculptMode`
+
+Which terrain stroke the Terreno blocks show as picked.
 
 ### `interface vtt.widgets.ConstructionHotbarProps`
 
@@ -13140,6 +13502,48 @@ Which opening preset the Aberturas blocks show as picked.
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.structureEditParams: StructureEditParams`
 
 How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns.
+
+### `interface vtt.widgets.DebugPanelProps`
+
+### `property vtt.widgets.DebugPanelProps.edgeOverlay: boolean`
+
+Whether the lines along the edges, by role, are drawn.
+
+### `property vtt.widgets.DebugPanelProps.graphOverlay: boolean`
+
+Whether the dots on the graph's vertices are drawn.
+
+### `property vtt.widgets.DebugPanelProps.onEdgeOverlayChange: (visible: boolean) => void`
+
+### `property vtt.widgets.DebugPanelProps.onGraphOverlayChange: (visible: boolean) => void`
+
+### `property vtt.widgets.DebugPanelProps.stats: DebugPanelStats`
+
+### `interface vtt.widgets.DebugPanelStats`
+
+The panel's numbers, as plain values: this widget draws them and knows nothing of where they come from.
+
+### `property vtt.widgets.DebugPanelStats.changes: readonly DebugPanelChange[]`
+
+### `property vtt.widgets.DebugPanelStats.counts?: PanelCounts`
+
+### `property vtt.widgets.DebugPanelStats.frame?: { fps: number; meanMs: number; worstMs: number }`
+
+### `property vtt.widgets.DebugPanelStats.heapBytes?: number`
+
+### `property vtt.widgets.DebugPanelStats.readMs?: number`
+
+### `interface vtt.widgets.HeightCutMarkerProps`
+
+### `property vtt.widgets.HeightCutMarkerProps.height: number | undefined`
+
+The height above which the map is hidden; `undefined` shows it all.
+
+### `property vtt.widgets.HeightCutMarkerProps.measureUnit: MeasureUnitId`
+
+The unit the height is written in.
+
+### `property vtt.widgets.HeightCutMarkerProps.onHeightChange: (height: number | undefined) => void`
 
 ### `interface vtt.widgets.RulerReadoutProps`
 
@@ -13165,15 +13569,9 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.SettingsDrawerProps.activeTool: ConstructionToolId`
 
-### `property vtt.widgets.SettingsDrawerProps.graphOverlay: boolean`
-
-Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool.
-
 ### `property vtt.widgets.SettingsDrawerProps.measureUnit: MeasureUnitId`
 
 The unit the table writes every distance in.
-
-### `property vtt.widgets.SettingsDrawerProps.onGraphOverlayChange: (visible: boolean) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onMeasureUnitChange: (unit: MeasureUnitId) => void`
 
@@ -13255,6 +13653,22 @@ entirely by `activeTool` (set by `ConstructionHotbar`/`ToolRail`), and
 editing a field here only ever updates `params[activeTool]` -- it never
 knows how a tool turns its own parameters into geometry, that lives in
 `composition/tabletop/tools/*.ts`.
+
+### `function vtt.widgets.DebugPanel(props: DebugPanelProps): Element`
+
+The always-visible developer panel: frame rate, what the map is made of,
+what each recent change cost and did to it, and the switches that draw the topology. It
+floats over the map and folds to its title bar.
+
+### `function vtt.widgets.HeightCutMarker(props: HeightCutMarkerProps): Element`
+
+The height cut as a marker on the side of the map, as in TaleSpire: a
+vertical track whose top is "no cut" and whose foot is the ground. Drag the
+marker down and everything above it hides, to see and edit inside roofed
+or upper-floored structures; drag it back to the top, or double-click it,
+and the whole map shows again. The wheel over the track and the arrow keys
+move it a step at a time. Only the view changes: nothing reaches the
+construction or the history.
 
 ### `function vtt.widgets.RulerReadout(props: RulerReadoutProps): Element`
 

@@ -13,7 +13,7 @@ initSync({ module: readFileSync(new URL("../../../../libs/domains/procgen/constr
 
 const { AppTabletopRuntime } = await import("../../src/composition/tabletop/tabletop-runtime.ts");
 const { createConstructionSessionAdapter } = await import("../../src/adapters/construction/construction-session-wasm-adapter.ts");
-const { createEditHistoryStack, DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType } = await import("../../src/features/edit-construction/index.ts");
+const { createEditHistoryStack, DEFAULT_TOOL_PARAMS, hasTrait, openingHandles, openingStructureType } = await import("../../src/features/edit-construction/index.ts");
 const { surfaceRefFromNodeSet } = await import("../../src/entities/map/index.ts");
 const { gestureMoved } = await import("../../src/composition/tabletop/tools/core/tool-context.ts");
 const { openingTool } = await import("../../src/composition/tabletop/tools/openings/opening-tool.ts");
@@ -95,6 +95,28 @@ export function openingRefAt(openings, point) {
 export function press(h, params, down, up = down, extra = {}) {
   const start = { point: down, surfaceRef: openingRefAt(h.openings(), down), ...extra };
   dispatchGesture(openingTool, h.ctx, params, up === down ? [start] : [start, { point: up }]);
+}
+
+/** The handle `part` of the opening standing at `at`, as the scene places it. */
+export function openingHandleAt(h, part, at) {
+  const openings = h.openings();
+  const opening = openings.find((o) => ref(o) === openingRefAt(openings, at));
+  if (!opening) throw new Error(`no opening at ${JSON.stringify(at)}`);
+  const handle = openingHandles(h.runtime.getAllRegionTopologies(), new Set([opening.surfaceKey.join("\u0000")]), isOpeningType, h.runtime).find((candidate) => candidate.part === part);
+  if (!handle) throw new Error(`the opening at ${JSON.stringify(at)} has no ${part} handle`);
+  return handle;
+}
+const isOpeningType = (surfaceType) => surfaceType === openingStructureType.surfaceType;
+
+/**
+ * Drags the handle `part` of the opening standing at `on` as far as the
+ * pointer goes from `on` to `to`: the press lands on the handle, as the
+ * scene's pick would report it, and the release that far from it.
+ */
+export function dragHandle(h, params, part, on, to) {
+  const handle = openingHandleAt(h, part, on);
+  const end = { x: handle.position.x + to.x - on.x, y: handle.position.y + to.y - on.y, z: handle.position.z + to.z - on.z };
+  dispatchGesture(openingTool, h.ctx, params, [{ point: handle.position, nodeId: handle.id }, { point: end }]);
 }
 
 export function line(ctx, a, b) {

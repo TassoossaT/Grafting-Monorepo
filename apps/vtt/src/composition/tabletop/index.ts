@@ -1,5 +1,7 @@
 export { createTabletopRuntime } from "./create-tabletop-runtime.ts";
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
+export { useDebugStats, type DebugStats } from "./use-debug-stats.ts";
+export { useTopologyOverlay, type TopologyOverlayOptions } from "./topology-overlay/use-topology-overlay.ts";
 export type {
   ConfirmedTokenDeltaEnvelope,
   TabletopRuntime,
@@ -28,7 +30,7 @@ export { attachCameraNavigation } from "../../features/navigate-camera/index.ts"
 // Same reason again: the tool vocabulary is a `features/` type, `TabletopEntry`
 // reaches it only through this barrel.
 export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, withOpeningKind } from "../../features/edit-construction/index.ts";
-export type { ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+export type { ConstructionToolId, OpeningParams, StructureEditParams, TerrainSculptMode, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 
 export { useConstructionPointer, type RulerReadout } from "./use-construction-pointer.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";

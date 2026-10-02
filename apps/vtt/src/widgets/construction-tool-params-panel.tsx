@@ -215,28 +215,9 @@ function TerrainSculptFields(props: {
       ? "Profundidade do corte (-m)"
       : "Intensidade do nivelamento";
 
+  // Which stroke -- add, remove, flatten -- is picked in the dock below the map; here only how it acts.
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-        <SelectableChip
-          label="Adicionar (+)"
-          swatchColor="#22c55e"
-          selected={isAdd}
-          onSelect={() => onChange({ ...params, mode: "add" })}
-        />
-        <SelectableChip
-          label="Cavar (-)"
-          swatchColor="#ef4444"
-          selected={isDig}
-          onSelect={() => onChange({ ...params, mode: "dig" })}
-        />
-        <SelectableChip
-          label="Nivelar (=)"
-          swatchColor="#3b82f6"
-          selected={currentMode === "flatten"}
-          onSelect={() => onChange({ ...params, mode: "flatten" })}
-        />
-      </div>
       {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
@@ -337,7 +318,7 @@ function OpeningShapeFields(props: { readonly params: OpeningParams; readonly on
           onBlur={commitDraft}
         />
       </label>
-      <p style={{ margin: 0, fontSize: "0.72rem", color: "#94a3b8" }}>Clique num lado do quadrado e ajuste o raio (0 = reto). Com uma abertura selecionada, o formato muda nela; sem seleção, vale para a próxima.</p>
+      <p style={{ margin: 0, fontSize: "0.72rem", color: "#ffffff" }}>Clique num lado do quadrado e ajuste o raio (0 = reto). Com uma abertura selecionada, o formato muda nela; sem seleção, vale para a próxima.</p>
     </div>
   );
 }
@@ -401,7 +382,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
     return (
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
-        <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
+        <p style={{ margin: 0, fontSize: "0.75rem", color: "#ffffff" }}>
           Selecione uma ferramenta de construção (Caminho, Parede ou Escultura de Terreno) no hotbar
           para ajustar seus parâmetros.
         </p>

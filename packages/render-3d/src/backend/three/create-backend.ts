@@ -7,6 +7,7 @@ import type { CameraDescriptor, PickResult } from "../../contracts/view.js";
 import type { VisualDescriptor } from "../../contracts/visual.js";
 import type { BackendSurface, RenderBackend } from "../contract.js";
 import { applyTransform, buildVisual, toVec3 } from "./build-visual.js";
+import { cutAwayByClip } from "./clip-hit.js";
 import type { BuiltVisual } from "./build-visual.js";
 
 /** Options for {@link createThreeBackend}. */
@@ -372,6 +373,9 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
       raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
       for (const hit of raycaster.intersectObjects(groupsFor(layers), true)) {
         if (hit.object.userData.pickable === false) continue;
+        // A ray ignores clipping planes: a hit the active plane cut away is
+        // not there to be picked, so the ray goes on to what is behind it.
+        if (cutAwayByClip(clipPlane, renderer.localClippingEnabled, hit.object, hit.point)) continue;
         const itemId = hit.object.userData.itemId as string | undefined;
         if (itemId === undefined) continue;
         return {

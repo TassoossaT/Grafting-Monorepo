@@ -14,3 +14,5 @@ export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "@/feat
 export { RulerReadout, type RulerReadoutProps } from "./ruler-readout.tsx";
 export { AUTO_LENGTH_STEP, DEFAULT_MEASURE_UNIT, DEFAULT_RULER_SETTINGS, MEASURE_UNITS, RULER_KINDS, isMeasureUnitId, parseRulerSettings, serializeRulerSettings } from "@/features/edit-construction";
 export type { MeasureUnitId, RulerKind, RulerSettings } from "@/features/edit-construction";
+export { DebugPanel, type DebugPanelProps, type DebugPanelStats } from "./debug-panel.tsx";
+export { HeightCutMarker, type HeightCutMarkerProps } from "./height-cut-marker.tsx";
