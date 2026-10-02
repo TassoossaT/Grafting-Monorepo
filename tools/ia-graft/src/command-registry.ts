@@ -340,10 +340,11 @@ export const COMMAND_REGISTRY: AnyCommand[] = [
     name: "graft_task_cleanup",
     group: "task",
     subcommand: "cleanup",
-    description: "Safely removes a merged worktree and deletes the task branch after the PR merges.",
+    description: "Removes a task worktree and branch after a verified merge or explicitly rejected PR.",
     parameters: {
       taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
       force: { type: "boolean", description: "Clean up even when the PR is not detected as merged" },
+      rejected: { type: "boolean", description: "Delete a task whose PR is closed without merge; verifies remote SHA and dependent PRs", flag: "--rejected" },
     },
     handler: (root, input) => taskCleanup(root, input),
   }),

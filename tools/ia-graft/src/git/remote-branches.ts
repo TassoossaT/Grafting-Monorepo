@@ -2,8 +2,8 @@
  * Deciding whether a task's remote branch is safe to delete, and deleting it.
  *
  * Deletion is planned before it is performed, and the plan has to carry proof
- * that the branch actually merged -- a cleanup must never be the thing that
- * loses work.
+ * that the branch merged or its PR was explicitly rejected. Both paths
+ * verify the remote head and dependent PRs before deleting anything remotely.
  */
 
 import { executeGit } from "./exec.ts";
@@ -14,6 +14,8 @@ export interface MergedBranchProof {
     number: number;
     headRefName: string;
     headRefOid: string;
+    state?: 'MERGED' | 'CLOSED';
+    mergedAt?: string | null;
 }
 
 export type RemoteBranchDeletionPlan =
@@ -30,6 +32,9 @@ export function remoteBranchDeletionPlan(
     if (!remoteHead) return { remove: false, state: 'already-absent', reason: 'remote branch is already absent' };
     if (mergedProof.headRefName !== branch) {
         throw new Error(`merged PR #${mergedProof.number} head is ${mergedProof.headRefName}, expected ${branch}`);
+    }
+    if (mergedProof.state === 'CLOSED' && mergedProof.mergedAt !== null) {
+        throw new Error('closed PR proof must confirm it was not merged');
     }
     if (mergedProof.headRefOid.toLowerCase() !== remoteHead.toLowerCase()) {
         throw new Error(`remote head ${remoteHead} does not match merged PR #${mergedProof.number} head ${mergedProof.headRefOid}`);

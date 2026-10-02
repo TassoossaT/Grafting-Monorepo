@@ -495,6 +495,24 @@ test("remote branch deletion requires a matching merged SHA and no open dependen
   );
 });
 
+test("rejected PR deletion preserves SHA and dependent PR protections", () => {
+  const branch = "task/REJECTED";
+  const head = "a".repeat(40);
+  const proof = { number: 42, headRefName: branch, headRefOid: head, state: "CLOSED" as const, mergedAt: null };
+  assert.equal(remoteBranchDeletionPlan(branch, head, proof, []).remove, true);
+  assert.equal(remoteBranchDeletionPlan(branch, head, proof, [77]).remove, false);
+  assert.equal(remoteBranchDeletionPlan(branch, head, proof, undefined).remove, false);
+  assert.throws(() => remoteBranchDeletionPlan(branch, "b".repeat(40), proof, []), /does not match/);
+  assert.throws(() => remoteBranchDeletionPlan(branch, head, { ...proof, mergedAt: "2026-10-02" }, []), /not merged/);
+});
+
+test("rejected cleanup cannot use force to bypass missing PR proof", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "REJECTED-PROOF", base: "main" });
+  await assert.rejects(taskCleanup(root, { taskId: "REJECTED-PROOF", rejected: true, force: true }), /refusing cleanup/);
+  assert.equal((await taskStatus(root, { taskId: "REJECTED-PROOF" })).worktreeRegistered, true);
+});
+
 test("remote task branch deletion is atomic against the expected SHA", async () => {
   const root = await makeRepoWithBareRemote();
   await taskNew(root, { taskId: "REMOTE-DELETE", base: "main" });
@@ -1082,6 +1100,5 @@ test("summarizeTestOutput captures TAP failure diagnostics with failure details"
   assert(summary.includes("ERR_ASSERTION"));
   assert(summary.includes("# fail 1"));
 });
-
 
 

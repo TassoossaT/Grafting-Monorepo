@@ -253,7 +253,7 @@ export class GitClient {
         };
     }
 
-    async cleanupTask(taskId: string, force: boolean): Promise<{
+    async cleanupTask(taskId: string, force: boolean, rejected = false): Promise<{
         discarded: boolean; removedOrphan: boolean; dependencyCacheRemoved: boolean;
         remoteBranchRemoved: boolean; remoteBranchState: string; remoteBranchReason?: string;
     }> {
@@ -270,9 +270,9 @@ export class GitClient {
         if (status.checkoutMode === 'main') throw new Error('refusing cleanup while task is checked out in main; run task checkout --restore first');
         if (status.dirty && !force) throw new Error('refusing cleanup: task worktree has uncommitted changes (use --force only to abandon them)');
         let deletionPlan: RemoteBranchDeletionPlan | undefined;
-        if (!force) {
+        if (!force || rejected) {
             const remoteHead = await this.remoteBranchHead(status.branch);
-            const merge = await this.branchMergeStatus(status.branch, remoteHead);
+            const merge = await this.branchMergeStatus(status.branch, remoteHead, rejected);
             if (!merge.merged) throw new Error(`refusing cleanup: ${merge.reason}`);
             deletionPlan = remoteBranchDeletionPlan(
                 status.branch,
@@ -292,14 +292,14 @@ export class GitClient {
         if (remoteBranchRemoved || deletionPlan?.state === 'already-absent') {
             await executeGit(['update-ref', '-d', `refs/remotes/origin/${status.branch}`], this.repoPath);
         }
-        const remoteBranchState = force ? 'preserved-force' : deletionPlan?.state ?? 'already-absent';
+        const remoteBranchState = force && !rejected ? 'preserved-force' : deletionPlan?.state ?? 'already-absent';
         return {
             discarded: force,
             removedOrphan: status.orphanDirectory,
             dependencyCacheRemoved: await removeTaskDependencyCache(this.repoPath, taskId),
             remoteBranchRemoved,
             remoteBranchState,
-            remoteBranchReason: force
+            remoteBranchReason: force && !rejected
                 ? 'force cleanup never deletes remote branches'
                 : deletionPlan && !deletionPlan.remove ? deletionPlan.reason : undefined,
         };
@@ -602,25 +602,33 @@ export class GitClient {
     private async branchMergeStatus(
         branch: string,
         expectedHead?: string,
+        rejected = false,
     ): Promise<{ merged: boolean; reason: string; proof?: MergedBranchProof }> {
         try {
             const { stdout } = await execGhAsync(
-                ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number,headRefName,headRefOid'],
+                ['pr', 'list', '--head', branch, '--state', rejected ? 'all' : 'merged', '--limit', '100', '--json', 'number,headRefName,headRefOid,state,mergedAt'],
                 { cwd: this.repoPath },
             );
             const rows = JSON.parse(stdout) as Array<Partial<MergedBranchProof>>;
+            if (rejected && rows.length >= 100) {
+                return { merged: false, reason: 'cannot verify all PRs for this branch: query limit reached' };
+            }
             const proofs = rows.filter((row): row is MergedBranchProof =>
                 Number.isInteger(row.number) && row.headRefName === branch && typeof row.headRefOid === 'string'
-                && /^[a-f0-9]{40}$/i.test(row.headRefOid));
+                && /^[a-f0-9]{40}$/i.test(row.headRefOid)
+                && (!rejected || (row.state === 'CLOSED' && row.mergedAt === null)));
+            if (rejected && rows.some((row) => row.state !== 'CLOSED' || row.mergedAt !== null)) {
+                return { merged: false, reason: 'rejected cleanup requires all PRs for this branch to be closed without merge' };
+            }
             const proof = expectedHead
                 ? proofs.find((candidate) => candidate.headRefOid.toLowerCase() === expectedHead.toLowerCase())
                 : proofs[0];
-            if (proof) return { merged: true, reason: `merged via PR #${proof.number}`, proof };
+            if (proof) return { merged: true, reason: `${rejected ? 'rejected' : 'merged'} via PR #${proof.number}`, proof };
             return {
                 merged: false,
                 reason: expectedHead && proofs.length > 0
-                    ? `remote head ${expectedHead} does not match any merged PR for this branch`
-                    : 'no merged PR found for this branch',
+                    ? `remote head ${expectedHead} does not match any ${rejected ? 'rejected' : 'merged'} PR for this branch`
+                    : rejected ? 'no matching rejected PR found for this branch' : 'no merged PR found for this branch',
             };
         } catch {
             return { merged: false, reason: 'could not reach gh to check merge status' };

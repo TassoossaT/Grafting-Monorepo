@@ -23,6 +23,12 @@ function parse(route: string, args: string[]): Record<string, unknown> {
   return parseCommandInput(command, args);
 }
 
+test("task cleanup exposes explicit rejected PR cleanup independently of force", () => {
+  const input = parse("task cleanup", ["--id", "TASK-1-X", "--rejected"]);
+  assert.equal(input.rejected, true);
+  assert.notEqual(input.force, true);
+});
+
 /**
  * The bug this covers (#210): routing keyed on the subcommand alone let `task
  * new` answer for `issue new`, so `issue new --title "..."` received

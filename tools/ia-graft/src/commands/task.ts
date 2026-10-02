@@ -323,13 +323,14 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
 export interface TaskCleanupInput {
   taskId: string;
   force?: boolean;
+  rejected?: boolean;
 }
 
 /** Removes a merged task's worktree/local branch and prunes its verified, unused remote branch. */
 export async function taskCleanup(repoRoot: string, input: TaskCleanupInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   const client = new GitClient(repoRoot);
-  const result = await client.cleanupTask(input.taskId, input.force ?? false);
+  const result = await client.cleanupTask(input.taskId, input.force ?? false, input.rejected ?? false);
   return { ok: true as const, ...result };
 }
 
@@ -649,4 +650,3 @@ export async function taskContext(repoRoot: string, input: TaskContextInput = {}
     summary: content || "No context found matching criteria.",
   };
 }
-
