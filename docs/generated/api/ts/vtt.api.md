@@ -434,13 +434,17 @@ One finished commit: what it was, how long it took, and the slowest phase inside
 
 ### `property vtt.commit-timing.CommitRecord.ms: number`
 
+### `property vtt.commit-timing.CommitRecord.seq: number`
+
+Counts up with every commit ever finished, so a reader can tell the commits it has not seen yet.
+
 ### `property vtt.commit-timing.CommitRecord.slowest?: { label: string; ms: number }`
 
 The slowest phase, by its own time; absent when the commit ran no timed phase.
 
-### `variable vtt.commit-timing.RECENT_COMMITS: 8`
+### `variable vtt.commit-timing.RECENT_COMMITS: 32`
 
-How many finished commits are remembered for the debug panel.
+How many finished commits are remembered for the debug panel: enough for a burst of them, like a drag, between two of its reads.
 
 ### `function vtt.commit-timing.clearRecentCommits(): void`
 
@@ -487,6 +491,16 @@ One face, as far as counting it needs: its type and the edges its loops walk.
 
 ### `property vtt.debug-stats.CountedFace.surfaceType: string`
 
+### `interface vtt.debug-stats.ElementChange`
+
+How many elements of one kind a change added, removed and changed in place.
+
+### `property vtt.debug-stats.ElementChange.added: number`
+
+### `property vtt.debug-stats.ElementChange.changed: number`
+
+### `property vtt.debug-stats.ElementChange.removed: number`
+
 ### `interface vtt.debug-stats.FrameStats`
 
 What the frame meter reports for a window of frames.
@@ -502,6 +516,24 @@ The mean time one frame took, in milliseconds.
 ### `property vtt.debug-stats.FrameStats.worstMs: number`
 
 The longest single frame in the window, in milliseconds -- where a stutter shows.
+
+### `interface vtt.debug-stats.MapChange`
+
+What one change did to the map.
+
+### `property vtt.debug-stats.MapChange.edges: ElementChange`
+
+### `property vtt.debug-stats.MapChange.faces: ElementChange`
+
+A face is known by its node set, so a face that gains or loses a vertex
+reads as one removed and one added; one whose vertices only move, or
+whose type or properties change, reads as changed.
+
+### `property vtt.debug-stats.MapChange.facesByType: readonly TypeChange[]`
+
+The faces' change by type, the most touched type first; types the change left alone are not listed.
+
+### `property vtt.debug-stats.MapChange.vertices: ElementChange`
 
 ### `interface vtt.debug-stats.MapCounts`
 
@@ -523,6 +555,70 @@ Of those, the edges that bound two or more faces: the seams where structures are
 
 ### `property vtt.debug-stats.MapCounts.vertices: number`
 
+### `interface vtt.debug-stats.MapFingerprint`
+
+The map reduced to one string per element, under the element's own
+identity: a vertex by its id, an edge by its id, a face by its node set.
+Two prints of the same element differ exactly when the element changed.
+
+### `property vtt.debug-stats.MapFingerprint.edges: ReadonlyMap<string, string>`
+
+### `property vtt.debug-stats.MapFingerprint.faces: ReadonlyMap<string, { print: string; type: string }>`
+
+### `property vtt.debug-stats.MapFingerprint.vertices: ReadonlyMap<string, string>`
+
+### `interface vtt.debug-stats.PrintedEdgeUse`
+
+One edge's walk along a face's loop, as far as telling it apart needs.
+
+### `property vtt.debug-stats.PrintedEdgeUse.edgeId: string`
+
+### `property vtt.debug-stats.PrintedEdgeUse.endNodeId: string`
+
+### `property vtt.debug-stats.PrintedEdgeUse.geometry: unknown`
+
+### `property vtt.debug-stats.PrintedEdgeUse.reversed: boolean`
+
+### `property vtt.debug-stats.PrintedEdgeUse.startNodeId: string`
+
+### `interface vtt.debug-stats.PrintedFace`
+
+One face, as far as telling whether it changed needs.
+
+### `property vtt.debug-stats.PrintedFace.holes: readonly (readonly PrintedEdgeUse[])[]`
+
+### `property vtt.debug-stats.PrintedFace.nodes: readonly { id: string; position: PrintedPoint }[]`
+
+### `property vtt.debug-stats.PrintedFace.outerLoops: readonly (readonly PrintedEdgeUse[])[]`
+
+### `property vtt.debug-stats.PrintedFace.profile?: unknown`
+
+### `property vtt.debug-stats.PrintedFace.props?: unknown`
+
+### `property vtt.debug-stats.PrintedFace.surfaceKey: readonly string[]`
+
+### `property vtt.debug-stats.PrintedFace.surfaceType: string`
+
+### `interface vtt.debug-stats.PrintedGraph`
+
+The graph, as far as telling whether it changed needs.
+
+### `property vtt.debug-stats.PrintedGraph.edges: readonly { curve?: unknown; edgeId: string; endNodeId: string; startNodeId: string }[]`
+
+### `property vtt.debug-stats.PrintedGraph.nodes: readonly { id: string; pin?: unknown; position: PrintedPoint }[]`
+
+### `interface vtt.debug-stats.TypeChange`
+
+The same, for the faces of one structure type.
+
+### `property vtt.debug-stats.TypeChange.added: number`
+
+### `property vtt.debug-stats.TypeChange.changed: number`
+
+### `property vtt.debug-stats.TypeChange.removed: number`
+
+### `property vtt.debug-stats.TypeChange.type: string`
+
 ### `interface vtt.debug-stats.TypeCount`
 
 How many faces of one structure type there are.
@@ -530,6 +626,10 @@ How many faces of one structure type there are.
 ### `property vtt.debug-stats.TypeCount.count: number`
 
 ### `property vtt.debug-stats.TypeCount.type: string`
+
+### `variable vtt.debug-stats.EMPTY_FINGERPRINT: MapFingerprint`
+
+The fingerprint of a map with nothing on it: what the first read of a table is compared with.
 
 ### `variable vtt.debug-stats.FRAME_WINDOW_MS: 500`
 
@@ -548,9 +648,28 @@ Measures frames as they arrive: give it each frame's timestamp and it
 answers with the stats of the window that just closed, or `undefined` while
 the window is still filling.
 
+### `function vtt.debug-stats.diffMaps(before: MapFingerprint, after: MapFingerprint): MapChange`
+
+Compares two prints of the map, element by element.
+
+### `function vtt.debug-stats.fingerprintMap(graph: PrintedGraph, faces: readonly PrintedFace[]): MapFingerprint`
+
+Prints every vertex, edge and face of the map. An edge or face prints the
+positions of its own vertices, so moving a vertex shows as a change of the
+edges and faces it bends, not only of the vertex.
+
 ### `function vtt.debug-stats.formatMegabytes(bytes: number): string`
 
 A byte count as megabytes, one decimal.
+
+### `function vtt.debug-stats.isNoChange(change: MapChange): boolean`
+
+Whether a change left the map exactly as it was.
+
+### `function vtt.debug-stats.nameCommits(labels: readonly string[]): string`
+
+Names a run of commits in one line: each label once, in the order it first
+ran, with how many times it ran when that was more than once.
 
 ### `interface vtt.change-area.ChangeArea`
 
@@ -4927,13 +5046,49 @@ hit, looks the active tool up in `tools/tool-registry.ts`, and calls
 whichever lifecycle hook that tool defines. Per-tool behavior (what a
 stroke or a click actually generates) lives entirely in `tools/*.ts`.
 
+### `interface vtt.use-debug-stats.ChangeRecord`
+
+One change of the map, with the commits that made it and what it did.
+
+### `property vtt.use-debug-stats.ChangeRecord.change: MapChange`
+
+What it added, removed and changed.
+
+### `property vtt.use-debug-stats.ChangeRecord.commits: readonly CommitRecord[]`
+
+The commits that made it, oldest first.
+
+### `property vtt.use-debug-stats.ChangeRecord.counts: MapCounts`
+
+What the map was made of afterwards, to read the totals the change led to.
+
+### `property vtt.use-debug-stats.ChangeRecord.diffMs: number`
+
+How long telling the change apart took, in milliseconds.
+
+### `property vtt.use-debug-stats.ChangeRecord.label: string`
+
+What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads.
+
+### `property vtt.use-debug-stats.ChangeRecord.ms?: number`
+
+The commits' time together, in milliseconds; absent when no timed commit made it.
+
+### `property vtt.use-debug-stats.ChangeRecord.revision: number`
+
+The map's revision once the change was read.
+
+### `property vtt.use-debug-stats.ChangeRecord.slowest?: { label: string; ms: number }`
+
+The slowest phase of any of those commits.
+
 ### `interface vtt.use-debug-stats.DebugStats`
 
 Everything the debug panel shows, gathered.
 
-### `property vtt.use-debug-stats.DebugStats.commits: readonly CommitRecord[]`
+### `property vtt.use-debug-stats.DebugStats.changes: readonly ChangeRecord[]`
 
-The most recent finished commits, oldest first.
+The most recent changes, oldest first.
 
 ### `property vtt.use-debug-stats.DebugStats.counts?: MapCounts`
 
@@ -4949,14 +5104,19 @@ Bytes of JavaScript heap in use, where the browser says.
 
 ### `property vtt.use-debug-stats.DebugStats.readMs?: number`
 
-How long reading those counts took, in milliseconds: what looking at the map costs.
+How long reading the map took, in milliseconds: what looking at the map costs.
+
+### `variable vtt.use-debug-stats.RECENT_CHANGES: 8`
+
+How many changes the panel keeps.
 
 ### `function vtt.use-debug-stats.useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats`
 
 Gathers the debug panel's numbers. Frames are timed on the page's own
-animation frame, so a stutter from anywhere shows; the map is counted once
-a second and only when it, or a commit, has changed -- looking at the map
-is a read of the graph and must not become a cost of its own.
+animation frame, so a stutter from anywhere shows. The map is read only
+after it says it changed, once the burst settles, and compared with the
+previous read element by element -- looking at the map is a read of the
+graph and must not become a cost of its own.
 
 ### `interface vtt.map-projection.MapProjection`
 
@@ -13319,9 +13479,9 @@ Whether the dots on the graph's vertices are drawn.
 
 The panel's numbers, as plain values: this widget draws them and knows nothing of where they come from.
 
-### `property vtt.widgets.DebugPanelStats.commits: readonly { label: string; ms: number; slowest?: { label: string; ms: number } }[]`
+### `property vtt.widgets.DebugPanelStats.changes: readonly DebugPanelChange[]`
 
-### `property vtt.widgets.DebugPanelStats.counts?: { byType: readonly { count: number; type: string }[]; edges: number; faces: number; sharedEdges: number; vertices: number }`
+### `property vtt.widgets.DebugPanelStats.counts?: PanelCounts`
 
 ### `property vtt.widgets.DebugPanelStats.frame?: { fps: number; meanMs: number; worstMs: number }`
 
@@ -13447,7 +13607,7 @@ knows how a tool turns its own parameters into geometry, that lives in
 ### `function vtt.widgets.DebugPanel(props: DebugPanelProps): Element`
 
 The always-visible developer panel: frame rate, what the map is made of,
-what the last commits cost, and the switches that draw the topology. It
+what each recent change cost and did to it, and the switches that draw the topology. It
 floats over the map and folds to its title bar.
 
 ### `function vtt.widgets.RulerReadout(props: RulerReadoutProps): Element`

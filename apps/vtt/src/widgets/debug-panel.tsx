@@ -2,19 +2,43 @@
 
 import { useState } from "react";
 
+interface PanelCounts {
+  readonly vertices: number;
+  readonly edges: number;
+  readonly sharedEdges: number;
+  readonly faces: number;
+  readonly byType: readonly { readonly type: string; readonly count: number }[];
+}
+
+interface PanelElementChange {
+  readonly added: number;
+  readonly removed: number;
+  readonly changed: number;
+}
+
+/** One change of the map, as the panel draws it. */
+export interface DebugPanelChange {
+  readonly revision: number;
+  readonly label: string;
+  readonly ms?: number;
+  readonly slowest?: { readonly label: string; readonly ms: number };
+  readonly change: {
+    readonly vertices: PanelElementChange;
+    readonly edges: PanelElementChange;
+    readonly faces: PanelElementChange;
+    readonly facesByType: readonly (PanelElementChange & { readonly type: string })[];
+  };
+  readonly counts: PanelCounts;
+  readonly diffMs: number;
+}
+
 /** The panel's numbers, as plain values: this widget draws them and knows nothing of where they come from. */
 export interface DebugPanelStats {
   readonly frame?: { readonly fps: number; readonly meanMs: number; readonly worstMs: number };
-  readonly counts?: {
-    readonly vertices: number;
-    readonly edges: number;
-    readonly sharedEdges: number;
-    readonly faces: number;
-    readonly byType: readonly { readonly type: string; readonly count: number }[];
-  };
+  readonly counts?: PanelCounts;
   readonly readMs?: number;
   readonly heapBytes?: number;
-  readonly commits: readonly { readonly label: string; readonly ms: number; readonly slowest?: { readonly label: string; readonly ms: number } }[];
+  readonly changes: readonly DebugPanelChange[];
 }
 
 export interface DebugPanelProps {
@@ -59,9 +83,69 @@ function Row(props: { readonly label: string; readonly value: string; readonly c
   );
 }
 
+const ADDED_COLOR = "#34d399";
+const REMOVED_COLOR = "#f87171";
+const CHANGED_COLOR = "#facc15";
+
+/** A count the change left at zero is drawn faint, so the ones that moved stand out. */
+function Tally(props: { readonly sign: string; readonly value: number; readonly color: string }) {
+  return <span style={{ color: props.color, opacity: props.value === 0 ? 0.35 : 1 }}>{`${props.sign}${props.value}`}</span>;
+}
+
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+/** One kind of element: added, removed, changed in place, and the total it went to with the net in brackets. */
+function ImpactRow(props: { readonly label: string; readonly line: PanelElementChange; readonly total?: number }) {
+  const { line } = props;
+  return (
+    <div className="gm-debug-impact-row">
+      <span>{props.label}</span>
+      <Tally sign="+" value={line.added} color={ADDED_COLOR} />
+      <Tally sign="−" value={line.removed} color={REMOVED_COLOR} />
+      <Tally sign="~" value={line.changed} color={CHANGED_COLOR} />
+      <span className="gm-debug-impact-total">{props.total === undefined ? "" : `${props.total} (${signed(line.added - line.removed)})`}</span>
+    </div>
+  );
+}
+
+/** One change: what made it and how long it took, folding open to what it did element by element. */
+function ChangeEntry(props: { readonly record: DebugPanelChange; readonly open: boolean }) {
+  const { record } = props;
+  const { change, counts } = record;
+  return (
+    <details className="gm-debug-change" open={props.open}>
+      <summary>
+        <span className="gm-debug-change-label">{record.label}</span>
+        <span className="gm-stat-value" style={record.ms === undefined ? undefined : { color: commitColor(record.ms) }}>
+          {record.ms === undefined ? "—" : `${record.ms.toFixed(0)} ms`}
+        </span>
+      </summary>
+      <div className="gm-debug-impact">
+        <div className="gm-debug-impact-row gm-debug-impact-head">
+          <span />
+          <span>adic.</span>
+          <span>rem.</span>
+          <span>mod.</span>
+          <span className="gm-debug-impact-total">total (saldo)</span>
+        </div>
+        <ImpactRow label="Vértices" line={change.vertices} total={counts.vertices} />
+        <ImpactRow label="Arestas" line={change.edges} total={counts.edges} />
+        <ImpactRow label="Faces" line={change.faces} total={counts.faces} />
+        {change.facesByType.map((line) => (
+          <ImpactRow key={line.type} label={`· ${line.type}`} line={line} total={counts.byType.find((entry) => entry.type === line.type)?.count ?? 0} />
+        ))}
+      </div>
+      {record.slowest ? <Row label={`Fase mais lenta: ${record.slowest.label}`} value={`${record.slowest.ms.toFixed(0)} ms`} /> : null}
+      <Row label="Comparação" value={`${record.diffMs.toFixed(1)} ms`} />
+    </details>
+  );
+}
+
 /**
  * The always-visible developer panel: frame rate, what the map is made of,
- * what the last commits cost, and the switches that draw the topology. It
+ * what each recent change cost and did to it, and the switches that draw the topology. It
  * floats over the map and folds to its title bar.
  */
 export function DebugPanel(props: DebugPanelProps) {
@@ -111,16 +195,9 @@ export function DebugPanel(props: DebugPanelProps) {
           </section>
 
           <section>
-            <span className="gm-debug-panel-heading">Últimas operações</span>
-            {stats.commits.length === 0 ? <Row label="Nenhuma ainda" value="" /> : null}
-            {[...stats.commits].reverse().map((commit, index) => (
-              <Row
-                key={`${commit.label}:${index}`}
-                label={commit.slowest ? `${commit.label} (${commit.slowest.label} ${commit.slowest.ms.toFixed(0)})` : commit.label}
-                value={`${commit.ms.toFixed(0)} ms`}
-                color={commitColor(commit.ms)}
-              />
-            ))}
+            <span className="gm-debug-panel-heading">Últimas mudanças</span>
+            {stats.changes.length === 0 ? <Row label="Nenhuma ainda" value="" /> : null}
+            {[...stats.changes].reverse().map((record, index) => <ChangeEntry key={record.revision} record={record} open={index === 0} />)}
           </section>
 
           <section>

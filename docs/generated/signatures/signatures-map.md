@@ -3606,11 +3606,13 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
 export function timeCommit<T>(label: string, run: () => T): T {
   if (current !== undefined) return timePhase(label, run);
 export interface CommitRecord {
+  /** Counts up with every commit ever finished, so a reader can tell the commits it has not seen yet. */
+  readonly seq: number;
   readonly label: string;
   readonly ms: number;
   /** The slowest phase, by its own time; absent when the commit ran no timed phase. */
   readonly slowest?: { readonly label: string; readonly ms: number };
-export const RECENT_COMMITS = 8;
+export const RECENT_COMMITS = 32;
 export function recentCommits(): readonly CommitRecord[] {
   return [...recent];
   }
@@ -3677,8 +3679,40 @@ export function countMap(
   faces: readonly CountedFace[],
   ): MapCounts {
   const byType = new Map<string, number>();
-export function formatMegabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+export interface PrintedEdgeUse {
+  readonly edgeId: string;
+  readonly reversed: boolean;
+  readonly startNodeId: string;
+  readonly endNodeId: string;
+  readonly geometry: unknown;
+  }
+export interface PrintedFace {
+  readonly surfaceKey: readonly string[];
+  readonly surfaceType: string;
+  readonly outerLoops: readonly (readonly PrintedEdgeUse[])[];
+  readonly holes: readonly (readonly PrintedEdgeUse[])[];
+  readonly nodes: readonly { readonly id: string; readonly position: PrintedPoint }[];
+  readonly props?: unknown;
+  readonly profile?: unknown;
+export interface PrintedGraph {
+  readonly nodes: readonly { readonly id: string; readonly position: PrintedPoint; readonly pin?: unknown }[];
+  readonly edges: readonly { readonly edgeId: string; readonly startNodeId: string; readonly endNodeId: string; readonly curve?: unknown }[];
+  }
+export interface MapFingerprint {
+  readonly vertices: ReadonlyMap<string, string>;
+  readonly edges: ReadonlyMap<string, string>;
+  readonly faces: ReadonlyMap<string, { readonly type: string; readonly print: string }>;
+  }
+export const EMPTY_FINGERPRINT: MapFingerprint = { vertices: new Map(), edges: new Map(), faces: new Map() };
+export function fingerprintMap(graph: PrintedGraph, faces: readonly PrintedFace[]): MapFingerprint {
+  const positions = new Map<string, string>();
+export interface ElementChange {
+  readonly added: number;
+  readonly removed: number;
+  readonly changed: number;
+  }
+export interface TypeChange extends ElementChange {
+  readonly type: string;
   }
 
 // src/composition/tabletop/effects/change-area.ts
@@ -5532,12 +5566,21 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const gestureRef = useRef<ActiveGesture | null>(null);
 
 // src/composition/tabletop/use-debug-stats.ts
+export const RECENT_CHANGES = 8;
+export interface ChangeRecord {
+  /** The map's revision once the change was read. */
+  readonly revision: number;
+  /** What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads. */
+  readonly label: string;
+  /** The commits' time together, in milliseconds; absent when no timed commit made it. */
+  readonly ms?: number;
+  /** The slowest phase of any of those commits. */
 export interface DebugStats {
   /** The last full window of frames; absent until one has passed. */
   readonly frame?: FrameStats;
   /** What the map is made of; absent until the table is live. */
   readonly counts?: MapCounts;
-  /** How long reading those counts took, in milliseconds: what looking at the map costs. */
+  /** How long reading the map took, in milliseconds: what looking at the map costs. */
   readonly readMs?: number;
   /** Bytes of JavaScript heap in use, where the browser says. */
 export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats {

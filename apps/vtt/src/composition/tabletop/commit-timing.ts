@@ -51,20 +51,24 @@ export function timeCommit<T>(label: string, run: () => T): T {
 
 /** One finished commit: what it was, how long it took, and the slowest phase inside it. */
 export interface CommitRecord {
+  /** Counts up with every commit ever finished, so a reader can tell the commits it has not seen yet. */
+  readonly seq: number;
   readonly label: string;
   readonly ms: number;
   /** The slowest phase, by its own time; absent when the commit ran no timed phase. */
   readonly slowest?: { readonly label: string; readonly ms: number };
 }
 
-/** How many finished commits are remembered for the debug panel. */
-export const RECENT_COMMITS = 8;
+/** How many finished commits are remembered for the debug panel: enough for a burst of them, like a drag, between two of its reads. */
+export const RECENT_COMMITS = 32;
 
 const recent: CommitRecord[] = [];
+let finished = 0;
 
 function recordCommit(label: string, ms: number, trace: Trace): void {
   const slowest = trace.phases.reduce<Phase | undefined>((worst, phase) => (worst === undefined || phase.ms > worst.ms ? phase : worst), undefined);
-  recent.push(slowest === undefined ? { label, ms } : { label, ms, slowest: { label: slowest.label, ms: slowest.ms } });
+  finished += 1;
+  recent.push(slowest === undefined ? { seq: finished, label, ms } : { seq: finished, label, ms, slowest: { label: slowest.label, ms: slowest.ms } });
   if (recent.length > RECENT_COMMITS) recent.shift();
 }
 

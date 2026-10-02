@@ -754,7 +754,8 @@ h1 {
   top: 0.75rem;
   left: 4.25rem;
   z-index: 16;
-  width: 16rem;
+  width: 21rem;
+  max-width: calc(100% - 5rem);
   max-height: calc(100% - 1.5rem);
   display: flex;
   flex-direction: column;
@@ -813,4 +814,60 @@ h1 {
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
+}
+
+/* One map change: its summary line folds open to the added/removed/changed table. */
+.gm-debug-change {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.2rem 0;
+}
+
+.gm-debug-change summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.gm-debug-change summary::-webkit-details-marker {
+  display: none;
+}
+
+.gm-debug-change-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gm-debug-impact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.25rem 0;
+  font-family: monospace;
+}
+
+.gm-debug-impact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.6rem 2.6rem 2.6rem 5.6rem;
+  gap: 0.25rem;
+  text-align: right;
+}
+
+.gm-debug-impact-row > span:first-child {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gm-debug-impact-head {
+  font-size: 0.62rem;
+  opacity: 0.7;
+}
+
+.gm-debug-impact-total {
+  white-space: nowrap;
 }
