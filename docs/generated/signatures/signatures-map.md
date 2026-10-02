@@ -3661,14 +3661,20 @@ export interface TypeCount {
   }
 export interface MapCounts {
   readonly vertices: number;
+  /** Every distinct edge: the ones faces are bounded by, and the graph's own durable ones (a spine segment) that no face bounds. */
   readonly edges: number;
+  /** Of those, the edges that bound two or more faces: the seams where structures are joined. */
+  readonly sharedEdges: number;
   readonly faces: number;
   /** Faces by structure type, the most numerous first. */
-  readonly byType: readonly TypeCount[];
+export interface CountedFace {
+  readonly surfaceType: string;
+  readonly outerLoops: readonly (readonly { readonly edgeId: string }[])[];
+  readonly holes: readonly (readonly { readonly edgeId: string }[])[];
   }
 export function countMap(
-  graph: { readonly nodes: readonly unknown[]; readonly edges: readonly unknown[] },
-  faces: readonly { readonly surfaceType: string }[],
+  graph: { readonly nodes: readonly unknown[]; readonly edges: readonly { readonly edgeId: string }[] },
+  faces: readonly CountedFace[],
   ): MapCounts {
   const byType = new Map<string, number>();
 export function formatMegabytes(bytes: number): string {

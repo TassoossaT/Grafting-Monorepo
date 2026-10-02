@@ -8,6 +8,7 @@ export interface DebugPanelStats {
   readonly counts?: {
     readonly vertices: number;
     readonly edges: number;
+    readonly sharedEdges: number;
     readonly faces: number;
     readonly byType: readonly { readonly type: string; readonly count: number }[];
   };
@@ -98,6 +99,7 @@ export function DebugPanel(props: DebugPanelProps) {
               <>
                 <Row label="Vértices" value={String(stats.counts.vertices)} />
                 <Row label="Arestas" value={String(stats.counts.edges)} />
+                <Row label="· compartilhadas (2+ faces)" value={String(stats.counts.sharedEdges)} />
                 <Row label="Faces" value={String(stats.counts.faces)} />
                 {lines.slice(0, TYPES_SHOWN).map((line) => <Row key={line.type} label={`· ${line.type}`} value={String(line.count)} />)}
                 {lines.length > TYPES_SHOWN ? <Row label="· outros tipos" value={String(lines.slice(TYPES_SHOWN).reduce((sum, line) => sum + line.count, 0))} /> : null}

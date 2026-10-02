@@ -58,22 +58,45 @@ export interface TypeCount {
 /** What the map is made of, counted. */
 export interface MapCounts {
   readonly vertices: number;
+  /** Every distinct edge: the ones faces are bounded by, and the graph's own durable ones (a spine segment) that no face bounds. */
   readonly edges: number;
+  /** Of those, the edges that bound two or more faces: the seams where structures are joined. */
+  readonly sharedEdges: number;
   readonly faces: number;
   /** Faces by structure type, the most numerous first. */
   readonly byType: readonly TypeCount[];
 }
 
-/** Counts a graph's vertices and edges and the faces standing on it, with the faces told apart by type. */
+/** One face, as far as counting it needs: its type and the edges its loops walk. */
+export interface CountedFace {
+  readonly surfaceType: string;
+  readonly outerLoops: readonly (readonly { readonly edgeId: string }[])[];
+  readonly holes: readonly (readonly { readonly edgeId: string }[])[];
+}
+
+/**
+ * Counts a graph's vertices and edges and the faces standing on it, with the
+ * faces told apart by type. The graph's own edge list holds only its durable
+ * generic edges; the edges a face is bounded by live in the face's loops, so
+ * both are counted, each edge once.
+ */
 export function countMap(
-  graph: { readonly nodes: readonly unknown[]; readonly edges: readonly unknown[] },
-  faces: readonly { readonly surfaceType: string }[],
+  graph: { readonly nodes: readonly unknown[]; readonly edges: readonly { readonly edgeId: string }[] },
+  faces: readonly CountedFace[],
 ): MapCounts {
   const byType = new Map<string, number>();
-  for (const face of faces) byType.set(face.surfaceType, (byType.get(face.surfaceType) ?? 0) + 1);
+  const uses = new Map<string, number>();
+  for (const face of faces) {
+    byType.set(face.surfaceType, (byType.get(face.surfaceType) ?? 0) + 1);
+    for (const loop of [...face.outerLoops, ...face.holes]) {
+      for (const use of loop) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
+    }
+  }
+  const distinct = new Set([...uses.keys(), ...graph.edges.map((edge) => edge.edgeId)]);
   return {
     vertices: graph.nodes.length,
-    edges: graph.edges.length,
+    edges: distinct.size,
+    sharedEdges: [...uses.values()].filter((count) => count > 1).length,
     faces: faces.length,
     byType: [...byType].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count || a.type.localeCompare(b.type)),
   };

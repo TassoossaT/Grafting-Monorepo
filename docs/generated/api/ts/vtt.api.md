@@ -477,6 +477,16 @@ Times `run` as a phase of the running commit; untimed outside one.
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
 
+### `interface vtt.debug-stats.CountedFace`
+
+One face, as far as counting it needs: its type and the edges its loops walk.
+
+### `property vtt.debug-stats.CountedFace.holes: readonly (readonly { edgeId: string }[])[]`
+
+### `property vtt.debug-stats.CountedFace.outerLoops: readonly (readonly { edgeId: string }[])[]`
+
+### `property vtt.debug-stats.CountedFace.surfaceType: string`
+
 ### `interface vtt.debug-stats.FrameStats`
 
 What the frame meter reports for a window of frames.
@@ -503,7 +513,13 @@ Faces by structure type, the most numerous first.
 
 ### `property vtt.debug-stats.MapCounts.edges: number`
 
+Every distinct edge: the ones faces are bounded by, and the graph's own durable ones (a spine segment) that no face bounds.
+
 ### `property vtt.debug-stats.MapCounts.faces: number`
+
+### `property vtt.debug-stats.MapCounts.sharedEdges: number`
+
+Of those, the edges that bound two or more faces: the seams where structures are joined.
 
 ### `property vtt.debug-stats.MapCounts.vertices: number`
 
@@ -519,9 +535,12 @@ How many faces of one structure type there are.
 
 How long a window of frames lasts before it is reported and a new one begins.
 
-### `function vtt.debug-stats.countMap(graph: { edges: readonly unknown[]; nodes: readonly unknown[] }, faces: readonly { surfaceType: string }[]): MapCounts`
+### `function vtt.debug-stats.countMap(graph: { edges: readonly { edgeId: string }[]; nodes: readonly unknown[] }, faces: readonly CountedFace[]): MapCounts`
 
-Counts a graph's vertices and edges and the faces standing on it, with the faces told apart by type.
+Counts a graph's vertices and edges and the faces standing on it, with the
+faces told apart by type. The graph's own edge list holds only its durable
+generic edges; the edges a face is bounded by live in the face's loops, so
+both are counted, each edge once.
 
 ### `function vtt.debug-stats.createFrameMeter(windowMs: number): (now: number) => FrameStats | undefined`
 
@@ -13302,7 +13321,7 @@ The panel's numbers, as plain values: this widget draws them and knows nothing o
 
 ### `property vtt.widgets.DebugPanelStats.commits: readonly { label: string; ms: number; slowest?: { label: string; ms: number } }[]`
 
-### `property vtt.widgets.DebugPanelStats.counts?: { byType: readonly { count: number; type: string }[]; edges: number; faces: number; vertices: number }`
+### `property vtt.widgets.DebugPanelStats.counts?: { byType: readonly { count: number; type: string }[]; edges: number; faces: number; sharedEdges: number; vertices: number }`
 
 ### `property vtt.widgets.DebugPanelStats.frame?: { fps: number; meanMs: number; worstMs: number }`
 

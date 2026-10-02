@@ -24,14 +24,16 @@ test("the frame meter says nothing until a window has filled, then reports it an
   assert.ok(next.fps < 50);
 });
 
+const face = (surfaceType, ...edgeIds) => ({ surfaceType, outerLoops: [edgeIds.map((edgeId) => ({ edgeId }))], holes: [] });
+
 test("counting the map totals vertices, edges and faces and tells faces apart by type, most numerous first", () => {
   const counts = countMap(
-    { nodes: [1, 2, 3, 4], edges: [1, 2, 3] },
-    [{ surfaceType: "wall" }, { surfaceType: "terrain" }, { surfaceType: "terrain" }, { surfaceType: "terrain" }, { surfaceType: "path" }, { surfaceType: "wall" }],
+    { nodes: [1, 2, 3, 4], edges: [] },
+    [face("wall", "a", "b"), face("terrain", "c"), face("terrain", "d"), face("terrain", "e"), face("path", "f"), face("wall", "g")],
   );
 
   assert.equal(counts.vertices, 4);
-  assert.equal(counts.edges, 3);
+  assert.equal(counts.edges, 7);
   assert.equal(counts.faces, 6);
   assert.deepEqual(counts.byType, [
     { type: "terrain", count: 3 },
@@ -40,10 +42,30 @@ test("counting the map totals vertices, edges and faces and tells faces apart by
   ]);
 });
 
+test("the edges faces are bounded by are counted although the graph's own edge list is empty", () => {
+  // The graph's list holds only its durable generic edges; a plain face's boundary lives in the face itself.
+  const counts = countMap({ nodes: [1, 2, 3], edges: [] }, [face("terrain", "a", "b", "c")]);
+
+  assert.equal(counts.edges, 3);
+});
+
+test("an edge two faces share is counted once, and as shared", () => {
+  const counts = countMap({ nodes: [], edges: [] }, [face("terrain", "a", "seam"), face("wall", "seam", "b")]);
+
+  assert.equal(counts.edges, 3);
+  assert.equal(counts.sharedEdges, 1);
+});
+
+test("a graph edge no face bounds, such as a spine segment, is counted too, and once when a face also walks it", () => {
+  const counts = countMap({ nodes: [], edges: [{ edgeId: "spine" }, { edgeId: "a" }] }, [face("terrain", "a", "b")]);
+
+  assert.equal(counts.edges, 3);
+});
+
 test("an empty map counts as zeroes", () => {
   const counts = countMap({ nodes: [], edges: [] }, []);
 
-  assert.deepEqual(counts, { vertices: 0, edges: 0, faces: 0, byType: [] });
+  assert.deepEqual(counts, { vertices: 0, edges: 0, sharedEdges: 0, faces: 0, byType: [] });
 });
 
 test("every finished commit is remembered, slow or not, with the slowest phase inside it", () => {
