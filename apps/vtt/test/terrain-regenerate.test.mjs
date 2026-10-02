@@ -26,27 +26,27 @@ import {
  * from another.
  */
 function field({ road = "crossing" } = {}) {
-  // Faces of 8, comfortably larger than the 2 a repair asks for, so the ground
-  // a road leaves behind is layable and the growth rule stays out of the way.
-  // The `devouring` road is the case where it does not.
+  // Faces of 32, comfortably larger than the 6 a repair lays ground this coarse
+  // at, so the ground a road leaves behind is layable and the growth rule
+  // stays out of the way. The `devouring` road is the case where it does not.
   const at = {
     n0: { x: 0, y: 1, z: 0 },
-    n1: { x: 8, y: 1, z: 0 },
-    n2: { x: 16, y: 1, z: 0 },
-    n3: { x: 0, y: 1, z: 8 },
-    n4: { x: 8, y: 1, z: 8 },
-    n5: { x: 16, y: 1, z: 8 },
+    n1: { x: 32, y: 1, z: 0 },
+    n2: { x: 64, y: 1, z: 0 },
+    n3: { x: 0, y: 1, z: 32 },
+    n4: { x: 32, y: 1, z: 32 },
+    n5: { x: 64, y: 1, z: 32 },
   };
   // A ribbon spanning L from rim to rim, an island sitting inside it, or a
   // ribbon so wide it leaves only a seam on either side.
-  const band = (z0, z1, x0 = 0, x1 = 8) => ({
+  const band = (z0, z1, x0 = 0, x1 = 32) => ({
     r0: { x: x0, y: 1, z: z0 },
     r1: { x: x1, y: 1, z: z0 },
     r2: { x: x1, y: 1, z: z1 },
     r3: { x: x0, y: 1, z: z1 },
   });
   const roadCorners =
-    road === "crossing" ? band(3, 5) : road === "devouring" ? band(0.3, 7.7) : band(3, 5, 3, 5);
+    road === "crossing" ? band(14, 18) : road === "devouring" ? band(1.2, 30.8) : band(14, 18, 14, 18);
   Object.assign(at, roadCorners);
 
   const face = (surfaceKey, ids) => ({
@@ -162,11 +162,15 @@ function pointAt(request, position) {
   return undefined;
 }
 
-test("a narrow road repair does not absorb a terrain face connected only at a corner", () => {
+// Grown by shared side alone, a repair grows as a cross, all notches, and the
+// generator lays a notched region about as densely as the strip it was meant to
+// widen. Taking in the face that only meets it at a corner is what keeps the
+// region compact.
+test("a narrow road repair takes in the face meeting it only at a corner too, so the region it lays is compact", () => {
   const context = field({road:"devouring"});
   const query = context.runtime.getRegionTopologiesInBounds;
   const ids = ["n3","c1","c2","c3"];
-  const points = [{x:0,y:1,z:8},{x:0,y:1,z:12},{x:-4,y:1,z:12},{x:-4,y:1,z:8}];
+  const points = [{x:0,y:1,z:32},{x:0,y:1,z:48},{x:-16,y:1,z:48},{x:-16,y:1,z:32}];
   const corner = {
     surfaceKey:["terrain","corner"],surfaceType:"terrain",physical:true,holes:[],
     nodes:ids.map((id,i)=>({id,position:points[i]})),
@@ -176,7 +180,7 @@ test("a narrow road repair does not absorb a terrain face connected only at a co
   for(let i=0;i<3;i++) repairTerrainCut(context.runtime,context.fallout,`repeat${i}`,"t");
   assert.equal(context.replacements.length,3);
   for(const replacement of context.replacements) {
-    assert.deepEqual(replacement.sourceSurfaceKeys.map(k=>k.join(" ")).sort(),["terrain L","terrain R"]);
+    assert.deepEqual(replacement.sourceSurfaceKeys.map(k=>k.join(" ")).sort(),["terrain L","terrain R","terrain corner"]);
   }
   assert.equal(context.edits.length,0,"this generated fixture requires no boundary splits");
   assert.equal(corner.nodes.length,4);
@@ -211,7 +215,7 @@ test("a road that crosses the face is subtracted from the ground, not handed ove
   assert.equal(request.boundary.length, 2, "what is left of the face is its two banks");
 
   // No ring may enclose the middle of the road, or ground would be laid over it.
-  const middleOfRoad = { x: 4, z: 4 };
+  const middleOfRoad = { x: 16, z: 16 };
   for (const ring of request.boundary) {
     assert.ok(!encloses(ring, middleOfRoad), "no bank reaches across the road");
   }
@@ -221,7 +225,7 @@ test("a road that leaves only a seam takes in a neighbour, so there is room to l
   const context = field({ road: "devouring" });
   repairTerrainCut(context.runtime, context.fallout, "cause-1", "t");
 
-  // The road covers all but 0.3 on either side of the face it runs over.
+  // The road covers all but 1.2 on either side of the face it runs over.
   // Regenerating exactly that leaves two ribbons a seventh of a face wide and
   // eight long, and the generator can only answer by subdividing until its
   // cells fit -- hundreds of faces a fraction of the size asked for. Taking in
@@ -251,7 +255,7 @@ test("a road sitting inside the face leaves a hole, because that is what the sub
 
   assert.equal(request.boundary.length, 1, "the face is still one piece");
   assert.equal(request.holes.length, 1, "with the road taken out of the middle of it");
-  assert.ok(encloses(request.holes[0], { x: 4, z: 4 }), "the hole is where the road stands");
+  assert.ok(encloses(request.holes[0], { x: 16, z: 16 }), "the hole is where the road stands");
 });
 
 test("the road's own corners survive the subtraction still naming a node", () => {

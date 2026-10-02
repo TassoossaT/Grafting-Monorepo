@@ -190,6 +190,56 @@ function restoreSkippedNodes(
   return result;
 }
 
+/** Twice the signed area of `p`, `q`, `r` in plan. */
+function turn(p: { readonly x: number; readonly z: number }, q: { readonly x: number; readonly z: number }, r: { readonly x: number; readonly z: number }): number {
+  return (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
+}
+
+/** The first pair of segments of `points` that properly cross, as the indices of their starts. */
+function firstCrossing(points: readonly ConstructionGridConstraintPoint[]): readonly [number, number] | undefined {
+  const count = points.length;
+  const strictly = (value: number) => (value > 1e-12 ? 1 : value < -1e-12 ? -1 : 0);
+  for (let i = 0; i < count; i += 1) {
+    const a = points[i]!, b = points[(i + 1) % count]!;
+    for (let j = i + 2; j < count; j += 1) {
+      if (i === 0 && j === count - 1) continue;
+      const c = points[j]!, d = points[(j + 1) % count]!;
+      const d1 = strictly(turn(c, d, a)), d2 = strictly(turn(c, d, b)), d3 = strictly(turn(a, b, c)), d4 = strictly(turn(a, b, d));
+      if (d1 * d2 < 0 && d3 * d4 < 0) return [i, j];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A ring that crosses itself, made sound by dropping the corners that cross
+ * it -- each time the one whose loss changes the shape least.
+ *
+ * Snapping and restoring corners onto standing nodes can do this: a node a
+ * centimetre inside a structure's side, left there by an earlier repair, is
+ * walked to and back from, and the walk folds over the side. The generator
+ * refuses a crossed ring outright, so the whole repair was lost and the ground
+ * stayed under the structure. A dropped corner costs at most one seam met at a
+ * coincident position instead of at a shared node.
+ */
+function untangled(points: readonly ConstructionGridConstraintPoint[]): readonly ConstructionGridConstraintPoint[] {
+  let ring = [...points];
+  for (let guard = points.length; guard > 0 && ring.length > 3; guard -= 1) {
+    const crossing = firstCrossing(ring);
+    if (crossing === undefined) return ring;
+    const [i, j] = crossing;
+    const count = ring.length;
+    const candidates = [i, (i + 1) % count, j, (j + 1) % count];
+    let best: { index: number; loss: number } | undefined;
+    for (const index of candidates) {
+      const loss = Math.abs(turn(ring[(index - 1 + count) % count]!, ring[index]!, ring[(index + 1) % count]!));
+      if (best === undefined || loss < best.loss) best = { index, loss };
+    }
+    ring = ring.filter((_, index) => index !== best!.index);
+  }
+  return firstCrossing(ring) === undefined ? ring : [];
+}
+
 function dropInventedCorners(
   points: readonly ConstructionGridConstraintPoint[],
   hasEdge: (a: number, b: number) => boolean,
@@ -479,8 +529,8 @@ export function buildConstraintRings(
       return from !== undefined && to !== undefined &&
         edgeAlongSegment(spansAtNode, from, to, onEdgeTolerance) !== undefined;
     };
-    const stitched = dropInventedCorners(collinearCleaned, joinedOrSpanned, onEdgeTolerance);
-
+    const stitched = untangled(dropInventedCorners(collinearCleaned, joinedOrSpanned, onEdgeTolerance));
+    if (stitched.length < 3) continue;
 
     const edges: (ConstructionRegionEdge | undefined)[] = [];
     for (let i = 0; i < stitched.length; i++) {

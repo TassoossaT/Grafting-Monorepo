@@ -93,27 +93,102 @@ function faceIntersectsArea(
 
 /**
  * How many rings of neighbouring faces a regenerate may take in before it
- * gives up trying to find room, and the ceiling on what it may hold at once.
+ * gives up trying to find room, and the ceiling on how many faces it may
+ * take in altogether.
  *
- * Both are here to bound the cost, not to express a rule: the loop stops as
- * soon as the ground it is about to lay is wide enough to lay in, which on
- * ordinary ground is after one ring or none at all.
+ * The loop stops as soon as the ground it is about to lay is wide enough and
+ * its rim no denser than the ground it lays. Two rings is where a floor on
+ * open ground gets there; a third only ever ran on ground squeezed between
+ * structures, where it widened the strip a little and laid half again as
+ * many faces as it replaced.
  */
-const MOST_RINGS_WORTH_ABSORBING = 1;
-const MOST_FACES_WORTH_ABSORBING = 48;
+const MOST_RINGS_WORTH_ABSORBING = 2;
+const MOST_FACES_WORTH_ABSORBING = 64;
 
 /**
- * How much of a face has to fit across the ground being laid before it counts
- * as layable, as a fraction of the face size.
+ * How wide the ground being laid has to be before it counts as layable, as a
+ * multiple of the face size.
  *
- * Calibrated against what {@link widthOf} actually reports rather than against
- * intuition: it answers the strip's true width but only half the side of a
- * square, so asking for a whole face here would demand a region two faces
- * across and grow into ground nothing was wrong with. Three quarters is the
- * point where the corridor a road leaves behind -- about half a face wide --
- * asks for one ring of neighbours and, having got it, stops.
+ * Measured against the real generator rather than guessed. Ground left round a
+ * floor by the faces it touches plus one ring is a strip one to two faces
+ * wide, and the generator laid 1.65 faces for every one that fits there -- each
+ * strip corner to corner, every triangle tripled by `ortho`. Two rings brought
+ * it to 1.08, so the strip has to hold a face and a half across before the loop
+ * stops. {@link widthOf} reports a strip's true width, so this reads directly.
  */
-const NARROW_ENOUGH_TO_GROW = 0.75;
+const NARROW_ENOUGH_TO_GROW = 1.5;
+
+/**
+ * Narrower than this fraction of the face size, no face fits across the
+ * ground at all and the repair grows whatever made it narrow: a strip a road
+ * leaves, or the sliver where a structure stood. Below {@link widthOf}'s half
+ * a square, so it asks for growth only where a cell genuinely cannot lie.
+ */
+const TOO_NARROW_FOR_A_FACE = 0.75;
+
+/** How much wider a ring taken in for room must leave the ground, or it is not taken. */
+const WIDENS_ENOUGH = 1.2;
+
+/** How much narrower the structures must leave the ground than it would be without them for it to grow at all. */
+const NARROWED_BY_STRUCTURES = 0.8;
+
+/**
+ * A neighbour whose sides run shorter than this fraction of the face size is
+ * denser than the ground about to be laid, and is laid again with it.
+ *
+ * Left standing, its every node is a corner the generator must keep, so the
+ * new ground comes back as dense along that rim as the neighbour was -- and the
+ * next repair inherits it. That is how repeated cuts in one place shrank the
+ * ground there from 4 m² a face to under 1. Taking it in is the only way a
+ * repair ever makes ground coarser again.
+ */
+const DENSER_THAN_LAID = 0.5;
+
+/**
+ * The face size a regenerate lays at: the size of the ground it replaces,
+ * never finer than {@link DEFAULT_FACE_SIDE} and never coarser than the
+ * coarsest face the brush lays.
+ *
+ * A fixed size was wrong both ways. Under a face coarser than it, a small cut
+ * turned one face into a hundred; under ground already made finer by earlier
+ * cuts, it kept the ground fine forever. The floor is what stops the second:
+ * a repair never lays finer than the default, whatever it replaces.
+ */
+const COARSEST_REGENERATED_FACE = 6;
+
+/** The side of a square with this face's plan area. */
+function faceSideOf(topology: ConstructionRegionTopology): number {
+  const ring = topologyToPolygon(topology)[0] ?? [];
+  let twice = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const [ax, az] = ring[index]!;
+    const [bx, bz] = ring[index + 1]!;
+    twice += ax * bz - bx * az;
+  }
+  return Math.sqrt(Math.abs(twice) / 2);
+}
+
+function median(values: readonly number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/** See {@link COARSEST_REGENERATED_FACE}. */
+function regeneratedFaceSide(replaced: readonly ConstructionRegionTopology[]): number {
+  const size = median(replaced.map(faceSideOf).filter((side) => side > 0)) ?? DEFAULT_FACE_SIDE;
+  return Math.min(COARSEST_REGENERATED_FACE, Math.max(DEFAULT_FACE_SIDE, size));
+}
+
+/** The median length of a face's sides, in plan. */
+function medianSideLength(topology: ConstructionRegionTopology): number {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const lengths = [...topology.outerLoops, ...topology.holes].flat().flatMap((use) => {
+    const a = at.get(use.startNodeId), b = at.get(use.endNodeId);
+    return a && b ? [Math.hypot(b.x - a.x, b.z - a.z)] : [];
+  });
+  return median(lengths) ?? 0;
+}
 
 /**
  * One face's boundary as a plan-view ring: closed, in walk order.
@@ -279,7 +354,6 @@ export function executeTerrainCut(
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Área de corte inválida." };
   }
 
-  const effectiveFaceSide = request.faceSide ?? DEFAULT_FACE_SIDE;
   const extent = boundsOfArea(request.area);
 
   // Ask runtime what surfaces are covered by outline / footprint
@@ -307,11 +381,13 @@ export function executeTerrainCut(
   // taken from the area alone would silently discard exactly the faces this
   // call exists to replace.
   const coveredExtent = { ...extent };
+  const coveredTopologies: ConstructionRegionTopology[] = [];
   for (const region of covered) {
     const topology =
       typeof runtime.getRegionTopology === "function"
         ? runtime.getRegionTopology(region.surfaceKey as ConstructionSurfaceKey)
         : undefined;
+    if (topology && hasTrait(topology.surfaceType, "ground")) coveredTopologies.push(topology);
     for (const node of topology?.nodes ?? []) {
       coveredExtent.minX = Math.min(coveredExtent.minX, node.position.x);
       coveredExtent.minZ = Math.min(coveredExtent.minZ, node.position.z);
@@ -331,6 +407,11 @@ export function executeTerrainCut(
       }
     }
   }
+
+  // A stroke lays at the size it was asked for; a repair, at the size of the
+  // ground it replaces.
+  const effectiveFaceSide =
+    request.faceSide ?? (request.profile.kind === "regenerate" ? regeneratedFaceSide(coveredTopologies) : DEFAULT_FACE_SIDE);
 
   // A regenerate has to be able to absorb a ring or two of neighbours (see the
   // growth loop below), so it reaches further out than a stroke needs to.
@@ -397,7 +478,7 @@ export function executeTerrainCut(
   const connectArea = structures.area;
 
   /** The affected faces as one polygon, with `connectArea` taken out of it. */
-  const groundFor = (faces: readonly ConstructionRegionTopology[]): PlanarArea => {
+  const groundFor = (faces: readonly ConstructionRegionTopology[], withStructures = true): PlanarArea => {
     // A face an edit dragged out of place -- rimmed by a node the structure
     // carried away -- never counts by its shape: that runs from where it lay to
     // where the node went, over ground nobody touched, and laying ground there
@@ -422,7 +503,7 @@ export function executeTerrainCut(
         // Keep the un-unioned shape rather than losing the stroke.
       }
     }
-    if (connectArea.length === 0) return merged;
+    if (connectArea.length === 0 || !withStructures) return merged;
     try {
       return planarDifference(runtime, merged, connectArea);
     } catch {
@@ -441,30 +522,56 @@ export function executeTerrainCut(
   //
   // The remedy is the one the sculpt brush gets for free by covering whole
   // faces: take in enough ground that the remainder is a region rather than a
-  // seam. Neighbours are absorbed by *shared node*, one ring at a time, and
-  // only while the result is still too narrow to lay in -- so ordinary strokes
-  // and cuts that barely clip a face never pay for it.
+  // seam. Neighbours are absorbed by *shared side*, one ring at a time: all of
+  // them while the result is still too narrow to lay in, and otherwise only
+  // those denser than the ground about to be laid (`DENSER_THAN_LAID`). Only a
+  // repair grows -- a stroke never lays ground outside what its ghost showed.
   let targetPolygon = timePhase(`chão a regerar (${affected.length} faces)`, () => groundFor(affected));
-  if (connectArea.length > 0) {
+  if (request.profile.kind === "regenerate") {
+    let absorbedSoFar = 0;
     for (let ring = 0; ring < MOST_RINGS_WORTH_ABSORBING; ring += 1) {
       if (affected.length === 0) break;
-      if (widthOf(targetPolygon) >= effectiveFaceSide * NARROW_ENOUGH_TO_GROW) break;
+      // Too narrow to lay a face in at all, it grows whatever made it so. Only
+      // narrow *because a structure stands in it* does it grow on to a face and
+      // a half: ground narrow with or without the structures -- where a
+      // structure left, a strip of hillside under one standing clear -- has no
+      // structure to make room round, and growing it further only lays again
+      // ground nobody touched.
+      const width = widthOf(targetPolygon);
+      const narrow = connectArea.length > 0 && (width < effectiveFaceSide * TOO_NARROW_FOR_A_FACE ||
+        (width < effectiveFaceSide * NARROW_ENOUGH_TO_GROW && width < widthOf(groundFor(affected, false)) * NARROWED_BY_STRUCTURES));
 
-      // Only a shared side adds width to the repair. A corner contact must
-      // not pull an otherwise untouched terrain face into regeneration.
-      const touched = affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat());
-      const absorbed = timePhase("vizinhas por aresta", () => retained.filter(
-        (t) => hasTrait(t.surfaceType, "ground") &&
-          [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touched.some((other) =>
-            (edge.startNodeId === other.startNodeId && edge.endNodeId === other.endNodeId) ||
-            (edge.startNodeId === other.endNodeId && edge.endNodeId === other.startNodeId)))),
-      ));
+      // Too narrow, the repair takes in every neighbour sharing a node with it,
+      // corners included: grown by shared side alone it grows as a cross, all
+      // notches, and the generator lays a notched region as densely as the
+      // strip it was meant to widen -- 1.6 faces for every one that fits,
+      // against 1.08 for the same ring taken whole. Wide enough, it takes in
+      // only a denser neighbour sharing a side with it.
+      const sideKey = (a: string, b: string) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+      const touchedSides = new Set(affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat().map((edge) => sideKey(edge.startNodeId, edge.endNodeId))));
+      const touchedNodes = new Set(affected.flatMap((t) => t.nodes.map((node) => node.id)));
+      // Ground standing under a structure is cut or passes under it; either
+      // way it is no room to take in, and laying it again would disturb ground
+      // the structure stands clear of.
+      const absorbed = timePhase("vizinhas", () => retained.filter((t) => hasTrait(t.surfaceType, "ground") && !structures.standsUnder(centroidOf(t.nodes)) && (narrow
+        ? t.nodes.some((node) => touchedNodes.has(node.id))
+        : [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touchedSides.has(sideKey(edge.startNodeId, edge.endNodeId)))) &&
+          medianSideLength(t) < effectiveFaceSide * DENSER_THAN_LAID)))
+        .slice(0, MOST_FACES_WORTH_ABSORBING - absorbedSoFar);
       if (absorbed.length === 0) break;
 
-      affected = [...affected, ...absorbed];
+      const grown = [...affected, ...absorbed];
+      const grownPolygon = timePhase(`chão a regerar com vizinhas (${grown.length} faces)`, () => groundFor(grown));
+      // Ground squeezed between two structures stays a strip however much is
+      // taken in around it. A ring that does not widen it is only more ground
+      // laid as densely, so it is left standing and the growth stops.
+      if (narrow && widthOf(grownPolygon) < width * WIDENS_ENOUGH) break;
+
+      absorbedSoFar += absorbed.length;
+      affected = grown;
       affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
       retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")) && !stale.has(t.surfaceKey.join(" ")));
-      targetPolygon = timePhase(`chão a regerar com vizinhas (${affected.length} faces)`, () => groundFor(affected));
+      targetPolygon = grownPolygon;
     }
   }
 
@@ -482,7 +589,7 @@ export function executeTerrainCut(
   // One numbering across the retained rim and the connected structure, because
   // the generator answers with one `source` index per corner.
   const retainedPerimeters = timePhase(`perímetro do terreno retido (${retained.length} faces)`, () => perimeterConstraints(retained, 0));
-  const connectTable = structures.constraints(retainedPerimeters.sources.length);
+  const connectTable = structures.constraints(retainedPerimeters.sources);
   const perimeters: ConstraintTable = {
     rings: [...retainedPerimeters.rings, ...connectTable.rings],
     sources: [...retainedPerimeters.sources, ...connectTable.sources],

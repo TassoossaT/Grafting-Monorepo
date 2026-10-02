@@ -5,7 +5,6 @@ import type { CutFallout } from "@/features/edit-construction";
 // test reaches has to spell out any import it needs at run time. The type-only
 // `@/` imports above are fine -- those are erased.
 import { executeTerrainCut } from "./terrain-cut-executor.ts";
-import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
 import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
 import { hasTrait } from "../../../features/edit-construction/index.ts";
 import { topologyIntersectsPolygon } from "./terrain-lattice-reaction.ts";
@@ -167,7 +166,6 @@ export function repairTerrainCut(
         staleRegions: fallout.draggedSurfaceKeys,
         causeId: `${causeId}:vacated`,
         tableId,
-        faceSide: DEFAULT_FACE_SIDE,
         seed: Math.max(1, Math.abs(hashOf(fallout.draggedSurfaceKeys ?? []))),
         irregularity: 0.7,
       });
@@ -193,7 +191,6 @@ export function repairTerrainCut(
       },
       causeId,
       tableId,
-      faceSide: DEFAULT_FACE_SIDE,
       seed: Math.max(1, Math.abs(hashOf(fallout.consumedSurfaceKeys))),
       irregularity: 0.7,
     });
@@ -230,7 +227,6 @@ export function repairTerrainCut(
     staleRegions: fallout.draggedSurfaceKeys,
     causeId,
     tableId,
-    faceSide: DEFAULT_FACE_SIDE,
     seed: Math.max(1, Math.abs(hashOf(fallout.consumedSurfaceKeys))),
     irregularity: 0.7,
   });

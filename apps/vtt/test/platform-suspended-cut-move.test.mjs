@@ -58,9 +58,12 @@ test("platform half in hill, moved away: suspended terrain is untouched", async 
     const underSuspended = (t) => {
       const cx = t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length;
       const cz = t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length;
-      return cx >= -1.3 && cx <= 2.0 && cz >= -2.3 && cz <= 2.3;
+      // Wholly clear of where it rested: a face reaching the cut line is laid
+      // again when the floor leaves, wherever its middle falls.
+      return cx >= -1.3 && cx <= 2.0 && cz >= -2.3 && cz <= 2.3 && t.nodes.every((n) => n.position.x <= 2.0);
     };
     const suspendedTerrainBefore = new Set(terrainBefore.filter(underSuspended).map(keyOf));
+    assert.ok(suspendedTerrainBefore.size > 0, "some ground stands wholly under the suspended part to begin with");
 
     // Now move the platform by +10 in X (out of the hill completely)
     const handle = shownGlobalHandles({
@@ -231,10 +234,12 @@ test("platform half in hill, moved slightly (overlapping): suspended terrain is 
     const underSuspended = (t) => {
       const cx = t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length;
       const cz = t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length;
-      // The region under the old suspended part that remains suspended even after move (+2.0 in X)
-      return cx >= -1.3 && cx <= 0.7 && cz >= -2.3 && cz <= 2.3;
+      // The region under the old suspended part that remains suspended even after move (+2.0 in X),
+      // wholly clear of where it rested.
+      return cx >= -1.3 && cx <= 0.7 && cz >= -2.3 && cz <= 2.3 && t.nodes.every((n) => n.position.x <= 0.7);
     };
     const suspendedTerrainBefore = new Set(terrainBefore.filter(underSuspended).map(keyOf));
+    assert.ok(suspendedTerrainBefore.size > 0, "some ground stands wholly under the suspended part to begin with");
 
     // Now move the platform slightly by +2 in X (still overlapping the hill and old location)
     const handle = shownGlobalHandles({

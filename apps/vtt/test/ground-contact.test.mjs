@@ -13,14 +13,14 @@ import { shownGlobalHandles } from "../src/features/edit-construction/index.ts";
  * heal; a ramp run into the ground is cut round without losing a corner.
  */
 
-function bowl(runtime, session, heightAt = (x, z) => 0.04 * (x * x + z * z)) {
+function bowl(runtime, session, heightAt = (x, z) => 0.04 * (x * x + z * z), cells = 10) {
   runtime.getSnapshot = () => ({
     tableId: "t",
     map: { nodePositions: new Map(JSON.parse(session.snapshot_json()).nodes.map((n) => [n.id, { position: { x: n.position[0], y: n.position[1], z: n.position[2] } }])) },
   });
-  const cell = 2, cells = 10, id = (i, j) => `g:${i}:${j}`, nodes = [];
+  const cell = 2, id = (i, j) => `g:${i}:${j}`, nodes = [];
   for (let i = 0; i <= cells; i++) for (let j = 0; j <= cells; j++) {
-    const x = -10 + i * cell, z = -10 + j * cell;
+    const x = -cells + i * cell, z = -cells + j * cell;
     nodes.push({ id: id(i, j), position: { x, y: heightAt(x, z), z } });
   }
   const edges = new Map();
@@ -38,10 +38,10 @@ function bowl(runtime, session, heightAt = (x, z) => 0.04 * (x * x + z * z)) {
   runtime.addPatch({ nodes, edges: [...edges.values()], regions });
 }
 
-function setup(heightAt) {
+function setup(heightAt, cells) {
   const fixture = sessionFixture();
   Object.assign(fixture.runtime, { showPreview() {}, clearPreview() {} });
-  bowl(fixture.runtime, fixture.session, heightAt);
+  bowl(fixture.runtime, fixture.session, heightAt, cells);
   return fixture;
 }
 const quiet = (body) => async () => {
@@ -246,18 +246,19 @@ test("where the ground ends under a floor run half out of a hill, its edge lies 
 }));
 
 test("a floor moved a long way across the ground is two cuts, where it left and where it arrived: the ground it passed over is left exactly as it was", quiet(() => {
-  const { runtime, ctx, calls, session } = setup(() => 0);
+  // Ground 32 m across: a repair takes in two rings of faces round each cut, so the path between has to be longer than that on both sides.
+  const { runtime, ctx, calls, session } = setup(() => 0, 16);
   try {
     floorAt(ctx, [-8.3, -1.7, -4.3, 1.7], 0);
     const keyOf = (t) => t.surfaceKey.join(" ");
     const middle = (t) => ({ x: t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length, z: t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length });
     // Halfway between where it stood and where it arrived: out of reach of either cut.
-    const onPath = (t) => { const { x, z } = middle(t); return x > -1.5 && x < -0.5 && z > -4 && z < 4; };
+    const onPath = (t) => { const { x, z } = middle(t); return x > 0.5 && x < 1.5 && z > -4 && z < 4; };
     const before = new Set(terrain(runtime).filter(onPath).map(keyOf));
     const handle = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) }).find((h) => h.kind === "pivot");
     const params = platformContourTool.defaultParams();
     const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
-    const current = { point: { ...handle.position, x: handle.position.x + 12 }, screenX: 400, screenY: 300 };
+    const current = { point: { ...handle.position, x: handle.position.x + 16 }, screenX: 400, screenY: 300 };
     platformContourTool.onPointerDown(ctx, start, params);
     platformContourTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
     platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
@@ -265,8 +266,8 @@ test("a floor moved a long way across the ground is two cuts, where it left and 
     const after = new Set(terrain(runtime).filter(onPath).map(keyOf));
     assert.deepEqual([...after].filter((key) => !before.has(key)), [], "no ground laid again along the way");
     assert.deepEqual([...before].filter((key) => !after.has(key)), [], "none taken away along the way");
-    // Now over x = 3.7..7.7: the ground heals where it stood and goes round where it is.
-    assert.deepEqual(holesIn(runtime, (x, z) => x > 3.7 && x < 7.7 && z > -1.7 && z < 1.7), [], "no hole where it stood, nor round where it is");
+    // Now over x = 7.7..11.7: the ground heals where it stood and goes round where it is.
+    assert.deepEqual(holesIn(runtime, (x, z) => x > 7.7 && x < 11.7 && z > -1.7 && z < 1.7), [], "no hole where it stood, nor round where it is");
   } finally { session.free(); }
 }));
 

@@ -49,10 +49,22 @@ export interface StructureMeeting {
   readonly seeds: readonly { readonly seed: readonly string[]; readonly surfaceType: string }[];
   /** Whether a node is a structure's -- never a height the ground should take. */
   holds(nodeId: ConstructionNodeId): boolean;
-  /** The structures' outlines as constraint rings, numbered from `startingIndex`. */
-  constraints(startingIndex: number): ConstraintTable;
+  /**
+   * The structures' outlines as constraint rings, numbered after
+   * `numberedBefore` -- the nodes another table already numbered from 0. A
+   * node among them keeps its number, so the ground's own rim and a structure
+   * it shares a corner with name that corner once: numbered twice, two ring
+   * corners stand on one spot and the generator refuses the whole ring.
+   */
+  constraints(numberedBefore: readonly ConstructionNodeId[]): ConstraintTable;
   /** Whether a point lies on a structure's side: where the ground meets it, never snapped away from it. */
   liesOnSide(point: { readonly x: number; readonly z: number }): boolean;
+  /**
+   * Whether a point lies under a structure in plan -- resting on the ground or
+   * standing clear of it. Ground there is either cut or passes under, and a
+   * repair widening itself for room never takes it in.
+   */
+  standsUnder(point: { readonly x: number; readonly z: number }): boolean;
   /** The height the ground must take at a point meeting a structure -- on a sealed side, or on the cut line under a face -- if it meets one. */
   heightAt(point: { readonly x: number; readonly z: number }): number | undefined;
 }
@@ -64,6 +76,7 @@ export const NO_STRUCTURES: StructureMeeting = Object.freeze({
   holds: () => false,
   constraints: () => ({ rings: [], sources: [] }),
   liesOnSide: () => false,
+  standsUnder: () => false,
   heightAt: () => undefined,
 });
 
@@ -201,18 +214,24 @@ export function meetStructures(
     const ring = faceRings(topology)[0] ?? [];
     return surfaceAt && ring.length >= 3 ? [{ ring, surfaceAt }] : [];
   });
+  // Every structure's plan, cutting or not, resting or clear.
+  const footprints = structures.flatMap((topology) => {
+    const [ring, ...holes] = faceRings(topology);
+    return ring !== undefined && ring.length >= 3 ? [{ ring, holes }] : [];
+  });
   const cutLine = area.flatMap((piece) => piece.flatMap((ring) => ring.slice(0, -1).map((a, index) => [{ x: a[0], z: a[1] }, { x: ring[index + 1]![0], z: ring[index + 1]![1] }] as const)));
 
   return {
     area,
     seeds: cutting.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
     holds: (nodeId) => positions.has(nodeId),
-    constraints(startingIndex) {
-      const shared = anchoredConstraints(sharedLoops, positions, startingIndex, resting, [], true);
-      const sealed = anchoredConstraints(sealedLoops, positions, startingIndex, sealedHeld, shared.sources);
+    constraints(numberedBefore) {
+      const shared = anchoredConstraints(sharedLoops, positions, 0, resting, numberedBefore, true);
+      const sealed = anchoredConstraints(sealedLoops, positions, 0, sealedHeld, [...numberedBefore, ...shared.sources]);
       return { rings: [...shared.rings, ...sealed.rings], sources: [...shared.sources, ...sealed.sources] };
     },
     liesOnSide: (point) => sides.some(({ a, b }) => nearestOnSegment(point, a, b).distance < ON),
+    standsUnder: (point) => footprints.some(({ ring, holes }) => insideRing(ring, point) && !holes.some((hole) => insideRing(hole, point))),
     heightAt(point) {
       // On a sealed side resting on the ground: the side's height. Over the
       // ground, clear of it, the ground passes under at its own height; the
