@@ -141,12 +141,46 @@ test("an opening's handles: one in the middle to move it, one on each side and c
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
   clickOnWall(h, { ...WINDOW, width: 1 }, { x: 2, y: 1, z: 0 }, wall);
-  const parts = (at) => openingHandles(h.runtime.getAllRegionTopologies(), new Set(h.openings().filter((o) => ref(o) === openingRefAt(h.openings(), at)).map((o) => o.surfaceKey.join("\u0000"))), (type) => type === h.openings()[0].surfaceType).map((handle) => handle.part).sort();
+  const parts = (at) => openingHandles(h.runtime.getAllRegionTopologies(), new Set(h.openings().filter((o) => ref(o) === openingRefAt(h.openings(), at)).map((o) => o.surfaceKey.join("\u0000"))), (type) => type === h.openings()[0].surfaceType, h.runtime).map((handle) => handle.part).sort();
   assert.deepEqual(parts({ x: 2, y: 1.5, z: 0 }), ["bottom", "bottom-left", "bottom-right", "center", "left", "right", "top", "top-left", "top-right"]);
   assert.equal(openingHandleAt(h, "center", { x: 2, y: 1.5, z: 0 }).kind, "pivot", "the middle one is drawn as a move handle");
 
   clickOnWall(h, { ...WINDOW, openingKind: "door", width: 1 }, { x: 6, y: 1, z: 0 }, wall);
   assert.deepEqual(parts({ x: 6, y: 1, z: 0 }), ["center", "left", "right", "top", "top-left", "top-right"]);
+});
+
+test("a window across a seam has its handles on its whole box, not on the part on its first wall, and they resize the whole", async () => {
+  const h = await harness();
+  twoPanelWall(h.ctx);
+  const [a] = h.walls();
+  clickOnWall(h, WINDOW, { x: 4, y: 1.5, z: 0 }, a); // [3.4, 4.6] across the seam at 4
+  assert.equal(h.openings().length, 2, "one piece on each wall");
+  const at = { x: 4, y: 2, z: 0 };
+  const near = (handle, x, y) => Math.abs(handle.position.x - x) < 1e-6 && Math.abs(handle.position.y - y) < 1e-6;
+  assert.ok(near(openingHandleAt(h, "left", at), 3.4, 2), "left on the box's left side");
+  assert.ok(near(openingHandleAt(h, "right", at), 4.6, 2), "right on the box's right side, past the seam");
+  assert.ok(near(openingHandleAt(h, "center", at), 4, 2), "the middle in the middle of the whole");
+  assert.ok(near(openingHandleAt(h, "top-right", at), 4.6, 2.5));
+
+  dragHandle(h, WINDOW, "right", { x: 4.6, y: 2, z: 0 }, { x: 5.6, y: 2, z: 0 });
+  const rect = assertOneRect(h.runtime, h.openings());
+  assert.ok(Math.abs(rect.s0 - 3.4) < 1e-6 && Math.abs(rect.s1 - 5.6) < 1e-6, `the right side followed, the left stayed: [${rect.s0}, ${rect.s1}]`);
+});
+
+test("on a wall drawn right to left, the left handle still moves the left side", async () => {
+  const h = await harness();
+  line(h.ctx, { x: 8, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+  const [wall] = h.walls();
+  clickOnWall(h, { ...WINDOW, width: 1 }, { x: 4, y: 1.5, z: 0 }, wall);
+  const before = h.openings()[0].nodes.map((n) => n.position.x);
+  const [x0, x1] = [Math.min(...before), Math.max(...before)];
+  const left = openingHandleAt(h, "left", { x: 4, y: 2, z: 0 });
+  assert.ok(Math.abs(left.position.x - x0) < 1e-6 || Math.abs(left.position.x - x1) < 1e-6, "on one side of the box");
+
+  dragHandle(h, WINDOW, "left", left.position, { ...left.position, x: left.position.x + (left.position.x === x0 ? -1 : 1) });
+  const after = h.openings()[0].nodes.map((n) => n.position.x);
+  const moved = Math.abs(left.position.x - x0) < 1e-6 ? [Math.min(...after), x0 - 1] : [Math.max(...after), x1 + 1];
+  assert.ok(Math.abs(moved[0] - moved[1]) < 1e-6, `the side under the handle followed it: ${JSON.stringify(after)}`);
 });
 
 test("resizing a window's edge across a seam grows a second piece on the next face", async () => {

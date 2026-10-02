@@ -102,7 +102,7 @@ export function openingHandleAt(h, part, at) {
   const openings = h.openings();
   const opening = openings.find((o) => ref(o) === openingRefAt(openings, at));
   if (!opening) throw new Error(`no opening at ${JSON.stringify(at)}`);
-  const handle = openingHandles(h.runtime.getAllRegionTopologies(), new Set([opening.surfaceKey.join("\u0000")]), isOpeningType).find((candidate) => candidate.part === part);
+  const handle = openingHandles(h.runtime.getAllRegionTopologies(), new Set([opening.surfaceKey.join("\u0000")]), isOpeningType, h.runtime).find((candidate) => candidate.part === part);
   if (!handle) throw new Error(`the opening at ${JSON.stringify(at)} has no ${part} handle`);
   return handle;
 }

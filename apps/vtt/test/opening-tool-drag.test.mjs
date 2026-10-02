@@ -51,7 +51,7 @@ function gesture(ctx, params, downPoint, upPoint = downPoint) {
 function handleOf(ctx, part, x) {
   const opening = openingAt(ctx, x);
   assert.ok(opening, `an opening stands near x=${x}`);
-  const handle = openingHandles(ctx.runtime.getAllRegionTopologies(), new Set([opening.surfaceKey.join("\u0000")]), (type) => type === opening.surfaceType).find((candidate) => candidate.part === part);
+  const handle = openingHandles(ctx.runtime.getAllRegionTopologies(), new Set([opening.surfaceKey.join("\u0000")]), (type) => type === opening.surfaceType, ctx.runtime).find((candidate) => candidate.part === part);
   assert.ok(handle, `the opening near x=${x} has a ${part} handle`);
   return handle;
 }
@@ -420,6 +420,22 @@ test("a door can never be dragged off the floor, even grabbed right where its ow
     const y = extent(openingsOf(runtime)[0], "y");
     assert.ok(Math.abs(y.min) < 1e-6, "a door's floor must never move");
     assert.ok(Math.abs(y.max - 2) < 1e-6, "a door's height must stay put when its (non-existent) bottom handle is dragged");
+  } finally { session.free(); }
+});
+
+test("the handle being dragged follows the outline it drags, and goes back with the rest on release", () => {
+  const { runtime, session, ctx } = fixture();
+  const placed = [];
+  ctx.runtime.previewNodeHandle = (id, position) => placed.push({ id, position });
+  try {
+    wall(runtime);
+    click(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    const right = handleOf(ctx, "right", 2);
+    dragPart(ctx, WINDOW, "right", { x: 2.5, y: 1.5, z: 0 }, { x: 4, y: 1.5, z: 0 });
+    const during = placed.filter((entry) => entry.position !== undefined);
+    assert.ok(during.length > 0 && during.every((entry) => entry.id === right.id), "the right handle was moved while dragged");
+    assert.ok(Math.abs(during.at(-1).position.x - 4) < 1e-6 && Math.abs(during.at(-1).position.y - 1.5) < 1e-6, JSON.stringify(during.at(-1)));
+    assert.deepEqual(placed.at(-1), { id: right.id, position: undefined }, "on release the scene places it again from what stands");
   } finally { session.free(); }
 });
 

@@ -6573,6 +6573,10 @@ A tool editing spines by their points: only spines' points and midpoints, never 
 
 Absent without the curve engine: then no curve has a handle.
 
+### `property vtt.scene-handles.SceneHandleInput.runs?: OpeningRunPort`
+
+Places an opening's handles on its whole box along the walls it crosses; absent, on the part on its first wall.
+
 ### `property vtt.scene-handles.SceneHandleInput.topologies: readonly ConstructionRegionTopology[]`
 
 ### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | GlobalHandleKind`
@@ -10601,15 +10605,21 @@ are pinned with, on the wall they are pinned to: where along it, and how
 high -- never off what shape the opening is. A door stands on the floor, so
 its bottom has none.
 
+### `type vtt.opening-handles.OpeningRunPort = Pick<ConstructionSessionPort, "panelRun" | "resolveOnHost">`
+
+What placing the handles on the run of walls an opening crosses needs from the engine.
+
 ### `function vtt.opening-handles.openingHandleId(part: OpeningHandlePart, nodeId: string): string`
 
 ### `function vtt.opening-handles.openingHandlePick(id: string): { nodeId: string; part: OpeningHandlePart } | undefined`
 
 Which opening handle `id` names, and after which node; `undefined` for any other id.
 
-### `function vtt.opening-handles.openingHandles(topologies: readonly ConstructionRegionTopology[], focus: ReadonlySet<string> | undefined, isOpening: (surfaceType: string) => boolean): readonly OpeningHandle[]`
+### `function vtt.opening-handles.openingHandles(topologies: readonly ConstructionRegionTopology[], focus: ReadonlySet<string> | undefined, isOpening: (surfaceType: string) => boolean, runs?: OpeningRunPort): readonly OpeningHandle[]`
 
-The handles of every opening group among `topologies` that `focus` holds a piece of; none without a focus.
+The handles of every opening group among `topologies` that `focus` holds a
+piece of; none without a focus. With `runs`, they stand on the group's
+whole box along the run of walls it crosses, as the opening tool reads it.
 
 ### `type vtt.panel-height-widget.PanelHeightWidgetZone = "group" | "single"`
 

@@ -4,7 +4,7 @@ import type { GlobalHandleKind } from "../global-handles/index.ts";
 import { spineWidthHandles } from "../spine/spine-handles.ts";
 import { spineDefaultOffsets } from "../structure-types/index.ts";
 import { curveEdgesOf, curveHandles, curveMidframes } from "../topology/curve-handles.ts";
-import { openingHandles } from "../topology/opening-handles.ts";
+import { openingHandles, type OpeningRunPort } from "../topology/opening-handles.ts";
 import { panelHeightWidgets } from "../topology/panel-height-widget.ts";
 import { shownGlobalHandles } from "./global-handles/index.ts";
 
@@ -53,6 +53,8 @@ export interface SceneHandleInput {
   readonly contour: readonly ConstructionCurvedEdge[];
   /** Absent without the curve engine: then no curve has a handle. */
   readonly port?: Pick<BezierPort, "curveBatch">;
+  /** Places an opening's handles on its whole box along the walls it crosses; absent, on the part on its first wall. */
+  readonly runs?: OpeningRunPort;
   readonly cloudFor: (request: { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }) => { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
   /** A tool editing spines by their points: only spines' points and midpoints, never contours' or walls'. */
   readonly pointsOnly: boolean;
@@ -85,7 +87,7 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
   }
   // The focused opening's own: a corner resizes it in both, a side moves that side.
   if (input.owns && input.focus) {
-    for (const handle of openingHandles(input.topologies, input.focus.faces, input.owns)) handles.push({ id: handle.id, kind: handle.kind, position: handle.position });
+    for (const handle of openingHandles(input.topologies, input.focus.faces, input.owns, input.runs)) handles.push({ id: handle.id, kind: handle.kind, position: handle.position });
   }
   if (input.owns) {
     for (const handle of shownGlobalHandles({ graph: input.graph, topologies: input.topologies, cloudFor: input.cloudFor }, input.owns)) {

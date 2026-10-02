@@ -6306,7 +6306,7 @@ export interface SceneHandleInput {
   readonly contour: readonly ConstructionCurvedEdge[];
   /** Absent without the curve engine: then no curve has a handle. */
   readonly port?: Pick<BezierPort, "curveBatch">;
-  readonly cloudFor: (request: { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }) => { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
+  /** Places an opening's handles on its whole box along the walls it crosses; absent, on the part on its first wall. */
 export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
   const handles: SceneHandle[] = [];
   if (input.port) {
@@ -8173,10 +8173,12 @@ export const openingHandleId = (part: OpeningHandlePart, nodeId: string): string
 export function openingHandlePick(id: string): { readonly part: OpeningHandlePart; readonly nodeId: string } | undefined {
   if (!id.startsWith(PREFIX)) return undefined;
   const rest = id.slice(PREFIX.length);
+export type OpeningRunPort = Pick<ConstructionSessionPort, "panelRun" | "resolveOnHost">;
 export function openingHandles(
   topologies: readonly ConstructionRegionTopology[],
   focus: ReadonlySet<string> | undefined,
   isOpening: (surfaceType: string) => boolean,
+  runs?: OpeningRunPort,
   ): readonly OpeningHandle[] {
   if (!focus) return [];
   const groups = new Map<string, ConstructionRegionTopology[]>();

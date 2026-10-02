@@ -668,6 +668,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       topologies: this.#construction.getAllRegionTopologies(),
       contour: typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [],
       ...(typeof this.#construction.curveBatch === "function" ? { port: this.#construction } : {}),
+      ...(typeof this.#construction.panelRun === "function" && typeof this.#construction.resolveOnHost === "function" ? { runs: this.#construction } : {}),
       cloudFor: (request) => this.cloudFor(request),
       pointsOnly: this.#pointHandlesOnly,
       ...(this.#globalHandleOwners ? { owns: this.#globalHandleOwners } : {}),
