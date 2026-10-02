@@ -214,6 +214,9 @@ function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): T
         side: material.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
         map: texture,
         clippingPlanes: material.clippable === true && clipPlane ? [clipPlane] : null,
+        // The renderer skips an invisible material; the raycaster does not
+        // look at it, so the object is still picked.
+        visible: material.pickOnly !== true,
       });
     case "line":
       return new THREE.LineBasicMaterial({

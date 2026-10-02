@@ -2302,6 +2302,7 @@ export interface TaskDoneInput {
 export interface TaskCleanupInput {
   taskId: string;
   force?: boolean;
+  rejected?: boolean;
   }
 export interface TaskStatusInput {
   taskId: string;
@@ -2436,6 +2437,8 @@ export interface MergedBranchProof {
   number: number;
   headRefName: string;
   headRefOid: string;
+  state?: 'MERGED' | 'CLOSED';
+  mergedAt?: string | null;
   }
 export type RemoteBranchDeletionPlan =
 export function remoteBranchDeletionPlan(
