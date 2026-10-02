@@ -9,7 +9,7 @@ import {
   edgeOverlayChannel,
   edgeOverlayDescriptor,
   edgeOverlayOf,
-} from "../src/composition/tabletop/tools/core/edge-overlay.ts";
+} from "../src/composition/tabletop/topology-overlay/edge-overlay.ts";
 import { PATH_ROLES } from "../src/features/edit-construction/structure-types/path/path-structure.ts";
 import { pathCorridorId } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
 import { stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";

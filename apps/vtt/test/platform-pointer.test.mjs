@@ -13,7 +13,6 @@ const modules={
   "@/ports": 'export const TOOL_GHOST_PREVIEW_CHANNEL="ghost";',
   "../../adapters/rendering/index.ts": "export const VIEW_FOV_DEGREES=38;",
   "./tools/index.ts": "export const toolFor=()=>globalThis.__platformHook.tool;",
-  "./tools/core/edge-overlay.ts": "export const edgeOverlayOf=()=>[]; export const edgeOverlayChannel=(v)=>v; export const edgeOverlayDescriptor=(v)=>v;",
 };
 const hooks=registerHooks({resolve(spec,context,next){
   if(context.parentURL===hookUrl && modules[spec])return {url:"data:text/javascript,"+encodeURIComponent(modules[spec]),shortCircuit:true};

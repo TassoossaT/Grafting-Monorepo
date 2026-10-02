@@ -219,7 +219,9 @@ export interface RenderPreviewLabel {
 export type RenderPreviewDescriptor =
   | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
   | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
-  | { readonly kind: "mesh"; readonly positions: Float32Array; readonly indices: Uint16Array | Uint32Array; readonly color: number; readonly opacity?: number };
+  | { readonly kind: "mesh"; readonly positions: Float32Array; readonly indices: Uint16Array | Uint32Array; readonly color: number; readonly opacity?: number }
+  /** A dot at each `[x, y, z]`: never pickable, and hidden behind what stands in front of it. */
+  | { readonly kind: "points"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number };
 
 export interface SceneRenderMetrics {
   readonly rendererCreates: number;

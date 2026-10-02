@@ -1129,7 +1129,8 @@ test("road presentation exposes only spine anchors, insertion points and width h
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
-    assert.ok(shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
+    // A plain vertex is no handle: only the topology overlay draws it, so nothing comes back for it here.
+    assert.ok(!shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
     // The active tool edits sloped platforms: their whole-structure handles show.
     runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
@@ -1181,7 +1182,7 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
   } finally { session.free(); }
 });
 
-test("the graph overlay switches off and on without touching an edit handle: only the dots with no function go", async () => {
+test("the handle layer holds edit handles only: a plain vertex never gets a dot there, whatever the handle presentation", async () => {
   const { sessionFixture } = await import("./platform-session-fixture.mjs");
   const { curvePickId } = await import("../src/features/edit-construction/index.ts");
   const real = sessionFixture(), render = createFakeRenderPort(), construction = createFakeConstructionPort();
@@ -1204,13 +1205,10 @@ test("the graph overlay switches off and on without touching an edit handle: onl
   };
   try {
     await runtime.start();
+    assert.ok(!shown().has("mesh:vertex"), "no dot for a plain vertex");
     runtime.setConstructionHandlePresentation("spine-points");
     runtime.setConstructionHandlePresentation("all");
-    assert.ok(shown().has("mesh:vertex"), "the graph's dot on a plain vertex is drawn");
-    runtime.setGraphOverlay(false);
-    assert.ok(!shown().has("mesh:vertex"), "off: the dot is gone");
-    assert.ok(shown().has(curvePickId("spine-edge:a", "midpoint")), "an edit handle stays");
-    runtime.setGraphOverlay(true);
-    assert.ok(shown().has("mesh:vertex"), "on: it is back");
+    assert.ok(!shown().has("mesh:vertex"), "nor after the presentation went to points and back");
+    assert.ok(shown().has(curvePickId("spine-edge:a", "midpoint")), "and the edit handle stays");
   } finally { await runtime.dispose(); real.session.free(); }
 });

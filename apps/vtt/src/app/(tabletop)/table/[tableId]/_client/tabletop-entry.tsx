@@ -10,6 +10,7 @@ import {
   DEFAULT_STRUCTURE_EDIT_PARAMS,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
+  useTopologyOverlay,
   withOpeningKind,
   type ConstructionToolFeedback,
   type ConstructionToolId,
@@ -120,7 +121,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setRulerSettings(next);
     try { window.localStorage.setItem(rulerKey, JSON.stringify(serializeRulerSettings(next))); } catch { /* the choice lasts this session only */ }
   }, [rulerKey]);
-  // The dots drawn on the graph's nodes are a debug view with no function: shown or hidden, no tool changes. Kept per table, on by default as it has always been.
+  // The dots on the graph's vertices are a debug view with no function: shown or hidden, no tool changes. Kept per table, on by default as it has always been.
   const [graphOverlay, setGraphOverlay] = useState(true);
   const graphOverlayKey = `grafting:table:${tableId}:graph-overlay`;
   useEffect(() => {
@@ -130,7 +131,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setGraphOverlay(visible);
     try { window.localStorage.setItem(graphOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
   }, [graphOverlayKey]);
-  useEffect(() => { runtime.setGraphOverlay?.(graphOverlay); }, [runtime, graphOverlay]);
   // The lines drawn along the edges, by role, are the other half of the same topology view: shown or hidden, no tool changes. Kept per table, on by default.
   const [edgeOverlay, setEdgeOverlay] = useState(true);
   const edgeOverlayKey = `grafting:table:${tableId}:edge-overlay`;
@@ -141,6 +141,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setEdgeOverlay(visible);
     try { window.localStorage.setItem(edgeOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
   }, [edgeOverlayKey]);
+  // Both are drawn by the topology overlay alone: no tool shows, hides or picks them.
+  useTopologyOverlay(runtime, { vertices: graphOverlay, edges: edgeOverlay });
   // The developer panel's numbers: frames, what the map is made of, what the last commits cost.
   const debugStats = useDebugStats(runtime, true);
   // The height cut is a view of the table, not a setting kept with it: it starts off every visit, so a table never opens with part of its map hidden.
@@ -249,7 +251,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     rulerSettings,
     onRulerReadout: setRulerReadout,
     structureEditParams,
-    edgeOverlay,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
     onToolParamsUpdate: handleToolParamsUpdate,

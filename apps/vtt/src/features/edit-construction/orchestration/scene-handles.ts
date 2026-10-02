@@ -12,8 +12,7 @@ import { shownGlobalHandles } from "./global-handles/index.ts";
  * Every edit handle the scene shows, in one list: what each one is for --
  * its kind, which is also what its look is chosen by -- and where it stands.
  * The one place that says which handles exist; whatever shows them only
- * draws this list. (The graph's own node dots are its debug view, not edit
- * handles, and are not here.)
+ * draws this list.
  *
  * - anchor: a spine's control point;
  * - midpoint: a span's midpoint -- bend it, or double-click to insert a point;

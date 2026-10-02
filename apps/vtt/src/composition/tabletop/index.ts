@@ -1,6 +1,7 @@
 export { createTabletopRuntime } from "./create-tabletop-runtime.ts";
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
 export { useDebugStats, type DebugStats } from "./use-debug-stats.ts";
+export { useTopologyOverlay, type TopologyOverlayOptions } from "./topology-overlay/use-topology-overlay.ts";
 export type {
   ConfirmedTokenDeltaEnvelope,
   TabletopRuntime,

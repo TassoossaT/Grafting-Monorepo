@@ -3398,7 +3398,8 @@ export interface ConstructionPreviewVisualParams {
   readonly indices?: Uint16Array | Uint32Array;
   readonly color: number;
   readonly opacity: number;
-  readonly filled: boolean;
+  /** Faces filled, lines along the segments, or a dot at each position. */
+  readonly shape: "faces" | "lines" | "points";
   }
 export function constructionPreviewSceneItem(
   descriptor: RenderPreviewDescriptor,
@@ -3541,6 +3542,7 @@ export interface NodeHandlePickData {
 export function nodeHandleSceneItemId(nodeId: string): string {
   return `construction-node-handle:${nodeId}`;
   }
+export const HANDLE_SCALE = 0.32;
 export interface NodeHandleVisualParams {
   readonly glyph: RenderHandleGlyph;
   }
@@ -3837,14 +3839,14 @@ export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopolog
   return { surfaceType, before: removed, after: [], removedNodeIds, declaredPositions: [] };
 
 // src/composition/tabletop/handle-glyphs.ts
-export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>> = {
-  /** A point of a structure's own outline -- the graph's own node dots. */
-  vertex: "point",
+export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>> = {
   /** A control point of a spine. */
   anchor: "point",
   /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
   /** On the edge of a span's band: push it out or in. */
+  width: "side",
+  /** A wall run's own height widget. */
 export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
   radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
@@ -4399,36 +4401,6 @@ export function beginCurveGesture(
   ): CurveGesture | undefined {
   const ownsType = typeof ownsTypeOrParams === "function" ? ownsTypeOrParams : () => true;
   const actualParams = typeof ownsTypeOrParams === "function" ? params : ownsTypeOrParams;
-
-// src/composition/tabletop/tools/core/edge-overlay.ts
-export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
-  "path-spine-edge": 0xfacc15,
-  "path-contour-edge": 0x22d3ee,
-  "path-rib-edge": 0xf472b6,
-  "panel-bottom-edge": 0x34d399,
-  "panel-top-edge": 0x818cf8,
-  "panel-post": 0xfb923c,
-  "organic-boundary-edge": 0x94a3b8,
-export const RIM_ROLES: ReadonlySet<string> = new Set([
-export const INTERIOR_EDGE_ROLE = "interior-edge";
-export const EDGE_FALLBACK_COLOR = 0x64748b;
-export function edgeOverlayChannel(role: string): string {
-  return `edges:${role}`;
-  }
-export interface EdgeOverlayGroup {
-  readonly role: string;
-  readonly color: number;
-  readonly positions: Float32Array;
-  }
-export function edgeOverlayOf(
-  port: ContourPort,
-  topologies: readonly ConstructionRegionTopology[],
-  graphSnapshot?: ConstructionGraphSnapshot,
-  curves?: import("../../../../ports/bezier-port.ts").BezierPort,
-  ): readonly EdgeOverlayGroup[] {
-  const byRole = new Map<string, number[]>();
-export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
-  return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
 // src/composition/tabletop/tools/core/face-props.ts
 export interface FacePropsRuntime {
@@ -5540,6 +5512,56 @@ export function wallSpans(ctx: ToolContext): readonly WallSpan[] {
   .getAllRegionTopologies()
   .map(spanOf)
   .filter((span): span is WallSpan => span !== undefined);
+
+// src/composition/tabletop/topology-overlay/edge-overlay.ts
+export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
+  "path-spine-edge": 0xfacc15,
+  "path-contour-edge": 0x22d3ee,
+  "path-rib-edge": 0xf472b6,
+  "panel-bottom-edge": 0x34d399,
+  "panel-top-edge": 0x818cf8,
+  "panel-post": 0xfb923c,
+  "organic-boundary-edge": 0x94a3b8,
+export const RIM_ROLES: ReadonlySet<string> = new Set([
+export const INTERIOR_EDGE_ROLE = "interior-edge";
+export const EDGE_FALLBACK_COLOR = 0x64748b;
+export function edgeOverlayChannel(role: string): string {
+  return `edges:${role}`;
+  }
+export interface EdgeOverlayGroup {
+  readonly role: string;
+  readonly color: number;
+  readonly positions: Float32Array;
+  }
+export function edgeOverlayOf(
+  port: ContourPort,
+  topologies: readonly ConstructionRegionTopology[],
+  graphSnapshot?: ConstructionGraphSnapshot,
+  curves?: BezierPort,
+  ): readonly EdgeOverlayGroup[] {
+  const byRole = new Map<string, number[]>();
+export function edgeOverlayDescriptor(group: EdgeOverlayGroup): RenderPreviewDescriptor {
+  return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
+
+// src/composition/tabletop/topology-overlay/use-topology-overlay.ts
+export interface TopologyOverlayOptions {
+  /** A dot on every vertex. */
+  readonly vertices: boolean;
+  /** Every edge, coloured by its role. */
+  readonly edges: boolean;
+  }
+export function useTopologyOverlay(runtime: TabletopRuntime, options: TopologyOverlayOptions): void {
+  const { vertices, edges } = options;
+  useEffect(() => {
+  if (!vertices && !edges) return;
+  let shown = new Set<string>();
+
+// src/composition/tabletop/topology-overlay/vertex-overlay.ts
+export const VERTEX_OVERLAY_CHANNEL = "topology:vertices";
+export function vertexOverlayOf(graph: Pick<ConstructionGraphSnapshot, "nodes">): Float32Array {
+  const positions = new Float32Array(graph.nodes.length * 3);
+export function vertexOverlayDescriptor(positions: Float32Array): RenderPreviewDescriptor {
+  return { kind: "points", positions, color: VERTEX_OVERLAY_COLOR, opacity: 1 };
 
 // src/composition/tabletop/use-construction-pointer.ts
 export interface RulerReadout {

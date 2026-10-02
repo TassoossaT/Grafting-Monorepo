@@ -60,6 +60,7 @@ import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
 import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture, createRulerLabelTexture } from "./marker-textures.ts";
 import { RULER_LABEL_VISUAL_KIND, rulerLabelSceneItem, rulerLabelSceneItemId, type RulerLabelVisualParams } from "./ruler-label-scene-item.ts";
 import {
+  HANDLE_SCALE,
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
   nodeHandleSceneItem,
@@ -108,6 +109,14 @@ const MAP_LIGHTS: readonly LightDescriptor[] = [
 
 /** Two triangles over a preview's 4 corner points -- the only topology a `"quad"` preview ever needs. */
 const PREVIEW_QUAD_INDICES = Uint32Array.from([0, 1, 2, 0, 2, 3]);
+
+/**
+ * A `"points"` preview's dot size, in world units. A point is scaled by the
+ * screen's half height where a sprite is scaled by the view's half height in
+ * world units, so a point handle's size over the tangent of half the field of
+ * view draws the same dot on screen.
+ */
+const PREVIEW_POINT_SIZE = HANDLE_SCALE / Math.tan((VIEW_FOV_DEGREES * Math.PI) / 360);
 
 function engineOrigin(origin: ChangeOrigin): EngineChangeOrigin {
   switch (origin) {
@@ -252,9 +261,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     });
     registry.register<ConstructionPreviewVisualParams>({
       kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
-      describe: (params) =>
-        params.filled
-          ? {
+      describe: (params) => {
+        switch (params.shape) {
+          case "faces":
+            return {
               geometry: { shape: "mesh", data: { positions: params.positions, indices: params.indices ?? PREVIEW_QUAD_INDICES } },
               material: {
                 surface: "unlit",
@@ -265,8 +275,9 @@ export class Render3dSceneAdapter implements SceneRenderPort {
                 depthWrite: false,
               },
               pickable: false,
-            }
-          : {
+            };
+          case "lines":
+            return {
               geometry: { shape: "segments", positions: params.positions },
               material: {
                 surface: "line",
@@ -276,13 +287,31 @@ export class Render3dSceneAdapter implements SceneRenderPort {
                 depthWrite: false,
               },
               pickable: false,
-            },
+            };
+          case "points":
+            // The node handle's own round dot, but drawn by the hundreds in one
+            // object, and hidden behind what stands in front of it as a handle is.
+            return {
+              geometry: { shape: "segments", positions: params.positions },
+              material: {
+                surface: "points",
+                color: params.color,
+                opacity: params.opacity,
+                size: PREVIEW_POINT_SIZE,
+                sizeAttenuation: true,
+                texture: handleTexture,
+                depthWrite: false,
+              },
+              pickable: false,
+            };
+        }
+      },
       equals: (left, right) =>
         left.positions === right.positions &&
         left.indices === right.indices &&
         left.color === right.color &&
         left.opacity === right.opacity &&
-        left.filled === right.filled,
+        left.shape === right.shape,
     });
 
     const engine = createEngine({ registry, autoplay: true, lights: MAP_LIGHTS });

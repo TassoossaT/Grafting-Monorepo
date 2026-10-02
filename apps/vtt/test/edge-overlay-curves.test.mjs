@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { enginePort } from "./engine-planar.mjs";
 
-import { edgeOverlayOf } from "../src/composition/tabletop/tools/core/edge-overlay.ts";
+import { edgeOverlayOf } from "../src/composition/tabletop/topology-overlay/edge-overlay.ts";
 import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { sessionFixture } from "./platform-session-fixture.mjs";
 

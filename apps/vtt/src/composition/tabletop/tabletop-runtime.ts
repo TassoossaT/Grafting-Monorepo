@@ -239,8 +239,6 @@ export interface TabletopRuntime extends BezierPort {
   setGlobalHandleOwners?(owns: ((surfaceType: string) => boolean) | undefined): void;
   /** Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one. */
   setHandleFocus?(focus: HandleFocus | undefined): void;
-  /** Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them. */
-  setGraphOverlay?(visible: boolean): void;
   /**
    * Hides everything of the map above `height`, picking included, so what is
    * inside a roofed or upper-floored structure can be seen and edited; `undefined` shows it all. A view of the table, not an edit: nothing here reaches the graph or the history.
@@ -345,8 +343,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #surfacePickRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
   readonly #nodeHandleRevisions = new Map<string, number>();
-  /** Whether the graph's own dots are drawn; the edit handles are drawn either way. */
-  #graphOverlay = true;
   /** The height the map is cut at, if it is: kept here so a cut asked for before the renderer starts is not lost. */
   #heightCut: number | undefined;
   /** Monotonic across hide/show cycles so renderer revision guards accept restored controls. */
@@ -633,7 +629,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#syncSurfaceChunks(meshes, staleRefs, origin, causeId, generation);
   }
 
-  /** Uploads one node's pickable handle at its current position, mirroring `#syncSurfaceChunks`'s revision-guard bookkeeping but per-node rather than per-chunk. */
+  /**
+   * Uploads one edit handle, pickable, at its current position, mirroring
+   * `#syncSurfaceChunks`'s revision-guard bookkeeping but per handle. Only
+   * edit handles live on this layer: the graph's vertices are drawn, for
+   * debugging only, by the topology overlay, which nothing here knows of.
+   */
   #uploadNodeHandle(
     nodeId: ConstructionNodeId,
     position: ConstructionPosition,
@@ -641,11 +642,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     generation: number,
     glyph?: RenderHandleGlyph,
-    /** A dot of the graph's own, which hides with the overlay -- as against an edit handle, which stays. */
-    dot = false,
   ): void {
     if (this.#pointHandlesOnly && !this.#pointHandleIds.has(nodeId)) return;
-    if (dot && !this.#graphOverlay && !this.#sceneHandleIds.has(nodeId)) return;
     const revision = ++this.#handleRevision;
     this.#nodeHandleRevisions.set(nodeId, revision);
     this.#render.applyConfirmed({
@@ -764,7 +762,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position: node.position,
         revision: (previous?.revision ?? 0) + 1,
       });
-      this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation, HANDLE_GLYPHS.vertex, true);
     }
     this.#syncSceneHandles(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
@@ -795,7 +792,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position,
         revision: (previous?.revision ?? 0) + 1,
       });
-      this.#uploadNodeHandle(nodeId, position, origin, causeId, generation, HANDLE_GLYPHS.vertex, true);
     }
     // Curve handles sit off the anchors and follow a reshaped edge too, so
     // they are re-placed whatever the edit moved or retyped. Height widgets
@@ -1283,19 +1279,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#uploadNodeHandle(nodeId, position, "local", "handle-preview", this.#generation, this.#sceneHandleGlyphs.get(nodeId));
   }
 
-  setGraphOverlay(visible: boolean): void {
-    if (this.#graphOverlay === visible) return;
-    this.#graphOverlay = visible;
-    if (this.#snapshot.status !== "ready") return;
-    if (visible) {
-      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id, node.position, "programmatic", "graph-overlay", this.#generation, HANDLE_GLYPHS.vertex, true);
-    } else {
-      // Every dot that is not an edit handle goes.
-      for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#sceneHandleIds.has(id)) this.#removeNodeHandle(id, "programmatic", "graph-overlay", this.#generation);
-    }
-    this.#syncSceneHandles("programmatic", "graph-overlay", this.#generation);
-  }
-
   setHeightCut(height: number | undefined): void {
     if (this.#heightCut === height) return;
     this.#heightCut = height;
@@ -1308,9 +1291,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     if (this.#pointHandlesOnly === points) return;
     this.#pointHandlesOnly = points;
     if (this.#snapshot.status !== "ready") return;
-    if (!points) {
-      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id,node.position,"programmatic","handle-presentation",this.#generation,HANDLE_GLYPHS.vertex, true);
-    }
     this.#syncSceneHandles("programmatic","handle-presentation",this.#generation);
   }
 

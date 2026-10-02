@@ -1,5 +1,4 @@
-import type { PreviewDescriptor } from "@/features/edit-construction";
-import type { ConstructionEdgeGeometry, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { BezierPort, ConstructionEdgeGeometry, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology, RenderPreviewDescriptor } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time.
@@ -9,17 +8,16 @@ import {
   resolvePolicy,
   resolveCurves,
   spineGraphFromSnapshot,
-} from "../../../../features/edit-construction/index.ts";
-import type { ContourPort } from "../../../../features/edit-construction/index.ts";
+} from "../../../features/edit-construction/index.ts";
+import type { ContourPort } from "../../../features/edit-construction/index.ts";
 
 /**
  * Every construction edge on the table, grouped by the role its own structure
- * type gives it.
+ * type gives it -- a debug view of the topology, and nothing else reads it.
  *
- * Node handles are drawn and edges are not, which leaves the one thing every
- * structure is actually made of invisible: you can see where the vertices are
- * but not how they were joined. A wall's post and its bottom run look the
- * same when only their endpoints show, and so do a path's spine and its rib.
+ * Without it the one thing every structure is actually made of is invisible:
+ * you see the faces but not how their vertices were joined. A wall's post and
+ * its bottom run look the same, and so do a path's spine and its rib.
  *
  * **The role comes from the type, the colour comes from here.** What an edge
  * *is* belongs to `structure-types/` -- it is the same table an edit rule
@@ -116,7 +114,7 @@ export function edgeOverlayOf(
   port: ContourPort,
   topologies: readonly ConstructionRegionTopology[],
   graphSnapshot?: ConstructionGraphSnapshot,
-  curves?: import("../../../../ports/bezier-port.ts").BezierPort,
+  curves?: BezierPort,
 ): readonly EdgeOverlayGroup[] {
   const byRole = new Map<string, number[]>();
   const drawn = new Set<string>();
@@ -181,6 +179,6 @@ export function edgeOverlayOf(
 }
 
 /** One group as the descriptor that draws it. */
-export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
+export function edgeOverlayDescriptor(group: EdgeOverlayGroup): RenderPreviewDescriptor {
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 }

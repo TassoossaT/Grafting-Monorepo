@@ -76,7 +76,7 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample, ownsType: Struct
     return topology === undefined ? undefined : { seedKey: topology.surfaceKey, target };
   }
 
-  // The vertex under the pointer: the one a picked dot named, else the node geometry finds -- it grabs the same with the dots off.
+  // The vertex under the pointer: the one a picked handle named, else the node the geometry finds.
   const vertexId = sample.nodeId ?? sample.node?.id;
   if (vertexId !== undefined) {
     const target: EditTarget = { kind: "vertex", nodeId: vertexId };

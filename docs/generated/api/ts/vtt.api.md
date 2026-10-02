@@ -109,13 +109,15 @@ already exists.
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.color: number`
 
-### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.filled: boolean`
-
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.indices?: Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike>`
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.opacity: number`
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.positions: Float32Array`
+
+### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.shape: "points" | "faces" | "lines"`
+
+Faces filled, lines along the segments, or a dot at each position.
 
 ### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_LAYER_ID: "construction-preview"`
 
@@ -315,6 +317,10 @@ Opaque per-item data a pick result echoes back, letting the adapter recover whic
 ### `interface vtt.node-handle-scene-item.NodeHandleVisualParams`
 
 ### `property vtt.node-handle-scene-item.NodeHandleVisualParams.glyph: RenderHandleGlyph`
+
+### `variable vtt.node-handle-scene-item.HANDLE_SCALE: 0.32`
+
+Large enough to stay a comfortable pointer/touch target at typical table-view camera distances, small enough not to obscure the geometry it marks.
 
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_LAYER_ID: "construction-handles"`
 
@@ -848,7 +854,7 @@ The faces behind `keys` that still exist. A stale key is skipped, not fatal.
 
 What each whole-structure handle reports once its edit is committed -- said here, with how it looks.
 
-### `variable vtt.handle-glyphs.HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>>`
+### `variable vtt.handle-glyphs.HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>>`
 
 Every handle the scene shows, by what it is for, and the glyph it is drawn
 with -- the one place a handle's look is chosen. Which handles exist is
@@ -1065,10 +1071,6 @@ Local editing presentation; never changes the graph or persistence.
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.setGraphOverlay(visible: boolean): void`
-
-Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them.
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
 
 Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
@@ -1271,10 +1273,6 @@ Local editing presentation; never changes the graph or persistence.
 
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.setGraphOverlay(visible: boolean): void`
-
-Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
 
@@ -2570,63 +2568,6 @@ Screen coordinate used by explicit elevation gestures.
 
 Starts a curve gesture on the handle `sample` landed on, when the curve belongs to a type `ownsType` accepts.
 
-### `interface vtt.edge-overlay.EdgeOverlayGroup`
-
-One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
-
-### `property vtt.edge-overlay.EdgeOverlayGroup.color: number`
-
-### `property vtt.edge-overlay.EdgeOverlayGroup.positions: Float32Array`
-
-### `property vtt.edge-overlay.EdgeOverlayGroup.role: string`
-
-### `variable vtt.edge-overlay.EDGE_FALLBACK_COLOR: 6583435`
-
-Drawn for an edge whose role no palette entry names.
-
-### `variable vtt.edge-overlay.EDGE_ROLE_COLORS: Readonly<Record<string, number>>`
-
-A palette keyed by role, with a fallback for a role nothing has named yet.
-
-### `variable vtt.edge-overlay.INTERIOR_EDGE_ROLE: "interior-edge"`
-
-What a rim role becomes once the graph shows a face on both sides.
-
-### `variable vtt.edge-overlay.RIM_ROLES: ReadonlySet<string>`
-
-Roles that claim an edge is on the outside of something, and so are only
-true while it has a face on one side.
-
-A type names the role; whether the graph still bears it out is not the
-type's business, because a type sees one face at a time and this is a
-question about a pair. Left unchecked it produces the one drawing error
-that matters here -- a rim line running through the middle of a road, kept
-by nothing but the addresses its nodes were minted with, long after a
-junction turned it into an interior seam.
-
-Any type may add to this. It is a capability, not a rule about paths.
-
-### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
-
-The preview channel one role's edges are drawn on.
-
-### `function vtt.edge-overlay.edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor`
-
-One group as the descriptor that draws it.
-
-### `function vtt.edge-overlay.edgeOverlayOf(port: ContourPort, topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot, curves?: BezierPort): readonly EdgeOverlayGroup[]`
-
-Groups every edge of every region in `topologies` by role.
-
-An edge shared by two faces is drawn once: it is one edge, and drawing it
-twice would only make a shared boundary look heavier than a free one, which
-is the opposite of the truth worth seeing.
-
-Sharing also settles the role. A type that named an edge as some kind of
-rim named it from one face, and one face cannot see the other; if the graph
-shows two, the edge is interior whatever it was called -- see
-RIM_ROLES.
-
 ### `interface vtt.face-props.FacePropsRuntime`
 
 What keeping a regenerated structure's properties and pins needs of the runtime.
@@ -2744,7 +2685,7 @@ How near the pointer's ray must pass to a node, on the screen, for the node to b
 
 ### `function vtt.node-identity.graphNodeOf(sample: Pick<PointerSample, "node" | "nodeId">): string | undefined`
 
-The graph node `sample` is on: the one geometry finds, else the one a picked dot named.
+The graph node `sample` is on: the one geometry finds, else the one a picked handle named.
 
 ### `function vtt.node-identity.nodeByGeometry(hit: Pick<PointerSample, "point" | "ray">, nodes: readonly NodeAt[], metersPerPixel: number | undefined): NodeAt | undefined`
 
@@ -4973,6 +4914,95 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 ### `function vtt.wall-spans.wallSpans(ctx: ToolContext): readonly WallSpan[]`
 
+### `interface vtt.edge-overlay.EdgeOverlayGroup`
+
+One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.color: number`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.positions: Float32Array`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.role: string`
+
+### `variable vtt.edge-overlay.EDGE_FALLBACK_COLOR: 6583435`
+
+Drawn for an edge whose role no palette entry names.
+
+### `variable vtt.edge-overlay.EDGE_ROLE_COLORS: Readonly<Record<string, number>>`
+
+A palette keyed by role, with a fallback for a role nothing has named yet.
+
+### `variable vtt.edge-overlay.INTERIOR_EDGE_ROLE: "interior-edge"`
+
+What a rim role becomes once the graph shows a face on both sides.
+
+### `variable vtt.edge-overlay.RIM_ROLES: ReadonlySet<string>`
+
+Roles that claim an edge is on the outside of something, and so are only
+true while it has a face on one side.
+
+A type names the role; whether the graph still bears it out is not the
+type's business, because a type sees one face at a time and this is a
+question about a pair. Left unchecked it produces the one drawing error
+that matters here -- a rim line running through the middle of a road, kept
+by nothing but the addresses its nodes were minted with, long after a
+junction turned it into an interior seam.
+
+Any type may add to this. It is a capability, not a rule about paths.
+
+### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
+
+The preview channel one role's edges are drawn on.
+
+### `function vtt.edge-overlay.edgeOverlayDescriptor(group: EdgeOverlayGroup): RenderPreviewDescriptor`
+
+One group as the descriptor that draws it.
+
+### `function vtt.edge-overlay.edgeOverlayOf(port: ContourPort, topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot, curves?: BezierPort): readonly EdgeOverlayGroup[]`
+
+Groups every edge of every region in `topologies` by role.
+
+An edge shared by two faces is drawn once: it is one edge, and drawing it
+twice would only make a shared boundary look heavier than a free one, which
+is the opposite of the truth worth seeing.
+
+Sharing also settles the role. A type that named an edge as some kind of
+rim named it from one face, and one face cannot see the other; if the graph
+shows two, the edge is interior whatever it was called -- see
+RIM_ROLES.
+
+### `interface vtt.use-topology-overlay.TopologyOverlayOptions`
+
+Which parts of the topology are drawn.
+
+### `property vtt.use-topology-overlay.TopologyOverlayOptions.edges: boolean`
+
+Every edge, coloured by its role.
+
+### `property vtt.use-topology-overlay.TopologyOverlayOptions.vertices: boolean`
+
+A dot on every vertex.
+
+### `function vtt.use-topology-overlay.useTopologyOverlay(runtime: TabletopRuntime, options: TopologyOverlayOptions): void`
+
+Draws the topology over the map for the debug panel: the vertices and the
+edges of whatever stands, redrawn once a frame at most after the map
+changes. It is the only thing that draws them. No tool, handle mode or
+gesture reaches it, so what a tool shows or hides never changes it, and it
+never changes what a tool can pick.
+
+### `variable vtt.vertex-overlay.VERTEX_OVERLAY_CHANNEL: "topology:vertices"`
+
+The preview channel the vertex dots are drawn on.
+
+### `function vtt.vertex-overlay.vertexOverlayDescriptor(positions: Float32Array): RenderPreviewDescriptor`
+
+The dots as the descriptor that draws them.
+
+### `function vtt.vertex-overlay.vertexOverlayOf(graph: Pick<ConstructionGraphSnapshot, "nodes">): Float32Array`
+
+Every vertex's position, as a flat `[x, y, z, x, y, z, ...]` list.
+
 ### `interface vtt.use-construction-pointer.ConstructionPointerHandlers`
 
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onClick: (event: MouseEvent<HTMLDivElement>) => void`
@@ -4998,10 +5028,6 @@ The ruler's words for the point under the pointer, with where the pointer is on 
 ### `interface vtt.use-construction-pointer.UseConstructionPointerOptions`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.activeTool: ConstructionToolId`
-
-### `property vtt.use-construction-pointer.UseConstructionPointerOptions.edgeOverlay?: boolean`
-
-Whether the table's edges are drawn, role by role: a view for reading the topology, which changes no tool. Drawn when absent.
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.history: EditHistoryStack`
 
@@ -6554,8 +6580,7 @@ Absent without the curve engine: then no curve has a handle.
 Every edit handle the scene shows, in one list: what each one is for --
 its kind, which is also what its look is chosen by -- and where it stands.
 The one place that says which handles exist; whatever shows them only
-draws this list. (The graph's own node dots are its debug view, not edit
-handles, and are not here.)
+draws this list.
 
 - anchor: a spine's control point;
 - midpoint: a span's midpoint -- bend it, or double-click to insert a point;
@@ -9756,7 +9781,7 @@ as its own.
 
 ### `property vtt.tool-types.StructureEditParams.curveWidth?: number`
 
-### `property vtt.tool-types.StructureEditParams.mode: "elevation" | "shape"`
+### `property vtt.tool-types.StructureEditParams.mode: "shape" | "elevation"`
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 
@@ -9816,7 +9841,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { action: "hole" | "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "points" | "arc" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
 A curved ramp, drawn in one of the shared spine creation modes. `rise` is
 its climb when the end is not on a floor; it climbs at one constant grade.
@@ -9919,7 +9944,7 @@ and differs only in the cross-section it seeds and a couple of declared
 behaviours. Adding one is adding a preset -- never a second set of type
 logic to keep in step with the first.
 
-### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
+### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array } | { color: number; kind: "points"; opacity?: number; positions: Float32Array }`
 
 A tool's not-yet-committed ghost, expressed as plain geometry -- no
 renderer type crosses this boundary (`adapters/rendering` is the only
@@ -12471,7 +12496,7 @@ handle can take any glyph.
 
 ### `type vtt.scene-render-port.RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks"`
 
-### `type vtt.scene-render-port.RenderPreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
+### `type vtt.scene-render-port.RenderPreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array } | { color: number; kind: "points"; opacity?: number; positions: Float32Array }`
 
 ### `type vtt.scene-render-port.RenderViewId = string`
 
