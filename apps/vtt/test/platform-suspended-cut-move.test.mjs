@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { sessionFixture } from "./platform-session-fixture.mjs";
 import { commitPlatformContour, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
-import { shownGlobalHandles } from "../src/features/edit-construction/index.ts";
+import { groundSurfaceOf, insideFace, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 
 function bowl(runtime, session, heightAt) {
   runtime.getSnapshot = () => ({
@@ -221,7 +221,13 @@ test("automatic collinear vertex simplification on platform move", async () => {
   }
 });
 
-test("platform half in hill, moved slightly (overlapping): suspended terrain is untouched", async () => {
+// The ground it stood clear of is uncovered by the move, and lies inside the
+// stroke the repair lays fresh round where it stood -- a stroke wide enough
+// that its rim falls on ground no earlier repair touched, which is what keeps
+// repeated edits from piling faces up. So that ground may come back as a new
+// mesh; what it may not do is move: it stays covered, at the height it had,
+// never drawn up to the floor it stood clear of.
+test("platform half in hill, moved slightly (overlapping): the ground it stood clear of stays where it was", async () => {
   const hill = (x, z) => Math.max(0, 8 - 0.35 * ((x - 6) ** 2 + z * z));
   const { runtime: r, ctx, session } = setup(hill);
   try {
@@ -240,6 +246,9 @@ test("platform half in hill, moved slightly (overlapping): suspended terrain is 
     };
     const suspendedTerrainBefore = new Set(terrainBefore.filter(underSuspended).map(keyOf));
     assert.ok(suspendedTerrainBefore.size > 0, "some ground stands wholly under the suspended part to begin with");
+    const window = [];
+    for (let x = -1.2; x <= 0.6; x += 0.3) for (let z = -2.2; z <= 2.2; z += 0.4) window.push({ x, z });
+    const heightBefore = groundSurfaceOf(terrainBefore, new Set());
 
     // Now move the platform slightly by +2 in X (still overlapping the hill and old location)
     const handle = shownGlobalHandles({
@@ -257,12 +266,12 @@ test("platform half in hill, moved slightly (overlapping): suspended terrain is 
     platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
 
     const terrainAfter = terrain(r);
-    const suspendedTerrainAfter = new Set(terrainAfter.filter(underSuspended).map(keyOf));
-
-    const touchedUnderSuspended = [...suspendedTerrainAfter].filter((k) => !suspendedTerrainBefore.has(k));
-    const removedUnderSuspended = [...suspendedTerrainBefore].filter((k) => !suspendedTerrainAfter.has(k));
-    assert.equal(touchedUnderSuspended.length, 0, "No new faces created under suspended part");
-    assert.equal(removedUnderSuspended.length, 0, "No faces removed under suspended part");
+    const heightAfter = groundSurfaceOf(terrainAfter, new Set());
+    for (const point of window) {
+      assert.ok(terrainAfter.some((t) => insideFace(t, point)), `ground still covers ${point.x.toFixed(1)},${point.z.toFixed(1)}`);
+      const was = heightBefore(point), now = heightAfter(point);
+      assert.ok(was !== undefined && now !== undefined && Math.abs(now - was) < 0.25, `and lies where it lay at ${point.x.toFixed(1)},${point.z.toFixed(1)}: ${was} -> ${now}`);
+    }
   } finally {
     session.free();
   }

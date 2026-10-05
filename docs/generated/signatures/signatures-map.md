@@ -3964,15 +3964,15 @@ export interface StructureMeeting {
   readonly seeds: readonly { readonly seed: readonly string[]; readonly surfaceType: string }[];
   /** Whether a node is a structure's -- never a height the ground should take. */
   holds(nodeId: ConstructionNodeId): boolean;
-  /** The structures' outlines as constraint rings, numbered from `startingIndex`. */
+  /**
 export const NO_STRUCTURES: StructureMeeting = Object.freeze({
   area: [],
   seeds: [],
   holds: () => false,
   constraints: () => ({ rings: [], sources: [] }),
   liesOnSide: () => false,
+  standsUnder: () => false,
   heightAt: () => undefined,
-  });
 export function meetStructures(
   runtime: TerrainCutRuntime,
   bounds: ConstructionTopologyBoundsQuery,

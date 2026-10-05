@@ -59,6 +59,16 @@ const groundHolding = (runtime, face) => {
   const ids = new Set(face.nodes.map((n) => n.id));
   return terrain(runtime).filter((t) => t.nodes.some((n) => ids.has(n.id)));
 };
+/**
+ * The corners of `face` the ground meets: a ground node standing exactly
+ * there, at the corner's height. A floor's outline is sealed -- the ground
+ * meets its sides without splitting them or taking its nodes -- so this, not a
+ * shared node, is what "the ground comes up to it" means.
+ */
+const cornersMet = (runtime, face) => {
+  const ground = terrain(runtime).flatMap((t) => t.nodes.map((n) => n.position));
+  return face.nodes.filter((corner) => ground.some((p) => Math.hypot(p.x - corner.position.x, p.y - corner.position.y, p.z - corner.position.z) < 1e-3));
+};
 /** Whether some ground face stands with its middle inside the box, in plan. */
 const groundUnder = (runtime, [x0, z0, x1, z1]) => terrain(runtime).some((t) => {
   const x = t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length, z = t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length;
@@ -73,6 +83,7 @@ test("a floor built high over the ground leaves the ground exactly as it was", q
     assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
     assert.deepEqual(terrain(runtime).map((t) => t.surfaceKey.join("|")).sort(), before, "not one ground face touched");
     assert.equal(groundHolding(runtime, of(runtime, "platform")).length, 0);
+    assert.equal(cornersMet(runtime, of(runtime, "platform")).length, 0);
   } finally { session.free(); }
 }));
 
@@ -83,9 +94,9 @@ test("a floor on the bowl's side cuts the ground only where the ground rises thr
     floorAt(ctx, [-2.3, -1.3, 9.3, 1.3], 3);
     assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
     const floor = of(runtime, "platform");
-    const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
-    const joined = floor.nodes.filter((n) => held.has(n.id));
-    assert.ok(joined.length >= 2, "the ground is joined to it where it runs into it");
+    assert.equal(floor.nodes.length, 4, "its four corners: the ground meets its sides without splitting them");
+    const joined = cornersMet(runtime, floor);
+    assert.ok(joined.length >= 2, "the ground comes up to it where it runs into it");
     assert.ok(joined.every((n) => n.position.x > 8), `and only there: ${JSON.stringify(joined.map((n) => n.position))}`);
     assert.ok(groundUnder(runtime, [-2.3, -1.3, 7, 1.3]), "the ground still stands under the part clear of it, however near it comes");
     assert.ok(!groundUnder(runtime, [8.9, -1.1, 9.3, 1.1]), "and none where it rises through it");
@@ -96,7 +107,7 @@ test("a floor on the ground lifted off it by its height handle lets the ground h
   const { runtime, ctx, calls, session } = setup();
   try {
     floorAt(ctx, [-3, -2, 2, 3], 0.3);
-    assert.ok(groundHolding(runtime, of(runtime, "platform")).length > 0, "cut into the ground to begin with");
+    assert.ok(cornersMet(runtime, of(runtime, "platform")).length > 0, "cut into the ground to begin with");
     assert.ok(!groundUnder(runtime, [-2.5, -1.5, 1.5, 2.5]));
     const handle = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) }).find((h) => h.kind === "height");
     const params = platformContourTool.defaultParams();
@@ -109,6 +120,7 @@ test("a floor on the ground lifted off it by its height handle lets the ground h
     const floor = of(runtime, "platform");
     assert.ok(floor.nodes.every((n) => n.position.y > 4), "lifted");
     assert.equal(groundHolding(runtime, floor).length, 0, "the ground let go of it");
+    assert.equal(cornersMet(runtime, floor).length, 0, "and comes up to it nowhere");
     assert.ok(groundUnder(runtime, [-2.5, -1.5, 1.5, 2.5]), "and healed under it");
   } finally { session.free(); }
 }));
@@ -139,9 +151,9 @@ test("a floor drawn on uneven ground, a little above or below it here and there,
       floorAt(ctx, [-2.3, -1.7, 3.7, 2.3], y);
       assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
       const floor = of(runtime, "platform");
-      const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
-      const sides = floor.outerLoops[0];
-      assert.ok(sides.every((use) => held.has(use.startNodeId) && held.has(use.endNodeId)), `at ${y}: the ground meets every side`);
+      assert.equal(floor.nodes.length, 4, `at ${y}: its four corners`);
+      // Every corner met is every side met at both ends.
+      assert.equal(cornersMet(runtime, floor).length, 4, `at ${y}: the ground meets every side`);
       assert.ok(!groundUnder(runtime, [-2.3, -1.7, 3.7, 2.3]), `at ${y}: none left under it`);
     } finally { session.free(); }
   }
@@ -277,7 +289,7 @@ test("a floor standing clear of the ground, moved to where it rests on it, cuts 
   try {
     floorAt(ctx, [-8.3, -1.7, -4.3, 1.7], 0.3);
     const keyOf = (t) => t.surfaceKey.join(" ");
-    assert.equal(groundHolding(runtime, of(runtime, "platform")).length, 0, "clear of the valley floor to begin with");
+    assert.equal(cornersMet(runtime, of(runtime, "platform")).length, 0, "clear of the valley floor to begin with");
     const middle = (t) => ({ x: t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length, z: t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length });
     const whereItStood = (t) => { const { x, z } = middle(t); return x > -10 && x < -2.5 && z > -4 && z < 4; };
     const before = new Set(terrain(runtime).filter(whereItStood).map(keyOf));
@@ -289,7 +301,7 @@ test("a floor standing clear of the ground, moved to where it rests on it, cuts 
     platformContourTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
     platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
     assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
-    assert.ok(groundHolding(runtime, of(runtime, "platform")).length > 0, "cut into the level ground where it arrived");
+    assert.ok(cornersMet(runtime, of(runtime, "platform")).length > 0, "cut into the level ground where it arrived");
     assert.deepEqual(terrain(runtime).filter(whereItStood).map(keyOf).sort(), [...before].sort(), "the valley where it stood is left exactly as it was");
   } finally { session.free(); }
 }));

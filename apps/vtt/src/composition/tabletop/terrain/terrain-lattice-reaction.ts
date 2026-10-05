@@ -235,9 +235,21 @@ function letGoOf(runtime: LatticeReactionRuntime, change: Effect["change"], hits
   const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
   const groundAt = groundSurfaceOf(hits, own);
   const held = new Set(hits.flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const groundNodes = hits.flatMap((topology) => topology.nodes.map((node) => node.position));
+  // Joined: the ground holds one of its nodes, or -- a sealed outline, met
+  // without being split -- stands a node of its own on one of its sides.
+  const joined = (face: ConstructionRegionTopology): boolean => {
+    if (face.nodes.some((node) => held.has(node.id))) return true;
+    const at = new Map(face.nodes.map((node) => [node.id, node.position]));
+    const sides = (face.outerLoops[0] ?? []).flatMap((use) => {
+      const a = at.get(use.startNodeId), b = at.get(use.endNodeId);
+      return a && b ? [[a, b] as const] : [];
+    });
+    return groundNodes.some((point) => sides.some(([a, b]) => nearestOnSegment(point, a, b).distance < 1e-3 && Math.abs(point.y - (a.y + (b.y - a.y) * nearestOnSegment(point, a, b).t)) < 1e-3));
+  };
   const after = new Map(change.after.map((face) => [face.surfaceKey.join("\u0000"), face]));
   return change.before.flatMap((face): PlanarArea => {
-    if (!face.nodes.some((node) => held.has(node.id))) return [];
+    if (!joined(face)) return [];
     const now = after.get(face.surfaceKey.join("\u0000"));
     if (now && groundContactOf(now, groundAt, GROUND_CONTACT_CELL).kind === "whole") return [];
     const at = new Map(face.nodes.map((node) => [node.id, node.position]));

@@ -477,6 +477,20 @@ export function executeTerrainCut(
   }
   const connectArea = structures.area;
 
+  // A repair's area reaches past what the structure consumed, to lay ground
+  // fresh round it. Ground under the part of a structure standing clear of it
+  // is none of that: it passes under, and laying it again would disturb ground
+  // nobody touched. Ground where a structure rests is the cut, and stays in.
+  if (request.profile.kind === "regenerate" && structures !== NO_STRUCTURES) {
+    // Wholly: a face reaching into where the structure rests is in the cut,
+    // whichever side of the contact line its middle falls.
+    const passesUnder = (t: ConstructionRegionTopology) =>
+      structures.standsUnder(centroidOf(t.nodes)) && !t.nodes.some((node) => insideSwept(node.position, connectArea));
+    affected = affected.filter((t) => coveredKeys.has(t.surfaceKey.join(" ")) || !passesUnder(t));
+    affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
+    retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+  }
+
   /** The affected faces as one polygon, with `connectArea` taken out of it. */
   const groundFor = (faces: readonly ConstructionRegionTopology[], withStructures = true): PlanarArea => {
     // A face an edit dragged out of place -- rimmed by a node the structure

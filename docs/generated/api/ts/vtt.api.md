@@ -1409,9 +1409,13 @@ Where the structures rest on the ground: the area the ground goes round.
 
 The structures, as the fill reads back which edges already have a face on them.
 
-### `method vtt.structure-contact.StructureMeeting.constraints(startingIndex: number): ConstraintTable`
+### `method vtt.structure-contact.StructureMeeting.constraints(numberedBefore: readonly string[]): ConstraintTable`
 
-The structures' outlines as constraint rings, numbered from `startingIndex`.
+The structures' outlines as constraint rings, numbered after
+`numberedBefore` -- the nodes another table already numbered from 0. A
+node among them keeps its number, so the ground's own rim and a structure
+it shares a corner with name that corner once: numbered twice, two ring
+corners stand on one spot and the generator refuses the whole ring.
 
 ### `method vtt.structure-contact.StructureMeeting.heightAt(point: { x: number; z: number }): number | undefined`
 
@@ -1424,6 +1428,12 @@ Whether a node is a structure's -- never a height the ground should take.
 ### `method vtt.structure-contact.StructureMeeting.liesOnSide(point: { x: number; z: number }): boolean`
 
 Whether a point lies on a structure's side: where the ground meets it, never snapped away from it.
+
+### `method vtt.structure-contact.StructureMeeting.standsUnder(point: { x: number; z: number }): boolean`
+
+Whether a point lies under a structure in plan -- resting on the ground or
+standing clear of it. Ground there is either cut or passes under, and a
+repair widening itself for room never takes it in.
 
 ### `variable vtt.structure-contact.NO_STRUCTURES: StructureMeeting`
 
@@ -2155,12 +2165,17 @@ correct question -- the ground *connected to* what was touched.
 The `"lattice-regenerate"` reaction's executor (`terrain-lattice-reaction.ts`):
 grow the ground back around the thing that cut it.
 
-Everything this decides is which *request* the shared executor gets. The
-consumed faces become the covered regions, so they are what gets replaced;
-the painter's footprint becomes the area, so the neighbourhood is gathered
-around the cut rather than around the hole; and `connectTo` names the
-painter's type, so its standing contour is subtracted from the ground being
-laid and its faces go down as seeds the fill can read edge directions from.
+A change with a footprint is repaired the way the brush paints: one stroke
+over where the structure stood and where it stands (`strokeAround`), every
+ground face it reaches laid again in one fill, the structure going down as
+the hole. One fill, not one where it left and another where it arrived: two
+fills meeting each other's fresh rims each laid a dense strip against the
+other's. A change without one -- ground regrowing where something was
+deleted -- has only the hole to work in, so the hole is the area.
+
+`connectTo` names the painter's type, so its standing contour is subtracted
+from the ground being laid and its faces go down as seeds the fill can read
+edge directions from.
 
 ### `interface vtt.terrain-restack.RestackOutcome`
 

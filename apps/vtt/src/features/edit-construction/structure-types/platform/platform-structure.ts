@@ -82,6 +82,12 @@ function contourPlatformStructureType(
     requiresMotionSolver: true,
     // A floor is solid: only its own sides, corners and handles reshape it.
     rigid: true,
+    // Its shape is its corners. Ground cut round it used to split its sides
+    // wherever a ground face met them, so a floor drawn with four corners
+    // stood with twelve, its side handle grabbed one piece of a side, and
+    // every resize split the sides further -- vertices piling up along the
+    // edge with each edit. The ground meets its sides without splitting them.
+    sealedOutline: true,
     roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
     policyFor: platformPolicy,
     interactionOver,

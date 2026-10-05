@@ -5,6 +5,7 @@ import type { CutFallout } from "@/features/edit-construction";
 // test reaches has to spell out any import it needs at run time. The type-only
 // `@/` imports above are fine -- those are erased.
 import { executeTerrainCut } from "./terrain-cut-executor.ts";
+import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
 import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
 import { hasTrait } from "../../../features/edit-construction/index.ts";
 import { topologyIntersectsPolygon } from "./terrain-lattice-reaction.ts";
@@ -111,15 +112,50 @@ function outlineAroundMultiPolygon(
 }
 
 /**
+ * How far past a structure's own outline a repair lays the ground again.
+ *
+ * Wide enough that the rim of the stroke falls on ground no earlier repair of
+ * the same structure touched. A repair bounded by the faces the structure
+ * touches lays a strip a face or two wide, every node of the rim a corner it
+ * must keep; the next edit inherits that rim and lays finer still, so moving a
+ * floor back and forth added faces on every move. A stroke this wide is laid
+ * fresh each time, over the same ground, so the count holds.
+ */
+const STROKE_MARGIN = 2 * DEFAULT_FACE_SIDE;
+
+/**
+ * A plan rectangle round each polygon given, widened by `margin`: where a
+ * structure stood and where it stands are two strokes, overlapping when it
+ * moved a little and apart when it moved far, so the ground between is left.
+ */
+function strokeAround(
+  polygons: readonly (readonly (readonly (readonly [number, number])[])[])[],
+  margin: number,
+): [number, number][][][] {
+  return polygons.flatMap((polygon) => {
+    const box = outlineAroundMultiPolygon([polygon]);
+    if (box.length < 4) return [];
+    const [[minX, minZ], , [maxX, maxZ]] = box as [[number, number], unknown, [number, number]];
+    const x0 = minX - margin, z0 = minZ - margin, x1 = maxX + margin, z1 = maxZ + margin;
+    return [[[[x0, z0], [x1, z0], [x1, z1], [x0, z1], [x0, z0]] as [number, number][]]];
+  });
+}
+
+/**
  * The `"lattice-regenerate"` reaction's executor (`terrain-lattice-reaction.ts`):
  * grow the ground back around the thing that cut it.
  *
- * Everything this decides is which *request* the shared executor gets. The
- * consumed faces become the covered regions, so they are what gets replaced;
- * the painter's footprint becomes the area, so the neighbourhood is gathered
- * around the cut rather than around the hole; and `connectTo` names the
- * painter's type, so its standing contour is subtracted from the ground being
- * laid and its faces go down as seeds the fill can read edge directions from.
+ * A change with a footprint is repaired the way the brush paints: one stroke
+ * over where the structure stood and where it stands (`strokeAround`), every
+ * ground face it reaches laid again in one fill, the structure going down as
+ * the hole. One fill, not one where it left and another where it arrived: two
+ * fills meeting each other's fresh rims each laid a dense strip against the
+ * other's. A change without one -- ground regrowing where something was
+ * deleted -- has only the hole to work in, so the hole is the area.
+ *
+ * `connectTo` names the painter's type, so its standing contour is subtracted
+ * from the ground being laid and its faces go down as seeds the fill can read
+ * edge directions from.
  */
 export function repairTerrainCut(
   runtime: TerrainRegenerateRuntime,
@@ -141,79 +177,25 @@ export function repairTerrainCut(
       ? { surfaceType: fallout.painterSurfaceType }
       : undefined;
 
-  const hasVacated = fallout.vacatedGround && fallout.vacatedGround.length > 0;
-  const hasFootprint = fallout.footprintOutline !== undefined && fallout.footprintOutline.length >= 3;
+  const hasVacated = fallout.vacatedGround !== undefined && fallout.vacatedGround.length > 0;
+  const footprint = fallout.footprintOutline !== undefined && fallout.footprintOutline.length >= 3 ? fallout.footprintOutline : undefined;
+  const draggedKeys = new Set((fallout.draggedSurfaceKeys ?? []).map((k) => k.join(" ")));
 
-  if (hasVacated && hasFootprint) {
-    let builtTotal = 0;
-    // 1. Where the structure left: regrow vacated ground and clear dragged stale regions.
-    const vacatedOutline = outlineAroundMultiPolygon(fallout.vacatedGround!);
-    if (vacatedOutline.length >= 3) {
-      const draggedKeys = new Set((fallout.draggedSurfaceKeys ?? []).map((k) => k.join(" ")));
-      const vacatedConsumed = consumed.filter((t) => draggedKeys.has(t.surfaceKey.join(" ")) || topologyIntersectsPolygon(t, vacatedOutline));
-      const outcome = executeTerrainCut(runtime, {
-        area: { outline: vacatedOutline },
-        coveredRegions: vacatedConsumed.map((topology) => ({
-          surfaceKey: topology.surfaceKey,
-          surfaceType: topology.surfaceType,
-        })),
-        targetSurfaceType: (consumed[0] && hasTrait(consumed[0].surfaceType, "ground")) ? consumed[0].surfaceType : "terrain",
-        profile: {
-          kind: "regenerate",
-          connectTo,
-        },
-        vacatedArea: fallout.vacatedGround,
-        staleRegions: fallout.draggedSurfaceKeys,
-        causeId: `${causeId}:vacated`,
-        tableId,
-        seed: Math.max(1, Math.abs(hashOf(fallout.draggedSurfaceKeys ?? []))),
-        irregularity: 0.7,
-      });
-      builtTotal += outcome.builtFaces;
-    }
-
-    // 2. Where the structure arrived: re-cut ground around it.
-    const outline = fallout.footprintOutline!;
-    const draggedKeys = new Set((fallout.draggedSurfaceKeys ?? []).map((k) => k.join(" ")));
-    const arrivalConsumed = consumed
-      .filter((t) => !draggedKeys.has(t.surfaceKey.join(" ")))
-      .filter((t) => topologyIntersectsPolygon(t, outline));
-    const outcome = executeTerrainCut(runtime, {
-      area: { outline },
-      coveredRegions: arrivalConsumed.map((topology) => ({
-        surfaceKey: topology.surfaceKey,
-        surfaceType: topology.surfaceType,
-      })),
-      targetSurfaceType: (consumed[0] && hasTrait(consumed[0].surfaceType, "ground")) ? consumed[0].surfaceType : "terrain",
-      profile: {
-        kind: "regenerate",
-        connectTo,
-      },
-      causeId,
-      tableId,
-      seed: Math.max(1, Math.abs(hashOf(fallout.consumedSurfaceKeys))),
-      irregularity: 0.7,
-    });
-    builtTotal += outcome.builtFaces;
-    return builtTotal;
-  }
-
-  // Single cut (creation, pure deletion, or pure vacated without footprint)
   const outline =
-    hasFootprint
-      ? fallout.footprintOutline!
-      : (hasVacated
-          ? outlineAroundMultiPolygon(fallout.vacatedGround!)
-          : (consumed.length > 0 ? outlineAroundConsumed(consumed) : []));
+    footprint ??
+    (hasVacated
+      ? outlineAroundMultiPolygon(fallout.vacatedGround!)
+      : (consumed.length > 0 ? outlineAroundConsumed(consumed) : []));
   if (outline.length < 3) return 0;
 
-  const draggedKeys = new Set((fallout.draggedSurfaceKeys ?? []).map((k) => k.join(" ")));
-  const covered = (hasVacated && !hasFootprint)
-    ? consumed.filter((t) => draggedKeys.has(t.surfaceKey.join(" ")) || (fallout.vacatedGround && fallout.vacatedGround.some((p) => p[0] && topologyIntersectsPolygon(t, p[0]))))
+  const covered = hasVacated && footprint === undefined
+    ? consumed.filter((t) => draggedKeys.has(t.surfaceKey.join(" ")) || fallout.vacatedGround!.some((p) => p[0] && topologyIntersectsPolygon(t, p[0])))
     : consumed;
 
   const outcome = executeTerrainCut(runtime, {
-    area: { outline },
+    area: footprint === undefined
+      ? { outline }
+      : { outline, sweptPolygon: strokeAround([[footprint], ...(fallout.vacatedGround ?? [])], STROKE_MARGIN) },
     coveredRegions: covered.map((topology) => ({
       surfaceKey: topology.surfaceKey,
       surfaceType: topology.surfaceType,
@@ -223,7 +205,7 @@ export function repairTerrainCut(
       kind: "regenerate",
       connectTo,
     },
-    vacatedArea: fallout.vacatedGround,
+    ...(hasVacated ? { vacatedArea: fallout.vacatedGround } : {}),
     staleRegions: fallout.draggedSurfaceKeys,
     causeId,
     tableId,
