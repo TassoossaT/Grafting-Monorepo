@@ -578,6 +578,11 @@ export interface ConstructionSolidGroundRequest {
   readonly faceSide: number;
   /** Face size of the pieces a shape made; omitted lays them at `faceSide`. */
   readonly shapeFaceSide?: number;
+  /**
+   * How far over open ground round the shapes a collar of it is laid with
+   * them, for ground laid as a height over the plane to meet. Omitted lays none.
+   */
+  readonly collar?: number;
   /** The steepest normal (its y component) still laid as ground facing up. */
   readonly steepestUp?: number;
   readonly seed?: number;
@@ -588,7 +593,7 @@ export interface ConstructionSolidGroundPiece {
   readonly facing: string;
   readonly inFront: number;
   readonly behind: number;
-  /** Ground under open sky with nothing beneath it: what a height map alone already is. */
+  /** Ground under open sky with nothing beneath it, away from any shape: what a height map alone already is. */
   readonly openGround: boolean;
   readonly vertices: readonly (readonly [number, number, number])[];
   /** Counter-clockwise seen from outside the solid. */

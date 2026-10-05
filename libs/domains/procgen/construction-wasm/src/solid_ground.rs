@@ -48,6 +48,10 @@ pub struct SolidGroundRequest {
     /// lays them at `faceSide`.
     #[serde(default)]
     pub shape_face_side: Option<f64>,
+    /// How far over open ground round the shapes a collar of it is laid
+    /// with them, for planar ground to meet. Omitted lays none.
+    #[serde(default)]
+    pub collar: f64,
     #[serde(default = "default_steepest_up")]
     pub steepest_up: f64,
     #[serde(default)]
@@ -118,7 +122,7 @@ pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, 
         field.shapes.push(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius });
     }
     let region = Region { min: point(request.region_min), max: point(request.region_max), cell: request.cell };
-    let options = SplitOptions { steepest_up: request.steepest_up, smallest_piece: request.face_side * request.face_side };
+    let options = SplitOptions { steepest_up: request.steepest_up, smallest_piece: request.face_side * request.face_side, collar: request.collar };
     let shape_face_side = request.shape_face_side.filter(|side| *side > 0.0).unwrap_or(request.face_side);
     let laid = lay_ground(&field, &region, &options, request.face_side, shape_face_side, request.seed);
 

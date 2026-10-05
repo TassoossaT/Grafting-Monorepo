@@ -124,6 +124,13 @@ pub struct SplitOptions {
     /// folded into ground facing up is laid seen from above, and its faces
     /// hang across it like a curtain.
     pub smallest_piece: f64,
+    /// How far over open ground, from the pieces a shape made, a collar of it
+    /// is split off as a piece of its own. `0` splits none.
+    ///
+    /// The collar is what ground laid as a height over the plane meets round
+    /// a shape: its far edge lies on open ground, a smooth line in plan,
+    /// where the shape's own outline climbs walls and folds under arches.
+    pub collar: f64,
 }
 
 /// What a piece is.
@@ -134,13 +141,15 @@ pub struct PieceKey {
     pub in_front: usize,
     /// Crossings walking in against it.
     pub behind: usize,
+    /// Open ground split off round a shape: see [`SplitOptions::collar`].
+    pub collar: bool,
 }
 
 impl PieceKey {
-    /// Ground under open sky with nothing beneath it: what a height map alone
-    /// already is, and the one piece that is not a shape's.
+    /// Ground under open sky with nothing beneath it, away from any shape:
+    /// what a height map alone already is.
     pub fn is_open_ground(&self) -> bool {
-        self.facing == Facing::Up && self.in_front == 0 && self.behind == 0
+        self.facing == Facing::Up && self.in_front == 0 && self.behind == 0 && !self.collar
     }
 }
 
@@ -210,7 +219,7 @@ pub fn split<H: HeightSource>(field: &SolidField<H>, region: &Region, options: &
                 let start = centre + direction * skip;
                 field.crossings(start, direction, region.reach(start, direction), cell * 0.5)
             };
-            PieceKey { facing, in_front: count_from(axis), behind: count_from(-axis) }
+            PieceKey { facing, in_front: count_from(axis), behind: count_from(-axis), collar: false }
         })
         .collect();
 
@@ -249,7 +258,102 @@ pub fn split<H: HeightSource>(field: &SolidField<H>, region: &Region, options: &
     }
 
     merge_small_pieces(&positions, &triangles, &beside, &mut piece_of, &mut pieces, options.smallest_piece);
+    if options.collar > 0.0 {
+        split_collars(&positions, &triangles, &beside, &mut piece_of, &mut pieces, options.collar);
+    }
     Split { positions, triangles, piece_of, pieces }
+}
+
+/// Splits off, as pieces of their own, the open ground within `reach` of any
+/// piece a shape made -- walked across the surface, triangle to triangle.
+fn split_collars(
+    positions: &[Vec3],
+    triangles: &[[usize; 3]],
+    beside: &HashMap<(usize, usize), Vec<usize>>,
+    piece_of: &mut [usize],
+    pieces: &mut Vec<Piece>,
+    reach: f64,
+) {
+    let centre = |t: usize| {
+        let [a, b, c] = triangles[t];
+        (positions[a] + positions[b] + positions[c]) * (1.0 / 3.0)
+    };
+    let open = |t: usize, piece_of: &[usize], pieces: &[Piece]| pieces[piece_of[t]].key.is_open_ground();
+    let neighbours = |t: usize| {
+        let [a, b, c] = triangles[t];
+        [(a, b), (b, c), (c, a)].into_iter().flat_map(move |(from, to)| beside[&(from.min(to), from.max(to))].iter().copied()).filter(move |&other| other != t)
+    };
+
+    // Distance over the surface from the nearest triangle of a shape's piece.
+    let mut distance = vec![f64::INFINITY; triangles.len()];
+    let mut frontier: Vec<usize> = Vec::new();
+    for t in 0..triangles.len() {
+        if open(t, piece_of, pieces) && neighbours(t).any(|other| !open(other, piece_of, pieces)) {
+            distance[t] = 0.0;
+            frontier.push(t);
+        }
+    }
+    while !frontier.is_empty() {
+        let mut next = Vec::new();
+        for t in frontier {
+            for other in neighbours(t) {
+                if !open(other, piece_of, pieces) {
+                    continue;
+                }
+                let through = distance[t] + centre(t).distance(centre(other));
+                if through < distance[other] && through < reach {
+                    distance[other] = through;
+                    next.push(other);
+                }
+            }
+        }
+        frontier = next;
+    }
+
+    // Each connected stretch of collar becomes a piece.
+    let in_collar: Vec<bool> = (0..triangles.len()).map(|t| distance[t] < reach && open(t, piece_of, pieces)).collect();
+    let mut seen = vec![false; triangles.len()];
+    for seed in 0..triangles.len() {
+        if !in_collar[seed] || seen[seed] {
+            continue;
+        }
+        let id = pieces.len();
+        let key = PieceKey { collar: true, ..pieces[piece_of[seed]].key };
+        let mut piece = Piece { key, triangles: Vec::new(), area: 0.0 };
+        let mut stack = vec![seed];
+        seen[seed] = true;
+        while let Some(t) = stack.pop() {
+            piece.triangles.push(t);
+            piece.area += triangle_area(positions, triangles[t]);
+            for other in neighbours(t) {
+                if in_collar[other] && !seen[other] {
+                    seen[other] = true;
+                    stack.push(other);
+                }
+            }
+        }
+        for &t in &piece.triangles {
+            let was = piece_of[t];
+            pieces[was].triangles.retain(|&kept| kept != t);
+            pieces[was].area -= triangle_area(positions, triangles[t]);
+            piece_of[t] = id;
+        }
+        pieces.push(piece);
+    }
+
+    // An open piece the collars took whole is gone; renumber.
+    let mut renumber = vec![usize::MAX; pieces.len()];
+    let mut kept = Vec::new();
+    for (index, piece) in pieces.drain(..).enumerate() {
+        if !piece.triangles.is_empty() {
+            renumber[index] = kept.len();
+            kept.push(piece);
+        }
+    }
+    for piece in piece_of.iter_mut() {
+        *piece = renumber[*piece];
+    }
+    *pieces = kept;
 }
 
 /// Folds every piece under `smallest` into the neighbour it shares the most

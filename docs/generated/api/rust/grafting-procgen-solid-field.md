@@ -129,8 +129,8 @@ outside the solid, so faces laid there need no flipping when lifted.
 
 ### `pub fn grafting_procgen_solid_field::pieces::PieceKey::is_open_ground(&self) -> bool`
 
-Ground under open sky with nothing beneath it: what a height map alone
-already is, and the one piece that is not a shape's.
+Ground under open sky with nothing beneath it, away from any shape:
+what a height map alone already is.
 
 ### `pub fn grafting_procgen_solid_field::pieces::split<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions) -> grafting_procgen_solid_field::pieces::Split`
 
@@ -284,6 +284,10 @@ concave face.
 
 Crossings walking in against it.
 
+### `pub grafting_procgen_solid_field::PieceKey::collar: bool`
+
+Open ground split off round a shape: see [`SplitOptions::collar`].
+
 ### `pub grafting_procgen_solid_field::PieceKey::facing: grafting_procgen_solid_field::pieces::Facing`
 
 ### `pub grafting_procgen_solid_field::PieceKey::in_front: usize`
@@ -332,6 +336,15 @@ rounds the lip of a tunnel mouth. `0` cuts it sharp.
 ### `pub grafting_procgen_solid_field::Split::triangles: alloc::vec::Vec<[usize; 3]>`
 
 Wound counter-clockwise seen from outside the solid.
+
+### `pub grafting_procgen_solid_field::SplitOptions::collar: f64`
+
+How far over open ground, from the pieces a shape made, a collar of it
+is split off as a piece of its own. `0` splits none.
+
+The collar is what ground laid as a height over the plane meets round
+a shape: its far edge lies on open ground, a smooth line in plan,
+where the shape's own outline climbs walls and folds under arches.
 
 ### `pub grafting_procgen_solid_field::SplitOptions::smallest_piece: f64`
 
@@ -474,6 +487,10 @@ concave face.
 
 Crossings walking in against it.
 
+### `pub grafting_procgen_solid_field::pieces::PieceKey::collar: bool`
+
+Open ground split off round a shape: see [`SplitOptions::collar`].
+
 ### `pub grafting_procgen_solid_field::pieces::PieceKey::facing: grafting_procgen_solid_field::pieces::Facing`
 
 ### `pub grafting_procgen_solid_field::pieces::PieceKey::in_front: usize`
@@ -498,6 +515,15 @@ thin and the cave is not seen.
 ### `pub grafting_procgen_solid_field::pieces::Split::triangles: alloc::vec::Vec<[usize; 3]>`
 
 Wound counter-clockwise seen from outside the solid.
+
+### `pub grafting_procgen_solid_field::pieces::SplitOptions::collar: f64`
+
+How far over open ground, from the pieces a shape made, a collar of it
+is split off as a piece of its own. `0` splits none.
+
+The collar is what ground laid as a height over the plane meets round
+a shape: its far edge lies on open ground, a smooth line in plan,
+where the shape's own outline climbs walls and folds under arches.
 
 ### `pub grafting_procgen_solid_field::pieces::SplitOptions::smallest_piece: f64`
 

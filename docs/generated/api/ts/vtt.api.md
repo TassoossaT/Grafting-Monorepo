@@ -12212,7 +12212,7 @@ Counter-clockwise seen from outside the solid.
 
 ### `property vtt.construction-session-port.ConstructionSolidGroundPiece.openGround: boolean`
 
-Ground under open sky with nothing beneath it: what a height map alone already is.
+Ground under open sky with nothing beneath it, away from any shape: what a height map alone already is.
 
 ### `property vtt.construction-session-port.ConstructionSolidGroundPiece.vertices: readonly (readonly [number, number, number])[]`
 
@@ -12228,6 +12228,11 @@ How far a shape blends into the ground, rounding its lip.
 ### `property vtt.construction-session-port.ConstructionSolidGroundRequest.cell: number`
 
 Spacing of the grid the surface is split from.
+
+### `property vtt.construction-session-port.ConstructionSolidGroundRequest.collar?: number`
+
+How far over open ground round the shapes a collar of it is laid with
+them, for ground laid as a height over the plane to meet. Omitted lays none.
 
 ### `property vtt.construction-session-port.ConstructionSolidGroundRequest.faceSide: number`
 

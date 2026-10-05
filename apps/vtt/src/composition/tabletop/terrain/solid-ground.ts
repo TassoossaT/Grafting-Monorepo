@@ -24,12 +24,12 @@ import type { ToolContext } from "../tools/core/tool-context.ts";
  *
  * Laying a zone is one call to the engine (`solidGround`): the height field
  * plus its shapes, split into pieces that are each a height over a plane of
- * their own. Every piece in the zone's box -- a tunnel's ceiling, walls and
- * floor, the hill over it, a bridge's deck and belly, and the open ground
- * round them up to the box's edge -- becomes faces of one sealed structure,
- * committed the way a floor is: the ground's own regeneration then cuts
- * round it and meets its outline, with nothing here that the floors do not
- * already go through. Inside a zone its heights are the truth.
+ * their own. What the shapes made -- a tunnel's ceiling, walls and floor,
+ * the hill over it, a bridge's deck and belly -- and a narrow collar of open
+ * ground round it become faces of one sealed structure, committed the way a
+ * floor is: the ground's own regeneration then cuts round it and meets the
+ * collar's edge, with nothing here that the floors do not already go
+ * through. The rest of the ground stays terrain.
  *
  * A stroke whose shape reaches a standing zone joins it: the zone is laid
  * again with every shape it holds, replacing the faces it had.
@@ -39,6 +39,8 @@ import type { ToolContext } from "../tools/core/tool-context.ts";
 const HEIGHT_SPACING = 0.5;
 /** How far, in faces, the box a zone is read in reaches past its shapes: the ground under open sky has to reach the box on every side. */
 const MARGIN_FACES = 2;
+/** How wide, in faces, the collar of open ground laid with the shapes is. */
+const COLLAR_FACES = 1.5;
 /** The steepest slope still laid as ground facing up: 60 degrees. */
 const STEEPEST_UP = 0.5;
 
@@ -249,25 +251,24 @@ function layZone(
     regionMin: [box.minX, Math.min(...ys) - 2, box.minZ],
     regionMax: [box.maxX, Math.max(...ys) + 2, box.maxZ],
     cell: Math.min(0.5, Math.min(...shapes.map((s) => s.radius)) / 3),
-    // The open ground inside the zone too, at the shape's size: it runs down
-    // into the trench a tunnel leaves before its mouth, which ground at the
-    // size round it would lay straight across.
     faceSide: shapeFaceSide,
     shapeFaceSide,
+    // A collar of open ground round the shapes is laid with them: its far
+    // edge lies on open ground, smooth in plan, and that is the line the
+    // ground round them meets. The shapes' own outline climbs walls and folds
+    // under arches, which ground laid as a height over the plane cannot follow.
+    collar: COLLAR_FACES * shapeFaceSide,
     steepestUp: STEEPEST_UP,
     seed,
   };
   const laid = ctx.runtime.solidGround(request);
   if (!laid) throw new Error("o núcleo recusou a forma");
-  // Every piece, the ground under open sky inside the zone included: the
-  // outline the ground round it then meets is the zone's own edge, at the
-  // ground's height and straight in plan. A tunnel's mouth seen from above
-  // folds over itself -- its floor under its arch -- and planar ground laid
-  // against that outline takes the arch's height for the floor's.
-  const shaped = laid.pieces;
+  // What the shapes made and the collar round it: the ground under open sky
+  // beyond stays the ground's, laid by its own regeneration round them.
+  const shaped = laid.pieces.filter((piece) => !piece.openGround);
   const failed = shaped.find((piece) => piece.error !== null);
   if (failed) throw new Error(`um pedaço da forma não pôde ser malhado: ${failed.error}`);
-  if (shaped.every((piece) => piece.openGround || piece.faces.length === 0)) throw new Error("a forma não alcança o terreno");
+  if (shaped.every((piece) => piece.faces.length === 0)) throw new Error("a forma não alcança o terreno");
 
   const id = `${ctx.tableId}:solid:${ctx.nextSequence()}`;
   const nodes = new Map<string, { readonly id: string; readonly position: ConstructionPosition }>();

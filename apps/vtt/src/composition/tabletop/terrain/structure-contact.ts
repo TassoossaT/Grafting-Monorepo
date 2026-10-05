@@ -179,12 +179,18 @@ export function meetStructures(
   for (const [surfaceType, faces] of byType) {
     const { paintedLoops } = timePhase("perímetro das estruturas", () => paintedFalloutOf(faces));
     const sealed = structureTypeFor(surfaceType)?.sealedOutline === true;
+    // The ground meets a sealed structure along its outline: the sides one of
+    // its faces holds alone. A side two of its faces share is inside it --
+    // the arch over a tunnel's mouth stands right above the floor the ground
+    // meets there, and read as a side it gave the ground the arch's height.
+    const uses = new Map<string, number>();
+    for (const topology of faces) for (const use of [...topology.outerLoops, ...topology.holes].flat()) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
     for (const topology of faces) {
       const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
       for (const use of [...topology.outerLoops, ...topology.holes].flat()) {
         const side = { a: at.get(use.startNodeId)!, b: at.get(use.endNodeId)! };
         sides.push(side);
-        if (sealed) sealedSides.push(side);
+        if (sealed && uses.get(use.edgeId) === 1) sealedSides.push(side);
       }
     }
     if (!sealed) {

@@ -26,7 +26,7 @@ fn steepest_up() -> f64 {
 }
 
 fn options() -> SplitOptions {
-    SplitOptions { steepest_up: steepest_up(), smallest_piece: face_side() * face_side() }
+    SplitOptions { steepest_up: steepest_up(), smallest_piece: face_side() * face_side(), collar: 0.0 }
 }
 
 struct Laid {
@@ -298,4 +298,18 @@ fn probe_wrong_faces() {
                 laid.faces.iter().filter(|f| f.len() > 4).count());
         }
     }
+}
+
+#[test]
+fn a_tunnel_with_a_collar_of_open_ground_lays_watertight_and_the_collar_rings_it() {
+    let field = carved(vec![Vec3::new(-16.0, 2.0, 0.0), Vec3::new(16.0, 2.0, 0.0)], 1.8);
+    let options = SplitOptions { collar: 2.0 * face_side(), ..options() };
+    let ground = lay_ground(&field, &region(), &options, face_side(), face_side(), 7);
+    let collars = ground.pieces.iter().filter(|(key, _)| key.collar).count();
+    assert!(collars > 0, "a collar round the tunnel");
+    let laid = Laid {
+        keys: ground.pieces.iter().map(|(key, _)| format!("{key:?}")).collect(),
+        pieces: ground.pieces.into_iter().map(|(_, laid)| laid).collect(),
+    };
+    assert_lays_along_the_ground(&field, &laid);
 }

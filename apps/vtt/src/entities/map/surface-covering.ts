@@ -101,6 +101,7 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
     case "roof":
       return 0xb96e48;
     case "terrain":
+    case "solid-ground": // Ground a tunnel or bridge made: still the ground, drawn as it
       return 0x334155; // Dark Slate / Construction floor grid
     case "terrain-grass":
       return 0x4a7a4a; // Grass green
