@@ -689,6 +689,15 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Only the surface the shapes made, and a collar of open ground round
+    /// it, as one quad mesh. Pure, like `solid_ground_json`. See
+    /// `solid_ground::solid_surface`.
+    pub fn solid_surface_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = crate::solid_ground::solid_surface(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     /// Which of the given XZ points already sit inside a region -- what a
     /// generator consults so it only builds over open ground. See
     /// `footprint::classify_points`.

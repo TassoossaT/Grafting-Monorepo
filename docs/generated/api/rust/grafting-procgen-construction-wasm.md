@@ -231,6 +231,12 @@ plus shapes that carve or fill it, split into pieces and each laid by
 the irregular quad grid. Pure -- reads nothing from this session and
 mutates nothing in it. See `solid_ground::solid_ground`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::solid_surface_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Only the surface the shapes made, and a collar of open ground round
+it, as one quad mesh. Pure, like `solid_ground_json`. See
+`solid_ground::solid_surface`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_mesh_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 One surface's triangulated mesh piece(s), by key -- what a caller

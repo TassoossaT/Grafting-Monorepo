@@ -153,6 +153,8 @@ pub struct ShapeDto
 pub struct SolidGroundRequest
 pub struct LaidPieceDto
 pub struct SolidGroundResponse
+pub struct SolidSurfaceResponse
+pub fn solid_surface(mut request: SolidGroundRequest) -> Result<SolidSurfaceResponse, String>
 pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, String>
 
 // src/spatial_index.rs

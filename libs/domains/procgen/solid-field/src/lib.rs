@@ -20,10 +20,12 @@ pub mod field;
 pub mod lay;
 pub mod pieces;
 pub mod seams;
+pub mod surface;
 pub mod vector;
 
 pub use field::{Effect, HeightGrid, HeightSource, Shape, SolidField, smooth_min};
 pub use lay::{BorderSplit, LaidGround, LaidPiece, lay_ground, lay_piece};
 pub use pieces::{Facing, Piece, PieceKey, Region, Split, SplitOptions, split};
 pub use seams::{Seams, seams};
+pub use surface::{ShapedSurface, shaped_surface};
 pub use vector::Vec3;

@@ -42,6 +42,7 @@ import type {
   ConstructionIrregularQuadGridRequest,
   ConstructionSolidGround,
   ConstructionSolidGroundRequest,
+  ConstructionSolidSurface,
   ConstructionPatch,
   ConstructionPatchOutcome,
   ConstructionPosition,
@@ -531,6 +532,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       return JSON.parse(this.#read().solid_ground_json(JSON.stringify(request))) as ConstructionSolidGround;
     } catch {
       // A refusal, like the grid's: the request describes nothing the engine can lay.
+      return undefined;
+    }
+  }
+
+  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined {
+    try {
+      return JSON.parse(this.#read().solid_surface_json(JSON.stringify(request))) as ConstructionSolidSurface;
+    } catch {
       return undefined;
     }
   }

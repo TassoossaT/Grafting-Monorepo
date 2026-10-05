@@ -44,6 +44,7 @@ import type {
   ConstructionIrregularQuadGridRequest,
   ConstructionSolidGround,
   ConstructionSolidGroundRequest,
+  ConstructionSolidSurface,
   ConstructionNodeId,
   ConstructionHostPoint,
   ConstructionPatch,
@@ -188,6 +189,8 @@ export interface TabletopRuntime extends BezierPort {
   ): ConstructionIrregularQuadGrid | undefined;
   /** Solid ground split into pieces and laid. See `ConstructionSessionPort.solidGround`. */
   solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined;
+  /** The shapes' surface as one mesh. See `ConstructionSessionPort.solidSurface`. */
+  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Region boundaries near a local edit, resolved in one engine call. */
@@ -1017,6 +1020,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined {
     this.#requireReady("laying solid ground");
     return this.#construction.solidGround(request);
+  }
+
+  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined {
+    this.#requireReady("laying a shape's surface");
+    return this.#construction.solidSurface(request);
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {

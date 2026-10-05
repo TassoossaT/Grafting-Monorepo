@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use grafting_procgen_solid_field::{
-    Effect, HeightGrid, Region, Shape, SolidField, SplitOptions, Vec3, lay_ground,
+    Effect, HeightGrid, Region, Shape, SolidField, SplitOptions, Vec3, lay_ground, shaped_surface,
 };
 
 #[derive(Debug, Deserialize)]
@@ -94,6 +94,55 @@ fn point([x, y, z]: [f64; 3]) -> Vec3 {
 
 fn array(v: Vec3) -> [f64; 3] {
     [v.x, v.y, v.z]
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SolidSurfaceResponse {
+    pub vertices: Vec<[f64; 3]>,
+    /// Counter-clockwise seen from outside the solid; quads, and a triangle
+    /// where only half a grid quad is the shape's.
+    pub faces: Vec<Vec<usize>>,
+}
+
+/// The field a request describes, and the box it is read in.
+fn field_of(request: &SolidGroundRequest, grid: HeightGridDto) -> Result<SolidField<HeightGrid>, String> {
+    if grid.columns < 2 || grid.rows < 2 || grid.heights.len() != grid.columns * grid.rows {
+        return Err("ground needs columns x rows heights, at least 2 x 2".to_string());
+    }
+    let mut field = SolidField::new(HeightGrid {
+        origin_x: grid.origin_x,
+        origin_z: grid.origin_z,
+        spacing: grid.spacing,
+        columns: grid.columns,
+        rows: grid.rows,
+        heights: grid.heights,
+    });
+    field.blend = request.blend;
+    for shape in &request.shapes {
+        let effect = match shape.effect.as_str() {
+            "carve" => Effect::Carve,
+            "fill" => Effect::Fill,
+            other => return Err(format!("unknown shape effect {other:?}")),
+        };
+        field.shapes.push(Shape { effect, path: shape.path.iter().copied().map(point).collect(), radius: shape.radius });
+    }
+    Ok(field)
+}
+
+/// Only what the shapes made, and the collar round it, as one quad mesh read
+/// at `shapeFaceSide` (or `faceSide`): see `grafting_procgen_solid_field::surface`.
+pub fn solid_surface(mut request: SolidGroundRequest) -> Result<SolidSurfaceResponse, String> {
+    let side = request.shape_face_side.filter(|side| *side > 0.0).unwrap_or(request.face_side);
+    if !(side > 0.0) {
+        return Err("faceSide must be positive".to_string());
+    }
+    let grid = std::mem::replace(&mut request.ground, HeightGridDto { origin_x: 0.0, origin_z: 0.0, spacing: 1.0, columns: 0, rows: 0, heights: Vec::new() });
+    let field = field_of(&request, grid)?;
+    let region = Region { min: point(request.region_min), max: point(request.region_max), cell: side };
+    let options = SplitOptions { steepest_up: request.steepest_up, smallest_piece: side * side, collar: request.collar };
+    let mesh = shaped_surface(&field, &region, &options);
+    Ok(SolidSurfaceResponse { vertices: mesh.vertices.into_iter().map(array).collect(), faces: mesh.faces })
 }
 
 pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, String> {

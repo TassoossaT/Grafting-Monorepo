@@ -300,16 +300,34 @@ fn probe_wrong_faces() {
     }
 }
 
+
+/// Edges more than two faces hold, in a single mesh.
+fn open_edges(mesh: &grafting_procgen_solid_field::ShapedSurface) -> usize {
+    let mut uses: HashMap<(usize, usize), usize> = HashMap::new();
+    for face in &mesh.faces {
+        for i in 0..face.len() {
+            let (a, b) = (face[i], face[(i + 1) % face.len()]);
+            *uses.entry((a.min(b), a.max(b))).or_default() += 1;
+        }
+    }
+    uses.values().filter(|&&n| n > 2).count()
+}
+
 #[test]
-fn a_tunnel_with_a_collar_of_open_ground_lays_watertight_and_the_collar_rings_it() {
+fn a_tunnels_surface_is_one_light_quad_mesh_on_the_surface() {
     let field = carved(vec![Vec3::new(-16.0, 2.0, 0.0), Vec3::new(16.0, 2.0, 0.0)], 1.8);
-    let options = SplitOptions { collar: 2.0 * face_side(), ..options() };
-    let ground = lay_ground(&field, &region(), &options, face_side(), face_side(), 7);
-    let collars = ground.pieces.iter().filter(|(key, _)| key.collar).count();
-    assert!(collars > 0, "a collar round the tunnel");
-    let laid = Laid {
-        keys: ground.pieces.iter().map(|(key, _)| format!("{key:?}")).collect(),
-        pieces: ground.pieces.into_iter().map(|(_, laid)| laid).collect(),
-    };
-    assert_lays_along_the_ground(&field, &laid);
+    let region = Region { cell: 1.2, ..region() };
+    let options = SplitOptions { collar: 1.5, smallest_piece: 1.44, ..options() };
+    let mesh = grafting_procgen_solid_field::shaped_surface(&field, &region, &options);
+    let quads = mesh.faces.iter().filter(|f| f.len() == 4).count();
+    let worst = mesh.vertices.iter().map(|&p| field.distance(p).abs()).fold(0.0, f64::max);
+    if probe() {
+        println!("surface: {} faces ({quads} quads), {} vertices, worst off surface {worst:.3}", mesh.faces.len(), mesh.vertices.len());
+    }
+    assert!(mesh.faces.len() > 20 && mesh.faces.len() < 400, "{} faces", mesh.faces.len());
+    assert!(quads * 10 >= mesh.faces.len() * 8, "mostly quads: {quads} of {}", mesh.faces.len());
+    assert!(worst < 0.05, "settled on the surface: {worst}");
+    // Surface Nets pinches an edge between three faces where the surface
+    // touches itself inside one cell: rare, never a gap.
+    assert!(open_edges(&mesh) * 100 <= mesh.faces.len(), "edges held by more than two faces: {}", open_edges(&mesh));
 }

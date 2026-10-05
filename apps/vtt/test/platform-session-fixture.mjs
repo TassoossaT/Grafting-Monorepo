@@ -78,6 +78,13 @@ export function sessionFixture() {
         return undefined;
       }
     },
+    solidSurface(request) {
+      try {
+        return JSON.parse(session.solid_surface_json(JSON.stringify(request)));
+      } catch {
+        return undefined;
+      }
+    },
     addPatch(patch) { const result = JSON.parse(session.add_patch_json(JSON.stringify(wirePatch(patch)))); if (result.skippedRegionIds.length) throw new Error(JSON.stringify(result)); return { ...result.outcome, skippedRegionIds: result.skippedRegionIds, skippedRegionReasons: result.skippedRegionReasons ?? [] }; },
     getRegionTopologiesInBounds: (bounds) => JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))).map(topology),
     queryContours: (queries) => (queries.length === 0 ? [] : JSON.parse(session.contour_query_json(JSON.stringify(queries)))),

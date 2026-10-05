@@ -603,6 +603,13 @@ export interface ConstructionSolidGroundPiece {
   readonly error: string | null;
 }
 
+/** Only the surface the shapes made, and the collar round it, as one mesh. */
+export interface ConstructionSolidSurface {
+  readonly vertices: readonly (readonly [number, number, number])[];
+  /** Counter-clockwise seen from outside the solid: quads, and a triangle where only half a grid quad is the shape's. */
+  readonly faces: readonly (readonly number[])[];
+}
+
 /** Every piece of the surface in the box, sharing their border points. */
 export interface ConstructionSolidGround {
   readonly borderPoints: readonly (readonly [number, number, number])[];
@@ -832,6 +839,12 @@ export interface ConstructionSessionPort extends BezierPort {
    * where the engine refuses the request.
    */
   solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined;
+  /**
+   * Only the surface the shapes made, and a collar of open ground round it,
+   * as one quad mesh read at `shapeFaceSide` and relaxed onto the surface.
+   * Pure. `undefined` where the engine refuses the request.
+   */
+  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined;
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;

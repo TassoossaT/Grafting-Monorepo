@@ -43,8 +43,19 @@ const HEIGHT_SPACING = 0.5;
  * box is not what the stroke changes, but a bigger one costs more to read.
  */
 const MARGIN_FACES = 1.75;
+/**
+ * The face size a shape is laid at: the ground's round it, or half the
+ * shape's radius where that is coarser -- a wide tunnel in faces as small as
+ * the ground's is thousands of them -- and never more than seven tenths of
+ * the radius, so some nine faces run round it and the grid it is read from
+ * never steps over it.
+ */
+function shapeFaceSideFor(radius: number, groundFaceSide: number): number {
+  return Math.min(4, Math.max(0.6, Math.min(radius * 0.7, Math.max(groundFaceSide, radius / 2))));
+}
+
 /** How wide, in faces, the collar of open ground laid with the shapes is. */
-const COLLAR_FACES = 1;
+const COLLAR_FACES = 1.5;
 /** The steepest slope still laid as ground facing up: 60 degrees. */
 const STEEPEST_UP = 0.5;
 
@@ -178,7 +189,7 @@ export function commitSolidShape(ctx: ToolContext, stroke: SolidShapeStroke): { 
   const { shape, faceSide } = stroke;
   const all = ctx.runtime.getAllRegionTopologies();
   const { joined, box } = zonesReached(all, shapeBox(shape, blendFor([shape]) + MARGIN_FACES * faceSide));
-  const shapeFaceSide = Math.min(faceSide, Math.max(0.75, shape.radius * 0.8), ...joined.map((zone) => zone.faceSide));
+  const shapeFaceSide = Math.min(shapeFaceSideFor(shape.radius, faceSide), ...joined.map((zone) => zone.faceSide));
   const shapes = [...joined.flatMap((zone) => zone.shapes), shape];
   return layZone(ctx, all, joined, box, shapes, baseHeights(ctx, box, joined), shapeFaceSide, stroke.seed);
 }
@@ -265,48 +276,38 @@ function layZone(
     steepestUp: STEEPEST_UP,
     seed,
   };
-  const laid = ctx.runtime.solidGround(request);
-  if (!laid) throw new Error("o núcleo recusou a forma");
-  // What the shapes made and the collar round it: the ground under open sky
-  // beyond stays the ground's, laid by its own regeneration round them.
-  const shaped = laid.pieces.filter((piece) => !piece.openGround);
-  const failed = shaped.find((piece) => piece.error !== null);
-  if (failed) throw new Error(`um pedaço da forma não pôde ser malhado: ${failed.error}`);
-  if (shaped.every((piece) => piece.faces.length === 0)) throw new Error("a forma não alcança o terreno");
+  // What the shapes made and the collar round it, as one quad mesh: the
+  // ground under open sky beyond stays the ground's, laid by its own
+  // regeneration round it.
+  const surface = ctx.runtime.solidSurface(request);
+  if (!surface) throw new Error("o núcleo recusou a forma");
+  if (surface.faces.length === 0) throw new Error("a forma não alcança o terreno");
 
   const id = `${ctx.tableId}:solid:${ctx.nextSequence()}`;
-  const nodes = new Map<string, { readonly id: string; readonly position: ConstructionPosition }>();
-  const nodeOf = (piece: number, vertex: number): string => {
-    const border = shaped[piece]!.borderPoint[vertex];
-    const nodeId = border === null || border === undefined ? `${id}:p${piece}:v${vertex}` : `${id}:b${border}`;
-    if (!nodes.has(nodeId)) {
-      const [x, y, z] = shaped[piece]!.vertices[vertex]!;
-      nodes.set(nodeId, { id: nodeId, position: { x, y, z } });
-    }
-    return nodeId;
-  };
+  const nodeId = (vertex: number) => `${id}:v${vertex}`;
+  const nodes = surface.vertices.map(([x, y, z], vertex) => ({ id: nodeId(vertex), position: { x, y, z } }));
   const builder = createBoundaryEdges(ctx.tableId, { kind: "private-when-full", runPrefix: id, existingUses: new Map() });
   const regions: ConstructionPatchRegion[] = [];
-  shaped.forEach((piece, p) => piece.faces.forEach((face, f) => {
-    const ring = face.map((vertex) => nodeOf(p, vertex)).filter((nodeId, k, all) => nodeId !== all[(k + 1) % all.length]);
+  surface.faces.forEach((face, f) => {
+    const ring = face.map(nodeId);
     if (new Set(ring).size < 3) return;
     regions.push({
-      regionId: faceId(id, p, f),
-      boundary: ring.map((nodeId, k) => builder.use(nodeId, ring[(k + 1) % ring.length]!)),
+      regionId: faceId(id, 0, f),
+      boundary: ring.map((node, k) => builder.use(node, ring[(k + 1) % ring.length]!)),
       holes: [],
       surfaceType: SOLID_GROUND_SURFACE_TYPE,
       physical: true,
     });
-  }));
+  });
 
   const replaced: ConstructionSurfaceKey[] = joined.flatMap((zone) => liveFaces(all, zone).map((topology) => topology.surfaceKey));
   const { recorded } = commitPatchReplacement(ctx.runtime, {
     operationId: id,
     sourceSurfaceKeys: replaced,
-    patch: { nodes: [...nodes.values()], edges: builder.all(), regions },
+    patch: { nodes, edges: builder.all(), regions },
     // What the structure stands on, not the box it was read in: the ground's
     // regeneration reaches only round this.
-    footprintOutline: footprintOf(nodes.values()),
+    footprintOutline: footprintOf(nodes),
   }, { transactionId: id });
   ZONES.set(id, { id, box, shapes, ground, faceSide: shapeFaceSide, seed });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId: id });
@@ -323,8 +324,14 @@ function footprintOf(nodes: Iterable<{ readonly position: ConstructionPosition }
   return [[minX, minZ], [maxX, minZ], [maxX, maxZ], [minX, maxZ]];
 }
 
-/** How far over the point it starts on a tunnel's axis runs, as a fraction of its radius: its floor just under the ground there. */
-const TUNNEL_AXIS_RISE = 0.7;
+/**
+ * How far over the point it starts on a tunnel's axis runs, as a fraction of
+ * its radius: its floor on the ground there, never under it. A floor sunk
+ * into the ground digs a trench everywhere the stroke crosses level ground
+ * on its way to the hill; on it, the tunnel opens only where the hill rises
+ * over its floor.
+ */
+const TUNNEL_AXIS_RISE = 1.05;
 
 /** At least this far between the points a stroke's path keeps, as a fraction of its radius. */
 const PATH_STEP = 0.75;
@@ -343,8 +350,8 @@ function thinned(points: readonly ConstructionPosition[], step: number): Constru
 
 /**
  * A tunnel pushed into the hill from where the stroke starts: level at that
- * height, its floor just under the ground there so its mouth opens onto it,
- * running wherever the stroke runs in plan.
+ * height, its floor on the ground there so its mouth opens onto it, running
+ * wherever the stroke runs in plan.
  */
 export function tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined {
   const path = thinned(points, radius * PATH_STEP);

@@ -76,6 +76,7 @@ export type {
   ConstructionSolidGroundPiece,
   ConstructionSolidGroundRequest,
   ConstructionSolidShape,
+  ConstructionSolidSurface,
   ConstructionOrientedEdgeUse,
   ConstructionPosition,
   ConstructionRegionEdge,

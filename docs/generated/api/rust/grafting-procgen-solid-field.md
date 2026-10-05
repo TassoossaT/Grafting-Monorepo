@@ -144,6 +144,11 @@ Lays every border in `split` at `spacing`.
 
 Lays every border in `split` at `spacing`.
 
+### `pub fn grafting_procgen_solid_field::shaped_surface<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions) -> grafting_procgen_solid_field::surface::ShapedSurface`
+
+The surface the shapes in `field` made inside `region`, plus `options`'
+collar of open ground round it, at `region.cell`.
+
 ### `pub fn grafting_procgen_solid_field::smooth_min(a: f64, b: f64, k: f64) -> f64`
 
 Polynomial smooth minimum (Inigo Quilez): `min(a, b)` with the corner
@@ -152,6 +157,11 @@ rounded over a width of `k`. `k = 0` is the plain minimum.
 ### `pub fn grafting_procgen_solid_field::split<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions) -> grafting_procgen_solid_field::pieces::Split`
 
 Reads the surface in `region` and splits it into pieces.
+
+### `pub fn grafting_procgen_solid_field::surface::shaped_surface<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions) -> grafting_procgen_solid_field::surface::ShapedSurface`
+
+The surface the shapes in `field` made inside `region`, plus `options`'
+collar of open ground round it, at `region.cell`.
 
 ### `pub fn grafting_procgen_solid_field::vector::Vec3::add(self, other: Self) -> Self`
 
@@ -317,6 +327,13 @@ walked with the piece on its left seen from outside the solid.
 ### `pub grafting_procgen_solid_field::Shape::path: alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>`
 
 ### `pub grafting_procgen_solid_field::Shape::radius: f64`
+
+### `pub grafting_procgen_solid_field::ShapedSurface::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
+
+Quads, and a triangle where only half a grid quad is the shape's;
+counter-clockwise seen from outside the solid.
+
+### `pub grafting_procgen_solid_field::ShapedSurface::vertices: alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>`
 
 ### `pub grafting_procgen_solid_field::SolidField::blend: f64`
 
@@ -549,6 +566,13 @@ Every border point, shared by every piece it borders.
 Per piece, its closed rings as indices into [`Self::points`], each
 walked with the piece on its left seen from outside the solid.
 
+### `pub grafting_procgen_solid_field::surface::ShapedSurface::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
+
+Quads, and a triangle where only half a grid quad is the shape's;
+counter-clockwise seen from outside the solid.
+
+### `pub grafting_procgen_solid_field::surface::ShapedSurface::vertices: alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>`
+
 ### `pub grafting_procgen_solid_field::vector::Vec3::x: f64`
 
 ### `pub grafting_procgen_solid_field::vector::Vec3::y: f64`
@@ -649,6 +673,22 @@ A border runs between junctions, where three pieces meet or a piece meets
 the edge of the region. Junctions stay where the split put them, so every
 border that ends there ends on the same point.
 
+### `pub mod grafting_procgen_solid_field::surface`
+
+The surface a shape made, as one quad mesh.
+
+Read straight off the split's own Surface Nets mesh, at a cell as wide as
+the faces should be: the quads the shape's pieces and their collar hold,
+relaxed over the surface and settled back onto it. One connected mesh --
+no border inside it to lay twice and stitch, so none of the strips and
+slivers that laying every piece apart leaves along its seams, and faces
+the size of the ground's round it.
+
+The open ground beyond the collar is left out: it is the ground's, laid as
+a height over the plane by whoever owns it. The collar's far edge -- the
+mesh's boundary -- is smoothed along itself, so what meets it there meets
+a line, not the grid's staircase.
+
 ### `pub mod grafting_procgen_solid_field::vector`
 
 The one 3D vector this crate needs, kept local so no vector library's type
@@ -689,6 +729,10 @@ A capsule swept along a path: every point within `radius` of it.
 
 One brush stroke is one shape, however many samples the pointer produced,
 so the list grows with what was made, not with how long the drag took.
+
+### `pub struct grafting_procgen_solid_field::ShapedSurface`
+
+The shape's surface, laid.
 
 ### `pub struct grafting_procgen_solid_field::SolidField<H: grafting_procgen_solid_field::field::HeightSource>`
 
@@ -747,6 +791,10 @@ The coarse surface, and which piece each of its triangles went to.
 ### `pub struct grafting_procgen_solid_field::pieces::SplitOptions`
 
 ### `pub struct grafting_procgen_solid_field::seams::Seams`
+
+### `pub struct grafting_procgen_solid_field::surface::ShapedSurface`
+
+The shape's surface, laid.
 
 ### `pub struct grafting_procgen_solid_field::vector::Vec3`
 

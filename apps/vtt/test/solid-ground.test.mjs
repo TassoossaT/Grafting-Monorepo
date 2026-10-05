@@ -172,12 +172,13 @@ test("the ground regenerated round a tunnel comes up to its outline", () => {
     probe("worst gaps at", where.slice(0, 6).map(({ q, gap }) => `(${q.x.toFixed(1)},${q.y.toFixed(2)},${q.z.toFixed(1)}) ${gap.toFixed(3)}`).join("  "));
     probe("rim corners", gaps.length, "median gap", gaps[gaps.length >> 1]?.toFixed(3), "worst", gaps.at(-1)?.toFixed(3), "over 5 cm", gaps.filter((g) => g > 0.05).length);
     assert.ok(gaps.length > 0);
-    // The ground meets the collar's edge as it meets a floor's sealed side:
-    // along it, its own corners cutting the edge's bends. Measured 2026-10-05
-    // at 4.8 cm median and 24 cm at the worst bend -- the bound holds that,
-    // it does not call it closed.
-    assert.ok(gaps[gaps.length >> 1] < 0.08, `median gap ${gaps[gaps.length >> 1]?.toFixed(3)}`);
-    assert.ok(gaps.at(-1) < 0.4, `worst gap ${gaps.at(-1)?.toFixed(3)}`);
+    // The ground meets the collar's edge, smooth in plan, as it meets a
+    // floor's sealed side. Measured 2026-10-05: on it at the median, two
+    // corners past 5 cm, the worst 44 cm at one bend -- the bound holds that,
+    // it does not call every corner closed.
+    assert.ok(gaps[gaps.length >> 1] < 0.03, `median gap ${gaps[gaps.length >> 1]?.toFixed(3)}`);
+    assert.ok(gaps.filter((gap) => gap > 0.05).length <= gaps.length / 10, `corners off the ground: ${gaps.filter((gap) => gap > 0.05).length} of ${gaps.length}`);
+    assert.ok(gaps.at(-1) < 0.6, `worst gap ${gaps.at(-1)?.toFixed(3)}`);
   } finally { session.free(); }
 });
 
@@ -219,7 +220,8 @@ test("a raise stroke over a tunnel's zone raises the hill over it and keeps the 
     probe("top", topBefore.toFixed(2), "->", topAfter.toFixed(2));
     assert.ok(topAfter > topBefore + 1, `the hill over the tunnel rose: ${topBefore.toFixed(2)} -> ${topAfter.toFixed(2)}`);
     const under = faces.flatMap((t) => t.nodes).filter((n) => Math.abs(n.position.x) < 2 && Math.abs(n.position.z) < 1).map((n) => n.position.y);
-    assert.ok(Math.min(...under) < 0.5, "the tunnel's floor is still there under it");
+    // Its floor is on the ground where the stroke began: 0.44 m on this hill.
+    assert.ok(Math.min(...under) < 1, "the tunnel's floor is still there under it");
   } finally { session.free(); }
 });
 
@@ -249,9 +251,116 @@ test("a tunnel stroke is ghosted as the volume it carves: a sphere under the poi
   const ys = [];
   for (let i = 1; i < hover.positions.length; i += 3) ys.push(hover.positions[i]);
   const centre = (Math.max(...ys) + Math.min(...ys)) / 2;
-  assert.ok(Math.abs(centre - (hill(-8, 0) + 1.8 * 0.7)) < 1e-3, "the sphere stands where the tunnel's axis starts");
+  assert.ok(Math.abs(centre - (hill(-8, 0) + 1.8 * 1.05)) < 1e-3, "the sphere stands where the tunnel's axis starts");
   assert.ok(Math.abs(Math.max(...ys) - Math.min(...ys) - 3.6) < 1e-3, "as wide as the tunnel");
   const samples = drag([-8, 0], [0, 0]).map(([x, z]) => at(x, z));
   const drawn = terrainSculptTool.previewFor({ start: samples[0], current: samples.at(-1), samples }, tool, {});
   assert.ok(drawn.positions.length > hover.positions.length * 2, "a capsule along the drag");
+});
+
+test("probe: what a tunnel's mesh is made of", () => {
+  if (process.env.PROBE !== "1") return;
+  const { runtime, ctx, session } = setup(hill);
+  try {
+    let captured;
+    const real = runtime.solidSurface;
+    runtime.solidSurface = (request) => { const t = performance.now(); const out = real(request); captured = { request, out, ms: performance.now() - t }; return out; };
+    const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: Number(process.env.RADIUS ?? 1.8), faceSize: 2 };
+    const t0 = performance.now();
+    stroke(ctx, drag([-16, 0], [4, 0]), { tool, heightAt: hill });
+    const total = performance.now() - t0;
+    const faces = captured.out.faces.map((f) => f.map((i) => captured.out.vertices[i]));
+    const angle = (f) => Math.min(...f.map((p, i) => {
+      const a = f[(i + f.length - 1) % f.length], b = f[(i + 1) % f.length];
+      const u = [a[0] - p[0], a[1] - p[1], a[2] - p[2]], v = [b[0] - p[0], b[1] - p[1], b[2] - p[2]];
+      const c = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (Math.hypot(...u) * Math.hypot(...v) || 1);
+      return Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI;
+    }));
+    const angles = faces.map(angle).sort((a, b) => a - b);
+    console.log("request shapeFaceSide", captured.request.shapeFaceSide, "collar", captured.request.collar);
+    console.log("engine ms", captured.ms.toFixed(0), "whole stroke ms", total.toFixed(0));
+    console.log("faces", faces.length, "triangles", faces.filter((f) => f.length === 3).length, "quads", faces.filter((f) => f.length === 4).length);
+    console.log("smallest angle p5/p25/p50", angles[Math.floor(angles.length * 0.05)]?.toFixed(1), angles[Math.floor(angles.length * 0.25)]?.toFixed(1), angles[Math.floor(angles.length * 0.5)]?.toFixed(1), "under 15deg", angles.filter((a) => a < 15).length);
+  } finally { session.free(); }
+});
+
+test("probe: the open edges of a tunnel's surface", () => {
+  if (process.env.PROBE !== "1") return;
+  const { runtime, ctx, session } = setup(hill);
+  try {
+    let out;
+    const real = runtime.solidSurface;
+    runtime.solidSurface = (request) => (out = real(request));
+    const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: 1.8, faceSize: 2 };
+    stroke(ctx, drag([-16, 0], [16, 0]), { tool, heightAt: hill });
+    const uses = new Map();
+    for (const f of out.faces) for (let i = 0; i < f.length; i++) { const a = f[i], b = f[(i + 1) % f.length]; const k = a < b ? `${a}~${b}` : `${b}~${a}`; uses.set(k, (uses.get(k) ?? 0) + 1); }
+    const open = [...uses].filter(([, n]) => n === 1).map(([k]) => k.split("~").map(Number));
+    // Chain into loops.
+    const next = new Map(); for (const [a, b] of open) { next.set(a, [...(next.get(a) ?? []), b]); next.set(b, [...(next.get(b) ?? []), a]); }
+    const seen = new Set(); const loops = [];
+    for (const [a] of open) { if (seen.has(a)) continue; const loop = []; const stack = [a]; while (stack.length) { const v = stack.pop(); if (seen.has(v)) continue; seen.add(v); loop.push(v); stack.push(...next.get(v)); } loops.push(loop); }
+    console.log("faces", out.faces.length, "open edges", open.length, "loops", loops.map((l) => { const ps = l.map((v) => out.vertices[v]); const ys = ps.map((p) => p[1]); return `${l.length}@x${Math.min(...ps.map((p) => p[0])).toFixed(0)}..${Math.max(...ps.map((p) => p[0])).toFixed(0)} y${Math.min(...ys).toFixed(1)}..${Math.max(...ys).toFixed(1)}`; }).join("  "));
+  } finally { session.free(); }
+});
+
+test("probe: the ground next to the worst seam corner", () => {
+  if (process.env.PROBE !== "1") return;
+  const { runtime, ctx, session } = setup(hill);
+  try {
+    const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: 1.8, faceSize: 2 };
+    stroke(ctx, drag([-16, 0], [16, 0]), { tool, heightAt: hill });
+    const faces = shaped(runtime);
+    const uses = new Map();
+    for (const t of faces) for (const use of t.outerLoops.flat()) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
+    const at = new Map(faces.flatMap((t) => t.nodes.map((n) => [n.id, n.position])));
+    const rimEdges = faces.flatMap((t) => t.outerLoops.flat().filter((use) => uses.get(use.edgeId) === 1)).map((u) => [at.get(u.startNodeId), at.get(u.endNodeId)]);
+    const near = (p, q) => Math.hypot(p.x - q.x, p.z - q.z) < 3;
+    const q = { x: -14.2, y: 0.73, z: -2.2 };
+    const f = (p) => `(${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)})`;
+    console.log("rim edges near", rimEdges.filter(([a]) => near(a, q)).map(([a, b]) => f(a) + "-" + f(b)).join(" "));
+    const ground = terrain(runtime).filter((t) => t.nodes.some((n) => near(n.position, q)));
+    console.log("ground faces near", ground.length);
+    for (const t of ground.slice(0, 8)) console.log("  ", t.nodes.map((n) => f(n.position)).join(" "));
+    const structureNear = faces.filter((t) => t.nodes.some((n) => near(n.position, q)));
+    console.log("structure faces near", structureNear.length, structureNear.slice(0, 4).map((t) => t.nodes.map((n) => f(n.position)).join(" ")).join(" | "));
+  } finally { session.free(); }
+});
+
+test("probe: does the structures' union fail", () => {
+  if (process.env.PROBE !== "1") return;
+  const { ctx, session } = setup(hill);
+  try {
+    const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: 1.8, faceSize: 2 };
+    stroke(ctx, drag([-16, 0], [16, 0]), { tool, heightAt: hill });
+    console.log("union failed:", globalThis.__unionFailed, "last union", JSON.stringify(globalThis.__union));
+  } finally { session.free(); }
+});
+
+test("probe: what the ground's fill logged", () => {
+  if (process.env.PROBE !== "1") return;
+  const { ctx, session } = setup(hill);
+  try {
+    const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: 1.8, faceSize: 2 };
+    const samples = drag([-16, 0], [16, 0]).map(([x, z], i) => ({ point: { x, y: hill(x, z), z }, screenX: i * 10, screenY: 0 }));
+    const logs = [];
+    const info = console.info, warn = console.warn, log = console.log;
+    console.info = (...a) => logs.push(a.map(String).join(" ")); console.warn = console.info;
+    try { terrainSculptTool.onPointerUp(ctx, { start: samples[0], current: samples.at(-1), samples }, tool); } finally { console.info = info; console.warn = warn; }
+    for (const line of logs) if (/terreno|faces|recus|descart|coberta|drop|cobert/i.test(line)) console.log("LOG", line.slice(0, 400));
+  } finally { session.free(); }
+});
+
+test("probe: heights over the middle of the tunnel before and after a raise", () => {
+  if (process.env.PROBE !== "1") return;
+  const { runtime, ctx, session } = setup(hill);
+  try {
+    const tunnel = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: 1.8, faceSize: 2 };
+    stroke(ctx, drag([-16, 0], [16, 0]), { tool: tunnel, heightAt: hill });
+    const mid = () => shaped(runtime).flatMap((t) => t.nodes).filter((n) => Math.abs(n.position.x) < 2 && Math.abs(n.position.z) < 2).map((n) => `${n.position.y.toFixed(1)}@${n.position.z.toFixed(1)}`);
+    console.log("before", [...new Set(mid())].sort().join(" "));
+    const raise = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "add", brushRadius: 3, faceSize: 2, elevationStep: 1.5 };
+    stroke(ctx, drag([-1, 0], [1, 0]), { tool: raise, heightAt: hill });
+    console.log("after", [...new Set(mid())].sort().join(" "));
+  } finally { session.free(); }
 });

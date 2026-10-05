@@ -174,6 +174,31 @@ fn triangle_area(positions: &[Vec3], [a, b, c]: [usize; 3]) -> f64 {
     (positions[b] - positions[a]).cross(positions[c] - positions[a]).length() * 0.5
 }
 
+/// The finest step a walk counting crossings takes, whatever the grid: a roof
+/// thinner than the step is walked straight through.
+const FINEST_STEP: f64 = 0.25;
+
+/// The field at a grid point. On a grid coarser than half a metre, the least
+/// of it round the point: solid thinner than a cell -- a shallow roof -- is
+/// still seen as solid, where a single sample can fall either side of it.
+/// What the grid reads then stands only for which side of the surface a cell
+/// is on; every corner is settled onto the true surface afterwards.
+fn sample<H: HeightSource>(field: &SolidField<H>, point: Vec3, cell: f64) -> f64 {
+    if cell <= 0.5 {
+        return field.distance(point);
+    }
+    let reach = cell / 3.0;
+    let mut least = f64::INFINITY;
+    for dx in [-reach, 0.0, reach] {
+        for dy in [-reach, 0.0, reach] {
+            for dz in [-reach, 0.0, reach] {
+                least = least.min(field.distance(point + Vec3::new(dx, dy, dz)));
+            }
+        }
+    }
+    least
+}
+
 /// Reads the surface in `region` and splits it into pieces.
 pub fn split<H: HeightSource>(field: &SolidField<H>, region: &Region, options: &SplitOptions) -> Split {
     let cell = region.cell;
@@ -184,7 +209,7 @@ pub fn split<H: HeightSource>(field: &SolidField<H>, region: &Region, options: &
     for index in 0..shape.size() {
         let [x, y, z] = shape.delinearize(index);
         let point = region.min + Vec3::new(x as f64, y as f64, z as f64) * cell;
-        samples[index as usize] = field.distance(point) as f32;
+        samples[index as usize] = sample(field, point, cell) as f32;
     }
     let mut buffer = SurfaceNetsBuffer::default();
     surface_nets(&samples, &shape, [0; 3], [size[0] - 1, size[1] - 1, size[2] - 1], &mut buffer);
@@ -217,9 +242,17 @@ pub fn split<H: HeightSource>(field: &SolidField<H>, region: &Region, options: &
             let skip = cell * 1.5;
             let count_from = |direction: Vec3| {
                 let start = centre + direction * skip;
-                field.crossings(start, direction, region.reach(start, direction), cell * 0.5)
+                field.crossings(start, direction, region.reach(start, direction), (cell * 0.5).min(FINEST_STEP))
             };
-            PieceKey { facing, in_front: count_from(axis), behind: count_from(-axis), collar: false }
+            let key = PieceKey { facing, in_front: count_from(axis), behind: count_from(-axis), collar: false };
+            // Open ground is ground the shapes left as the height field had
+            // it. Where a shape changed it -- a roof too thin for the grid
+            // gone, a floor seen from the sky -- it is the shape's.
+            let on_surface = field.project(centre, step);
+            let unchanged = field.ground_distance(on_surface).abs() <= 0.1;
+            // Only when a collar is asked for: it is what the surface laid as
+            // one mesh is bounded by (`surface.rs`).
+            if options.collar > 0.0 && key.is_open_ground() && !unchanged { PieceKey { collar: true, ..key } } else { key }
         })
         .collect();
 
@@ -315,6 +348,9 @@ fn split_collars(
     // shape, less what lies within the reach of open ground beyond that. A
     // collar grown alone wraps a shape's thin tips in notches narrower than a
     // face, which ground laid against it cuts straight across.
+    // All round, the hill over a tunnel included: its edge lies on open
+    // ground, but over the tunnel's walls, inside the plan the tunnel takes,
+    // and planar ground stops where that plan does.
     let touches_shape = |t: usize| neighbours(t).any(|other| !is_open(other));
     let grown = spread(&touches_shape, &is_open, 2.0 * reach);
     let in_grown = |t: usize| is_open(t) && grown[t] < 2.0 * reach;

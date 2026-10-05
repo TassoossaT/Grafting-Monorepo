@@ -1098,6 +1098,10 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 Solid ground split into pieces and laid. See `ConstructionSessionPort.solidGround`.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined`
+
+The shapes' surface as one mesh. See `ConstructionSessionPort.solidSurface`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.start(): Promise<void>`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.subscribe(listener: TabletopRuntimeListener): () => void`
@@ -1305,6 +1309,10 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 Solid ground split into pieces and laid. See `ConstructionSessionPort.solidGround`.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined`
+
+The shapes' surface as one mesh. See `ConstructionSessionPort.solidSurface`.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.start(): Promise<void>`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.subscribe(listener: TabletopRuntimeListener): () => void`
@@ -1432,8 +1440,8 @@ the one point it would start from.
 ### `function vtt.solid-ground.tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined`
 
 A tunnel pushed into the hill from where the stroke starts: level at that
-height, its floor just under the ground there so its mouth opens onto it,
-running wherever the stroke runs in plan.
+height, its floor on the ground there so its mouth opens onto it, running
+wherever the stroke runs in plan.
 
 ### `interface vtt.structure-contact.StructureMeeting`
 
@@ -12171,6 +12179,12 @@ into pieces that are each a height over a plane of their own, every piece
 laid by the irregular quad grid. Pure, like the grid itself. `undefined`
 where the engine refuses the request.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined`
+
+Only the surface the shapes made, and a collar of open ground round it,
+as one quad mesh read at `shapeFaceSide` and relaxed onto the surface.
+Pure. `undefined` where the engine refuses the request.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.start(): Promise<void>`
 
 Loads the underlying Wasm module and starts an empty session. Every
@@ -12280,6 +12294,16 @@ A capsule swept along a path that takes solid away or adds it.
 ### `property vtt.construction-session-port.ConstructionSolidShape.path: readonly (readonly [number, number, number])[]`
 
 ### `property vtt.construction-session-port.ConstructionSolidShape.radius: number`
+
+### `interface vtt.construction-session-port.ConstructionSolidSurface`
+
+Only the surface the shapes made, and the collar round it, as one mesh.
+
+### `property vtt.construction-session-port.ConstructionSolidSurface.faces: readonly (readonly number[])[]`
+
+Counter-clockwise seen from outside the solid: quads, and a triangle where only half a grid quad is the shape's.
+
+### `property vtt.construction-session-port.ConstructionSolidSurface.vertices: readonly (readonly [number, number, number])[]`
 
 ### `interface vtt.construction-session-port.ConstructionSurfaceCapability`
 
