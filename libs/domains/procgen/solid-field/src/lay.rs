@@ -26,8 +26,14 @@ const FACE_SIDE_TO_LATTICE_SIDE: f64 = 3.0;
 #[derive(Debug, Clone)]
 pub struct LaidPiece {
     pub vertices: Vec<Vec3>,
-    /// Counter-clockwise seen from outside the solid.
+    /// Counter-clockwise seen from outside the solid. Mostly quads; a face
+    /// the grid joined across a short border segment has more corners and
+    /// need not be convex.
     pub faces: Vec<Vec<usize>>,
+    /// Every face cut into triangles, in the piece's plane where the face is
+    /// flat and simple -- never fanned in 3D, which leaves holes in a
+    /// concave face.
+    pub triangles: Vec<[usize; 3]>,
     /// Index-aligned with `vertices`: the border point a corner is, where it
     /// is one.
     pub border_point: Vec<Option<usize>>,
@@ -128,7 +134,19 @@ pub fn lay_piece<H: HeightSource>(
         .map(|ring| ring.iter().map(|&p| ConstraintPoint { position: flat(seams.points[p]), source: Some(p as u32) }).collect())
         .collect();
     if rings.is_empty() {
-        return Err(format!("piece {index} has no border"));
+        // A sliver shorter than one face along its border: its neighbours
+        // already meet each other edge to edge across it, so there is nothing
+        // here to lay.
+        return Ok(LaidPiece {
+            vertices: Vec::new(),
+            faces: Vec::new(),
+            triangles: Vec::new(),
+            border_point: Vec::new(),
+            settled_by_projection: 0,
+            added_on_border: 0,
+            seams_kept: true,
+            tangled: 0,
+        });
     }
     let tangled = untangle(&mut rings);
     let outer = (0..rings.len())
@@ -198,8 +216,21 @@ pub fn lay_piece<H: HeightSource>(
         })
         .collect();
 
+    let mut triangles = Vec::new();
+    let mut local: Vec<u32> = Vec::new();
+    for face in &grid.mesh.faces {
+        if face.len() == 3 {
+            triangles.push([face[0], face[1], face[2]]);
+            continue;
+        }
+        local.clear();
+        earcut::Earcut::new().earcut(face.iter().map(|&i| [grid.mesh.vertices[i].x, grid.mesh.vertices[i].y]), &[], &mut local);
+        triangles.extend(local.chunks_exact(3).map(|t| [face[t[0] as usize], face[t[1] as usize], face[t[2] as usize]]));
+    }
+
     Ok(LaidPiece {
         vertices,
+        triangles,
         faces: grid.mesh.faces,
         border_point: grid.sources.iter().map(|s| s.map(|s| s as usize)).collect(),
         settled_by_projection,

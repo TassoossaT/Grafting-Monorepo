@@ -92,6 +92,8 @@ fn cracks(laid: &Laid) -> Vec<(Vec3, Vec3)> {
         .filter(|&(_, &n)| n == 1)
         .map(|(&(a, b), _)| (at[&a], at[&b]))
         .filter(|&(a, b)| !(near_edge(a) && near_edge(b)))
+        // Two corners at one point: a zero-length edge opens nothing.
+        .filter(|&(a, b)| a.distance(b) > 1e-6)
         .collect()
 }
 
@@ -115,7 +117,6 @@ fn assert_lays_watertight(field: &SolidField<fn(f64, f64) -> f64>, laid: &Laid) 
     assert!(failed.is_empty(), "every piece lays: {failed:#?}");
     for (index, piece) in laid.pieces.iter().enumerate() {
         let piece = piece.as_ref().unwrap();
-        assert!(!piece.faces.is_empty(), "piece {index} ({}) has faces", laid.keys[index]);
         assert!(worst_distance(field, piece) < 0.1, "piece {index} ({}) sits on the surface: {}", laid.keys[index], worst_distance(field, piece));
         if probe() {
             println!("  piece {index} smallest angle {:.1}", smallest_angle(piece));
@@ -123,6 +124,45 @@ fn assert_lays_watertight(field: &SolidField<fn(f64, f64) -> f64>, laid: &Laid) 
     }
     let cracks = cracks(laid);
     assert!(cracks.is_empty(), "{} cracks between pieces, first {:?}", cracks.len(), cracks.first());
+}
+
+/// Triangles whose middle hangs off the surface by more than `tolerance`: a
+/// face laid across an opening instead of along the ground.
+fn hanging_triangles(field: &SolidField<fn(f64, f64) -> f64>, laid: &LaidPiece, tolerance: f64) -> usize {
+    laid.triangles
+        .iter()
+        .filter(|t| field.distance((laid.vertices[t[0]] + laid.vertices[t[1]] + laid.vertices[t[2]]) * (1.0 / 3.0)).abs() > tolerance)
+        .count()
+}
+
+/// Whether the triangles cover each face exactly once: a face of `n`
+/// corners in `n - 2` triangles, none of them turned into the solid -- a fan
+/// over a concave face turns one over and leaves a notch bare.
+fn triangles_cover_faces(field: &SolidField<fn(f64, f64) -> f64>, laid: &LaidPiece) -> bool {
+    let expected: usize = laid.faces.iter().map(|f| f.len() - 2).sum();
+    let turned = laid.triangles.iter().filter(|t| {
+        let [a, b, c] = [laid.vertices[t[0]], laid.vertices[t[1]], laid.vertices[t[2]]];
+        (b - a).cross(c - a).dot(field.gradient((a + b + c) * (1.0 / 3.0), 0.1)) < 0.0
+    }).count();
+    if probe() && (turned > 0 || expected != laid.triangles.len()) {
+        println!("    {} triangles for {expected} expected, {turned} turned inward", laid.triangles.len());
+    }
+    expected == laid.triangles.len() && turned == 0
+}
+
+/// What [`assert_lays_watertight`] holds, and every face cut into triangles
+/// that cover it, none turned over.
+///
+/// Not held for a tunnel carved out past the hillside: the trench it leaves
+/// in front of its mouth is narrower than two faces, and where its wall is
+/// too short to be a piece of its own the ground is laid straight across it,
+/// one face turning over.
+fn assert_lays_along_the_ground(field: &SolidField<fn(f64, f64) -> f64>, laid: &Laid) {
+    assert_lays_watertight(field, laid);
+    for (index, piece) in laid.pieces.iter().enumerate() {
+        let piece = piece.as_ref().unwrap();
+        assert!(triangles_cover_faces(field, piece), "piece {index} ({}): its triangles cover its faces", laid.keys[index]);
+    }
 }
 
 fn worst_distance(field: &SolidField<fn(f64, f64) -> f64>, laid: &LaidPiece) -> f64 {
@@ -152,7 +192,13 @@ fn a_tunnel_through_the_hill_lays_every_piece_on_shared_borders() {
     });
     let laid = lay_all(&field);
     assert!(laid.pieces.len() > 1, "the tunnel splits the surface: {:#?}", laid.keys);
-    assert_lays_watertight(&field, &laid);
+    assert_lays_along_the_ground(&field, &laid);
+    // A steep sliver of the tunnel's mouth folded into the ground facing up
+    // used to be laid seen from above, its faces hanging over the mouth like
+    // a curtain. (Not a bound for every scene: a face is flat, and across a
+    // hollow narrower than two of them its middle stands off the ground.)
+    let hanging: usize = laid.pieces.iter().map(|p| hanging_triangles(&field, p.as_ref().unwrap(), 0.4)).sum();
+    assert_eq!(hanging, 0, "no face hangs across the mouth");
 }
 
 fn carved(path: Vec<Vec3>, radius: f64) -> SolidField<fn(f64, f64) -> f64> {
@@ -167,7 +213,7 @@ fn a_cave_closed_inside_the_hill_lays_watertight() {
     let field = carved(vec![Vec3::new(-2.0, 2.2, 0.0), Vec3::new(2.0, 2.2, 1.0)], 1.5);
     let laid = lay_all(&field);
     assert!(laid.pieces.len() > 1, "{:#?}", laid.keys);
-    assert_lays_watertight(&field, &laid);
+    assert_lays_along_the_ground(&field, &laid);
 }
 
 #[test]
@@ -187,6 +233,70 @@ fn a_bridge_of_earth_over_flat_ground_lays_watertight() {
         radius: 1.2,
     });
     let laid = lay_all(&field);
-    assert_lays_watertight(&field, &laid);
+    assert_lays_along_the_ground(&field, &laid);
 }
 
+
+/// Probe only: faces that came out wrong in 3D even though they close --
+/// facing into the solid, stretched across, or corners lifted onto another
+/// layer than their piece's.
+#[test]
+fn probe_wrong_faces() {
+    if !probe() {
+        return;
+    }
+    let cases: Vec<(&str, SolidField<fn(f64, f64) -> f64>)> = vec![
+        ("through", carved(vec![Vec3::new(-16.0, 2.0, 0.0), Vec3::new(16.0, 2.0, 0.0)], 1.8)),
+        ("diagonal", carved(vec![Vec3::new(-15.0, 1.8, -15.0), Vec3::new(1.0, 2.0, 1.0)], 1.8)),
+        ("curve", carved(vec![Vec3::new(-16.0, 1.8, -4.0), Vec3::new(-4.0, 2.0, -4.0), Vec3::new(2.0, 2.2, 2.0), Vec3::new(4.0, 2.2, 16.0)], 1.8)),
+    ];
+    for (name, field) in cases {
+        let region = region();
+        let split = split(&field, &region, &options());
+        let seams = seams(&field, &split, FACE_SIDE, region.cell * 0.25);
+        for index in 0..split.pieces.len() {
+            let key = split.pieces[index].key;
+            let laid = match lay_piece(&field, &region, &split, &seams, index, FACE_SIDE, 7) {
+                Ok(l) => l,
+                Err(e) => { println!("{name} {index}: ERR {e}"); continue; }
+            };
+            let own: Vec<Vec3> = split.pieces[index].triangles.iter().flat_map(|&t| split.triangles[t]).map(|p| split.positions[p]).collect();
+            let off_layer = laid.vertices.iter().enumerate().filter(|(v, p)| laid.border_point[*v].is_none() && own.iter().map(|q| q.distance(**p)).fold(f64::INFINITY, f64::min) > 1.0).count();
+            let mut inward = 0;
+            let mut stretched = 0;
+            for face in &laid.faces {
+                let pts: Vec<Vec3> = face.iter().map(|&i| laid.vertices[i]).collect();
+                let c = pts.iter().fold(Vec3::default(), |a, &p| a + p) * (1.0 / pts.len() as f64);
+                let mut n = Vec3::default();
+                for i in 0..pts.len() { n = n + pts[i].cross(pts[(i + 1) % pts.len()]); }
+                if n.dot(field.gradient(c, 0.1)) < 0.0 { inward += 1; }
+                if (0..pts.len()).any(|i| pts[i].distance(pts[(i + 1) % pts.len()]) > 3.0 * FACE_SIDE) { stretched += 1; }
+            }
+            // A face the fan cannot cover: some fan triangle faces the other way.
+            let fan_breaks = laid.faces.iter().filter(|f| f.len() > 3 && {
+                let pts: Vec<Vec3> = f.iter().map(|&i| laid.vertices[i]).collect();
+                let mut n = Vec3::default();
+                for i in 0..pts.len() { n = n + pts[i].cross(pts[(i + 1) % pts.len()]); }
+                (1..pts.len() - 1).any(|k| (pts[k] - pts[0]).cross(pts[k + 1] - pts[0]).dot(n) < 0.0)
+            }).count();
+            let covered: f64 = laid.triangles.iter().map(|t| (laid.vertices[t[1]] - laid.vertices[t[0]]).cross(laid.vertices[t[2]] - laid.vertices[t[0]]).length() * 0.5).sum();
+            // Faces whose middle hangs off the surface: a curtain across an opening.
+            let hanging: Vec<(f64, Vec3)> = laid.triangles.iter().map(|t| {
+                let c = (laid.vertices[t[0]] + laid.vertices[t[1]] + laid.vertices[t[2]]) * (1.0 / 3.0);
+                (field.distance(c), c)
+            }).filter(|(d, _)| d.abs() > 0.4).collect();
+            println!("  hanging triangles {} worst {:?}", hanging.len(), hanging.iter().max_by(|a, b| a.0.abs().total_cmp(&b.0.abs())));
+            for t in laid.triangles.iter().filter(|t| {
+                let c = (laid.vertices[t[0]] + laid.vertices[t[1]] + laid.vertices[t[2]]) * (1.0 / 3.0);
+                field.distance(c).abs() > 0.4
+            }).take(3) {
+                let fmt = |i: usize| { let p = laid.vertices[i]; let n = field.gradient(p, 0.1).normalized(); format!("({:.1},{:.2},{:.1}) n.y {:.2} border {}", p.x, p.y, p.z, n.y, laid.border_point[i].is_some()) };
+                println!("    tri {} | {} | {}", fmt(t[0]), fmt(t[1]), fmt(t[2]));
+            }
+            println!("  fan breaks {fan_breaks}, earcut triangles {} covering {covered:.1} m2", laid.triangles.len());
+            println!("{name} piece {index} {:?} f{} b{}: {} faces, {} off layer, {} inward, {} stretched, {} by projection, polygons>4: {}",
+                key.facing, key.in_front, key.behind, laid.faces.len(), off_layer, inward, stretched, laid.settled_by_projection,
+                laid.faces.iter().filter(|f| f.len() > 4).count());
+        }
+    }
+}

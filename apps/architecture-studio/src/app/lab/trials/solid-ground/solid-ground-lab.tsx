@@ -20,6 +20,8 @@ type Piece = {
   behind: number;
   vertices: Point[];
   faces: number[][];
+  /** The faces cut into triangles in the piece's plane, where a concave face is still simple. */
+  triangles: [number, number, number][];
   borderPoint: (number | null)[];
   error: string | null;
 };
@@ -51,8 +53,15 @@ function heights(source: (x: number, z: number) => number) {
   return { originX: -HALF, originZ: -HALF, spacing: SPACING, columns: count, rows: count, heights: values };
 }
 
-/** Faces fanned into triangles, and their edges nudged off the surface so they draw over it. */
-function geometry(piece: Piece) {
+/** Where "cut in half" keeps the world: z <= 0. */
+const KEPT_BY_CUT = (point: number[]) => point[2]! <= 0.01;
+
+/**
+ * The piece's triangles, and its face edges nudged off the surface so they
+ * draw over it. Lines take no clip plane, so with the cut on the edges of the
+ * removed half are left out here.
+ */
+function geometry(piece: Piece, cut: boolean) {
   const normals = piece.vertices.map(() => [0, 0, 0]);
   for (const face of piece.faces) {
     const [a, b, c] = face.map((i) => piece.vertices[i]!);
@@ -68,9 +77,13 @@ function geometry(piece: Piece) {
   });
   const indices: number[] = [];
   const edges: number[] = [];
+  for (const triangle of piece.triangles) indices.push(...triangle);
   for (const face of piece.faces) {
-    for (let k = 1; k + 1 < face.length; k++) indices.push(face[0]!, face[k]!, face[k + 1]!);
-    for (let k = 0; k < face.length; k++) edges.push(...lifted[face[k]!]!, ...lifted[face[(k + 1) % face.length]!]!);
+    for (let k = 0; k < face.length; k++) {
+      const a = lifted[face[k]!]!;
+      const b = lifted[face[(k + 1) % face.length]!]!;
+      if (!cut || (KEPT_BY_CUT(a) && KEPT_BY_CUT(b))) edges.push(...a, ...b);
+    }
   }
   return { positions: new Float32Array(piece.vertices.flat()), indices: new Uint32Array(indices), edges: new Float32Array(edges) };
 }
@@ -186,7 +199,7 @@ export default function SolidGroundLab() {
     shown.current = [];
     result?.response?.pieces.forEach((piece, index) => {
       if (piece.error) return;
-      const { positions, indices, edges } = geometry(piece);
+      const { positions, indices, edges } = geometry(piece, cut);
       const color = PALETTE[index % PALETTE.length]!;
       engine.scene.put({ id: `piece-${index}`, layer: LAYER, visual: { kind: "solid-ground-piece", params: { positions, indices, color } } }, "engine");
       engine.scene.put({ id: `edges-${index}`, layer: LAYER, visual: { kind: "solid-ground-edges", params: { positions: edges } } }, "engine");

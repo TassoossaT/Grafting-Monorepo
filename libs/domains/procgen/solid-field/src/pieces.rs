@@ -117,9 +117,12 @@ pub struct SplitOptions {
     /// and a border climbing it folds over in the piece's plane, and the
     /// faces against it come out as slivers.
     pub steepest_up: f64,
-    /// A piece smaller than this, in surface area, joins the neighbour it
-    /// shares the most border with: the split's grid makes slivers where a
-    /// facing changes, and no mesher lays a sliver well.
+    /// A piece smaller than this, in surface area, joins the neighbour facing
+    /// the same way it shares the most border with: the split's grid makes
+    /// slivers where the crossings counted change, and no mesher lays a
+    /// sliver well. Never a neighbour facing elsewhere -- a steep sliver
+    /// folded into ground facing up is laid seen from above, and its faces
+    /// hang across it like a curtain.
     pub smallest_piece: f64,
 }
 
@@ -261,7 +264,7 @@ fn merge_small_pieces(
             for (from, to) in [(a, b), (b, c), (c, a)] {
                 for &other in &beside[&(from.min(to), from.max(to))] {
                     let neighbour = piece_of[other];
-                    if neighbour != small {
+                    if neighbour != small && pieces[neighbour].key.facing == pieces[small].key.facing {
                         *shared.entry(neighbour).or_default() += positions[from].distance(positions[to]);
                     }
                 }

@@ -11,3 +11,4 @@ crate-type = ["rlib"]
 [dependencies]
 grafting-procgen-irregular-grid = { path = "../irregular-grid" }
 fast-surface-nets = "0.2"
+earcut = "0.4"

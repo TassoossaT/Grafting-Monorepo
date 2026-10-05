@@ -212,7 +212,9 @@ is one.
 
 ### `pub grafting_procgen_solid_field::LaidPiece::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
-Counter-clockwise seen from outside the solid.
+Counter-clockwise seen from outside the solid. Mostly quads; a face
+the grid joined across a short border segment has more corners and
+need not be convex.
 
 ### `pub grafting_procgen_solid_field::LaidPiece::seams_kept: bool`
 
@@ -225,6 +227,12 @@ Corners the lift found no crossing for and settled by projection.
 ### `pub grafting_procgen_solid_field::LaidPiece::tangled: usize`
 
 Crossings left in the rings after untangling.
+
+### `pub grafting_procgen_solid_field::LaidPiece::triangles: alloc::vec::Vec<[usize; 3]>`
+
+Every face cut into triangles, in the piece's plane where the face is
+flat and simple -- never fanned in 3D, which leaves holes in a
+concave face.
 
 ### `pub grafting_procgen_solid_field::LaidPiece::vertices: alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>`
 
@@ -289,9 +297,12 @@ Wound counter-clockwise seen from outside the solid.
 
 ### `pub grafting_procgen_solid_field::SplitOptions::smallest_piece: f64`
 
-A piece smaller than this, in surface area, joins the neighbour it
-shares the most border with: the split's grid makes slivers where a
-facing changes, and no mesher lays a sliver well.
+A piece smaller than this, in surface area, joins the neighbour facing
+the same way it shares the most border with: the split's grid makes
+slivers where the crossings counted change, and no mesher lays a
+sliver well. Never a neighbour facing elsewhere -- a steep sliver
+folded into ground facing up is laid seen from above, and its faces
+hang across it like a curtain.
 
 ### `pub grafting_procgen_solid_field::SplitOptions::steepest_up: f64`
 
@@ -364,7 +375,9 @@ is one.
 
 ### `pub grafting_procgen_solid_field::lay::LaidPiece::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
-Counter-clockwise seen from outside the solid.
+Counter-clockwise seen from outside the solid. Mostly quads; a face
+the grid joined across a short border segment has more corners and
+need not be convex.
 
 ### `pub grafting_procgen_solid_field::lay::LaidPiece::seams_kept: bool`
 
@@ -377,6 +390,12 @@ Corners the lift found no crossing for and settled by projection.
 ### `pub grafting_procgen_solid_field::lay::LaidPiece::tangled: usize`
 
 Crossings left in the rings after untangling.
+
+### `pub grafting_procgen_solid_field::lay::LaidPiece::triangles: alloc::vec::Vec<[usize; 3]>`
+
+Every face cut into triangles, in the piece's plane where the face is
+flat and simple -- never fanned in 3D, which leaves holes in a
+concave face.
 
 ### `pub grafting_procgen_solid_field::lay::LaidPiece::vertices: alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>`
 
@@ -429,9 +448,12 @@ Wound counter-clockwise seen from outside the solid.
 
 ### `pub grafting_procgen_solid_field::pieces::SplitOptions::smallest_piece: f64`
 
-A piece smaller than this, in surface area, joins the neighbour it
-shares the most border with: the split's grid makes slivers where a
-facing changes, and no mesher lays a sliver well.
+A piece smaller than this, in surface area, joins the neighbour facing
+the same way it shares the most border with: the split's grid makes
+slivers where the crossings counted change, and no mesher lays a
+sliver well. Never a neighbour facing elsewhere -- a steep sliver
+folded into ground facing up is laid seen from above, and its faces
+hang across it like a curtain.
 
 ### `pub grafting_procgen_solid_field::pieces::SplitOptions::steepest_up: f64`
 
