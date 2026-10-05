@@ -37,10 +37,14 @@ import type { ToolContext } from "../tools/core/tool-context.ts";
 
 /** Spacing of the heights a zone keeps, in world units. */
 const HEIGHT_SPACING = 0.5;
-/** How far, in faces, the box a zone is read in reaches past its shapes: the ground under open sky has to reach the box on every side. */
-const MARGIN_FACES = 2;
+/**
+ * How far, in faces, the box a zone is read in reaches past its shapes: room
+ * for the collar and a strip of open ground beyond it, and no more -- the
+ * box is not what the stroke changes, but a bigger one costs more to read.
+ */
+const MARGIN_FACES = 1.75;
 /** How wide, in faces, the collar of open ground laid with the shapes is. */
-const COLLAR_FACES = 1.5;
+const COLLAR_FACES = 1;
 /** The steepest slope still laid as ground facing up: 60 degrees. */
 const STEEPEST_UP = 0.5;
 
@@ -300,12 +304,27 @@ function layZone(
     operationId: id,
     sourceSurfaceKeys: replaced,
     patch: { nodes: [...nodes.values()], edges: builder.all(), regions },
-    footprintOutline: [[box.minX, box.minZ], [box.maxX, box.minZ], [box.maxX, box.maxZ], [box.minX, box.maxZ]],
+    // What the structure stands on, not the box it was read in: the ground's
+    // regeneration reaches only round this.
+    footprintOutline: footprintOf(nodes.values()),
   }, { transactionId: id });
   ZONES.set(id, { id, box, shapes, ground, faceSide: shapeFaceSide, seed });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId: id });
   return { faces: regions.length };
 }
+
+/** The plan rectangle the structure's corners stand in. */
+function footprintOf(nodes: Iterable<{ readonly position: ConstructionPosition }>): readonly (readonly [number, number])[] {
+  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+  for (const { position } of nodes) {
+    minX = Math.min(minX, position.x); maxX = Math.max(maxX, position.x);
+    minZ = Math.min(minZ, position.z); maxZ = Math.max(maxZ, position.z);
+  }
+  return [[minX, minZ], [maxX, minZ], [maxX, maxZ], [minX, maxZ]];
+}
+
+/** How far over the point it starts on a tunnel's axis runs, as a fraction of its radius: its floor just under the ground there. */
+const TUNNEL_AXIS_RISE = 0.7;
 
 /** At least this far between the points a stroke's path keeps, as a fraction of its radius. */
 const PATH_STEP = 0.75;
@@ -330,8 +349,26 @@ function thinned(points: readonly ConstructionPosition[], step: number): Constru
 export function tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
   if (path.length < 2) return undefined;
-  const y = path[0]!.y + radius * 0.7;
+  const y = path[0]!.y + radius * TUNNEL_AXIS_RISE;
   return { effect: "carve", radius, path: path.map((p) => [p.x, y, p.z] as const) };
+}
+
+/**
+ * Where the volume a tunnel or bridge stroke would make runs, for its ghost:
+ * the very path the commit lays, or -- before the stroke has gone anywhere --
+ * the one point it would start from.
+ */
+export function solidStrokePath(
+  mode: "tunnel" | "bridge",
+  points: readonly ConstructionPosition[],
+  radius: number,
+  rise: number,
+): readonly ConstructionPosition[] {
+  const shape = mode === "tunnel" ? tunnelShape(points, radius) : bridgeShape(points, radius, rise);
+  if (shape) return shape.path.map(([x, y, z]) => ({ x, y, z }));
+  const first = points[0];
+  if (!first) return [];
+  return [mode === "tunnel" ? { ...first, y: first.y + radius * TUNNEL_AXIS_RISE } : first];
 }
 
 /**

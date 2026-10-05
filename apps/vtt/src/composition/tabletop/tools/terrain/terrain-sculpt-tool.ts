@@ -4,12 +4,12 @@ import type {
   ConstructionCoveredRegion,
 } from "@/ports";
 
-import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
+import { brushSweptOutlinePolygons, brushSweptRegionFill, capsuleWireframe } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "../../terrain/terrain-restack.ts";
 import { OUTLINE_CHORD_PER_FACE } from "../../terrain/terrain-constraints.ts";
 import type { TerrainStrokeBounds } from "../../terrain/terrain-neighborhood.ts";
 import { executeTerrainCut } from "../../terrain/terrain-cut-executor.ts";
-import { bridgeShape, commitSolidShape, reshapeZoneGround, tunnelShape } from "../../terrain/solid-ground.ts";
+import { bridgeShape, commitSolidShape, reshapeZoneGround, solidStrokePath, tunnelShape } from "../../terrain/solid-ground.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 import type { PlanarArea } from "@/features/edit-construction";
 
@@ -50,6 +50,9 @@ const TERRAIN_COLOR: Record<"terrain" | "terrain-grass", number> = {
   terrain: 0x334155,
   "terrain-grass": 0x4a7a4a,
 };
+
+/** The wire a tunnel's or bridge's volume is ghosted in: the light grey the walls already use, which reads over any ground. */
+const VOLUME_GHOST_COLOR = 0xe2e8f0;
 
 /**
  * World units between noise samples.
@@ -167,7 +170,15 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
+  // A tunnel or bridge shows the volume it would make under the pointer before the stroke starts.
+  previewOnHover: (params: TerrainSculptParams) => params.mode === "tunnel" || params.mode === "bridge",
+
   previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
+    if (params.mode === "tunnel" || params.mode === "bridge") {
+      // The volume itself, from the very path the commit lays.
+      const path = solidStrokePath(params.mode, gesture.samples.map((sample) => sample.point), params.brushRadius, params.elevationStep ?? 2);
+      return capsuleWireframe(path, params.brushRadius, VOLUME_GHOST_COLOR);
+    }
     const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
     const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
     return brushSweptRegionFill(

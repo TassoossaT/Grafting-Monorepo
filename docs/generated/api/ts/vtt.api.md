@@ -1423,6 +1423,12 @@ under the brush with the falloff of a round brush -- and the zone is laid
 again over the hill as it now is, its tunnels following it. `undefined`
 when the stroke reaches no zone.
 
+### `function vtt.solid-ground.solidStrokePath(mode: "tunnel" | "bridge", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[]`
+
+Where the volume a tunnel or bridge stroke would make runs, for its ghost:
+the very path the commit lays, or -- before the stroke has gone anywhere --
+the one point it would start from.
+
 ### `function vtt.solid-ground.tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined`
 
 A tunnel pushed into the hill from where the stroke starts: level at that
@@ -4531,6 +4537,15 @@ be the identical shape, or the stroke would affect ground the preview
 never highlighted.
 
 ### `function vtt.preview-shapes.brushSweptRegionFill(port: PlanarPort, samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number, chord: number): PreviewDescriptor`
+
+### `function vtt.preview-shapes.capsuleWireframe(path: readonly ConstructionPosition[], radius: number, color: number, opacity: number): PreviewDescriptor`
+
+A capsule swept along `path` -- every point within `radius` of it -- drawn
+as a wire volume: three great circles round each point of the path, rings
+across each span every so often and four lines down its sides. A wire
+reads as a volume where a flat fill reads as a disc, and the preview layer
+draws it through whatever stands in front, so a shape inside a hill is
+still seen whole. One point is a sphere.
 
 ### `function vtt.preview-shapes.circleOutline(center: ConstructionPosition, radius: number, color: number, opacity: number): PreviewDescriptor`
 

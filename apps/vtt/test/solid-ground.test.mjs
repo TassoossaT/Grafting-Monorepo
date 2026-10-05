@@ -144,7 +144,9 @@ function seamGaps(runtime) {
     const t = l > 0 ? Math.max(0, Math.min(1, ((q.x - a.x) * d.x + (q.y - a.y) * d.y + (q.z - a.z) * d.z) / l)) : 0;
     return Math.hypot(q.x - a.x - d.x * t, q.y - a.y - d.y * t, q.z - a.z - d.z * t);
   };
-  return [...rim].map((id) => at.get(id)).filter((q) => Math.abs(q.x) < 19 && Math.abs(q.z) < 19).map((q) => Math.min(...groundEdges.map(([a, b]) => toSegment(q, a, b))));
+  const gaps = [...rim].map((id) => at.get(id)).filter((q) => Math.abs(q.x) < 19 && Math.abs(q.z) < 19).map((q) => ({ q, gap: Math.min(...groundEdges.map(([a, b]) => toSegment(q, a, b))) }));
+  probe("worst edge gaps", [...gaps].sort((a, b) => b.gap - a.gap).slice(0, 4).map(({ q, gap }) => `(${q.x.toFixed(1)},${q.y.toFixed(2)},${q.z.toFixed(1)}) ${gap.toFixed(2)}`).join("  "));
+  return gaps.map(({ gap }) => gap);
 }
 
 function seamGapsWhere(runtime) {
@@ -219,4 +221,37 @@ test("a raise stroke over a tunnel's zone raises the hill over it and keeps the 
     const under = faces.flatMap((t) => t.nodes).filter((n) => Math.abs(n.position.x) < 2 && Math.abs(n.position.z) < 1).map((n) => n.position.y);
     assert.ok(Math.min(...under) < 0.5, "the tunnel's floor is still there under it");
   } finally { session.free(); }
+});
+
+test("probe: how much of the ground a tunnel stroke replaces", () => {
+  if (process.env.PROBE !== "1") return;
+  const { runtime, ctx, session } = setup(hill);
+  try {
+    const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: 1.8, faceSize: 2 };
+    stroke(ctx, drag([-8, 0], [0, 0]), { tool, heightAt: hill });
+    const ground = terrain(runtime);
+    const original = ground.filter((t) => t.surfaceKey.some((part) => part.startsWith("q:")));
+    const replacedFar = ground.filter((t) => !t.surfaceKey.some((part) => part.startsWith("q:"))).filter((t) => {
+      const x = t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length, z = t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length;
+      return Math.abs(z) > 8 || x > 8 || x < -16;
+    });
+    console.log("ground faces", ground.length, "original kept", original.length, "of 400", "new faces far from the stroke", replacedFar.length, "keys sample", ground.find((t) => !t.surfaceKey.some((p) => p.startsWith("q:")))?.surfaceKey);
+  } finally { session.free(); }
+});
+
+test("a tunnel stroke is ghosted as the volume it carves: a sphere under the pointer, a capsule along the drag", () => {
+  const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "tunnel", brushRadius: 1.8, faceSize: 2 };
+  assert.equal(terrainSculptTool.previewOnHover(tool), true, "shown before the stroke starts");
+  assert.equal(terrainSculptTool.previewOnHover({ ...tool, mode: "add" }), false, "the other modes keep their own ghost");
+  const at = (x, z) => ({ point: { x, y: hill(x, z), z } });
+  const hover = terrainSculptTool.previewFor({ start: at(-8, 0), current: at(-8, 0), samples: [at(-8, 0)] }, tool, {});
+  assert.equal(hover.kind, "segments");
+  const ys = [];
+  for (let i = 1; i < hover.positions.length; i += 3) ys.push(hover.positions[i]);
+  const centre = (Math.max(...ys) + Math.min(...ys)) / 2;
+  assert.ok(Math.abs(centre - (hill(-8, 0) + 1.8 * 0.7)) < 1e-3, "the sphere stands where the tunnel's axis starts");
+  assert.ok(Math.abs(Math.max(...ys) - Math.min(...ys) - 3.6) < 1e-3, "as wide as the tunnel");
+  const samples = drag([-8, 0], [0, 0]).map(([x, z]) => at(x, z));
+  const drawn = terrainSculptTool.previewFor({ start: samples[0], current: samples.at(-1), samples }, tool, {});
+  assert.ok(drawn.positions.length > hover.positions.length * 2, "a capsule along the drag");
 });

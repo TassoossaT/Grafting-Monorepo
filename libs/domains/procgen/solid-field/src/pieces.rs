@@ -284,34 +284,45 @@ fn split_collars(
         [(a, b), (b, c), (c, a)].into_iter().flat_map(move |(from, to)| beside[&(from.min(to), from.max(to))].iter().copied()).filter(move |&other| other != t)
     };
 
-    // Distance over the surface from the nearest triangle of a shape's piece.
-    let mut distance = vec![f64::INFINITY; triangles.len()];
-    let mut frontier: Vec<usize> = Vec::new();
-    for t in 0..triangles.len() {
-        if open(t, piece_of, pieces) && neighbours(t).any(|other| !open(other, piece_of, pieces)) {
+    // Distance over open ground from the triangles in `from`, out to `limit`.
+    let spread = |from: &dyn Fn(usize) -> bool, within: &dyn Fn(usize) -> bool, limit: f64| -> Vec<f64> {
+        let mut distance = vec![f64::INFINITY; triangles.len()];
+        let mut frontier: Vec<usize> = (0..triangles.len()).filter(|&t| within(t) && from(t)).collect();
+        for &t in &frontier {
             distance[t] = 0.0;
-            frontier.push(t);
         }
-    }
-    while !frontier.is_empty() {
-        let mut next = Vec::new();
-        for t in frontier {
-            for other in neighbours(t) {
-                if !open(other, piece_of, pieces) {
-                    continue;
-                }
-                let through = distance[t] + centre(t).distance(centre(other));
-                if through < distance[other] && through < reach {
-                    distance[other] = through;
-                    next.push(other);
+        while !frontier.is_empty() {
+            let mut next = Vec::new();
+            for t in frontier {
+                for other in neighbours(t) {
+                    if !within(other) {
+                        continue;
+                    }
+                    let through = distance[t] + centre(t).distance(centre(other));
+                    if through < distance[other] && through < limit {
+                        distance[other] = through;
+                        next.push(other);
+                    }
                 }
             }
+            frontier = next;
         }
-        frontier = next;
-    }
+        distance
+    };
+    let is_open = |t: usize| open(t, piece_of, pieces);
+
+    // Closed, not merely grown: open ground within twice the reach of a
+    // shape, less what lies within the reach of open ground beyond that. A
+    // collar grown alone wraps a shape's thin tips in notches narrower than a
+    // face, which ground laid against it cuts straight across.
+    let touches_shape = |t: usize| neighbours(t).any(|other| !is_open(other));
+    let grown = spread(&touches_shape, &is_open, 2.0 * reach);
+    let in_grown = |t: usize| is_open(t) && grown[t] < 2.0 * reach;
+    let touches_beyond = |t: usize| neighbours(t).any(|other| is_open(other) && !in_grown(other));
+    let shrunk = spread(&touches_beyond, &in_grown, reach);
 
     // Each connected stretch of collar becomes a piece.
-    let in_collar: Vec<bool> = (0..triangles.len()).map(|t| distance[t] < reach && open(t, piece_of, pieces)).collect();
+    let in_collar: Vec<bool> = (0..triangles.len()).map(|t| in_grown(t) && shrunk[t] >= reach).collect();
     let mut seen = vec![false; triangles.len()];
     for seed in 0..triangles.len() {
         if !in_collar[seed] || seen[seed] {

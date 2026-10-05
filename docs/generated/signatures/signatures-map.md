@@ -3985,6 +3985,13 @@ export function reshapeZoneGround(
   // No zone was ever laid: an ordinary stroke has nothing more to do here.
 export function tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
+export function solidStrokePath(
+  mode: "tunnel" | "bridge",
+  points: readonly ConstructionPosition[],
+  radius: number,
+  rise: number,
+  ): readonly ConstructionPosition[] {
+  const shape = mode === "tunnel" ? tunnelShape(points, radius) : bridgeShape(points, radius, rise);
 export function bridgeShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionSolidShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
 
@@ -5320,6 +5327,14 @@ export function circularBrushStrokeOutline(
   ): PreviewDescriptor {
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
+export function capsuleWireframe(
+  path: readonly ConstructionPosition[],
+  radius: number,
+  color: number,
+  opacity = 0.75,
+  ): PreviewDescriptor {
+  const positions: number[] = [];
+  const add = (a: ConstructionPosition, b: ConstructionPosition) => positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
 
 // src/composition/tabletop/tools/shapes/ribbon-mesh-preview.ts
 export const PREVIEW_ELEVATION = 0.05;
@@ -5439,9 +5454,9 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
-  const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
-  const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
+  // A tunnel or bridge shows the volume it would make under the pointer before the stroke starts.
+  previewOnHover: (params: TerrainSculptParams) => params.mode === "tunnel" || params.mode === "bridge",
+
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
