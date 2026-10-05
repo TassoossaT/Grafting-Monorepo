@@ -224,6 +224,13 @@ not edit state: it is never undone and moves no geometry.
 The session's current nodes, edges, and surfaces, for a caller to
 render from without re-deriving state.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::solid_ground_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Solid ground that can hold caves, tunnels and bridges: a height grid
+plus shapes that carve or fill it, split into pieces and each laid by
+the irregular quad grid. Pure -- reads nothing from this session and
+mutates nothing in it. See `solid_ground::solid_ground`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_mesh_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 One surface's triangulated mesh piece(s), by key -- what a caller

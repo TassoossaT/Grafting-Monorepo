@@ -147,6 +147,14 @@ pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
+// src/solid_ground.rs
+pub struct HeightGridDto
+pub struct ShapeDto
+pub struct SolidGroundRequest
+pub struct LaidPieceDto
+pub struct SolidGroundResponse
+pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, String>
+
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
 pub struct RegionBounds

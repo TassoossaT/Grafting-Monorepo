@@ -679,6 +679,16 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Solid ground that can hold caves, tunnels and bridges: a height grid
+    /// plus shapes that carve or fill it, split into pieces and each laid by
+    /// the irregular quad grid. Pure -- reads nothing from this session and
+    /// mutates nothing in it. See `solid_ground::solid_ground`.
+    pub fn solid_ground_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = crate::solid_ground::solid_ground(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     /// Which of the given XZ points already sit inside a region -- what a
     /// generator consults so it only builds over open ground. See
     /// `footprint::classify_points`.
