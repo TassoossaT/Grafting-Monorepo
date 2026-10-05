@@ -170,6 +170,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
         { key: "terrain-add", label: "Adicionar", icon: "⛰️", tooltip: "Adicionar terreno: arraste para erguer o chão", active: isTerrainSculptActive && terrainStroke === "add", disabled: !ready, onClick: () => onTerrainModeChange("add") },
         { key: "terrain-dig", label: "Remover", icon: "⛏️", tooltip: "Remover terreno: arraste para cavar", active: isTerrainSculptActive && terrainStroke === "dig", disabled: !ready, onClick: () => onTerrainModeChange("dig") },
         { key: "terrain-flatten", label: "Aplainar", icon: "▬", tooltip: "Aplainar: arraste para nivelar o chão", active: isTerrainSculptActive && terrainStroke === "flatten", disabled: !ready, onClick: () => onTerrainModeChange("flatten") },
+        { key: "terrain-tunnel", label: "Túnel", icon: "🕳️", tooltip: "Túnel: arraste da encosta para dentro do morro", active: isTerrainSculptActive && terrainStroke === "tunnel", disabled: !ready, onClick: () => onTerrainModeChange("tunnel") },
+        { key: "terrain-bridge", label: "Ponte de terra", icon: "🌉", tooltip: "Ponte de terra: arraste de uma margem até a outra", active: isTerrainSculptActive && terrainStroke === "bridge", disabled: !ready, onClick: () => onTerrainModeChange("bridge") },
       ],
     },
     {

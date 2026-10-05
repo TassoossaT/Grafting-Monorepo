@@ -44,6 +44,10 @@ pub struct SolidGroundRequest {
     pub region_max: [f64; 3],
     pub cell: f64,
     pub face_side: f64,
+    /// Face size of the pieces a shape made -- cave, tunnel, bridge. Omitted
+    /// lays them at `faceSide`.
+    #[serde(default)]
+    pub shape_face_side: Option<f64>,
     #[serde(default = "default_steepest_up")]
     pub steepest_up: f64,
     #[serde(default)]
@@ -61,6 +65,9 @@ pub struct LaidPieceDto {
     pub facing: String,
     pub in_front: usize,
     pub behind: usize,
+    /// Ground under open sky with nothing beneath it -- what the height map
+    /// alone already is. Every other piece is a shape's.
+    pub open_ground: bool,
     pub vertices: Vec<[f64; 3]>,
     pub faces: Vec<Vec<usize>>,
     /// The faces cut into triangles in the piece's own plane: what to draw.
@@ -112,7 +119,8 @@ pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, 
     }
     let region = Region { min: point(request.region_min), max: point(request.region_max), cell: request.cell };
     let options = SplitOptions { steepest_up: request.steepest_up, smallest_piece: request.face_side * request.face_side };
-    let laid = lay_ground(&field, &region, &options, request.face_side, request.seed);
+    let shape_face_side = request.shape_face_side.filter(|side| *side > 0.0).unwrap_or(request.face_side);
+    let laid = lay_ground(&field, &region, &options, request.face_side, shape_face_side, request.seed);
 
     Ok(SolidGroundResponse {
         border_points: laid.border_points.into_iter().map(array).collect(),
@@ -121,11 +129,13 @@ pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, 
             .into_iter()
             .map(|(key, result)| {
                 let facing = format!("{:?}", key.facing).to_lowercase();
+                let open_ground = key.is_open_ground();
                 match result {
                     Ok(piece) => LaidPieceDto {
                         facing,
                         in_front: key.in_front,
                         behind: key.behind,
+                        open_ground,
                         vertices: piece.vertices.into_iter().map(array).collect(),
                         faces: piece.faces,
                         triangles: piece.triangles,
@@ -136,6 +146,7 @@ pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, 
                         facing,
                         in_front: key.in_front,
                         behind: key.behind,
+                        open_ground,
                         vertices: Vec::new(),
                         faces: Vec::new(),
                         triangles: Vec::new(),

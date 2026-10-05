@@ -9,6 +9,7 @@ import { dirtLoadOver, restackTerrain } from "../../terrain/terrain-restack.ts";
 import { OUTLINE_CHORD_PER_FACE } from "../../terrain/terrain-constraints.ts";
 import type { TerrainStrokeBounds } from "../../terrain/terrain-neighborhood.ts";
 import { executeTerrainCut } from "../../terrain/terrain-cut-executor.ts";
+import { bridgeShape, commitSolidShape, reshapeZoneGround, tunnelShape } from "../../terrain/solid-ground.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 import type { PlanarArea } from "@/features/edit-construction";
 
@@ -185,6 +186,10 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerMove(): void {},
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
+    if (params.mode === "tunnel" || params.mode === "bridge") {
+      solidStroke(ctx, gesture, params);
+      return;
+    }
     const causeId = `${ctx.tableId}:terrain-sculpt:${ctx.nextSequence()}`;
     // One stroke is one transaction: its edge splits, fills and replacements
     // undo together, and a failure part way leaves the ground as it was.
@@ -194,8 +199,50 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     } catch (error) {
       ctx.reportFeedback({ tone: "error", message: `Terreno preservado: ${error instanceof Error ? error.message : String(error)}` });
     }
+    zoneStroke(ctx, gesture, params);
   },
 };
+
+/**
+ * The same stroke over a tunnel's or bridge's zone, where the heights the
+ * zone keeps are the ground's: they are raised, lowered or levelled and the
+ * zone laid again, the tunnel following the hill (`terrain/solid-ground.ts`).
+ */
+function zoneStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
+  const mode = params.mode ?? "add";
+  const edit = mode === "flatten" ? "flatten" : mode === "dig" || mode === "lower" ? "lower" : "raise";
+  try {
+    const reshaped = reshapeZoneGround(ctx, gesture.samples.map((sample) => sample.point), params.brushRadius, edit, params.elevationStep ?? 2);
+    if (reshaped) ctx.reportFeedback({ tone: "success", message: `Terreno escavado refeito: ${reshaped.faces} faces.` });
+  } catch (error) {
+    ctx.reportFeedback({ tone: "error", message: `Túnel preservado: ${error instanceof Error ? error.message : String(error)}` });
+  }
+}
+
+/**
+ * A tunnel or an earth bridge: ground over ground, laid as a shape into the
+ * hill rather than as a height over the plane (`terrain/solid-ground.ts`).
+ * Its own transaction, like a floor's, which the ground's regeneration answers.
+ */
+function solidStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
+  const points = gesture.samples.map((sample) => sample.point);
+  const shape = params.mode === "tunnel"
+    ? tunnelShape(points, params.brushRadius)
+    : bridgeShape(points, params.brushRadius, params.elevationStep ?? 2);
+  if (!shape) {
+    ctx.reportFeedback({
+      tone: "info",
+      message: params.mode === "tunnel" ? "Arraste da encosta para dentro do morro." : "Arraste de uma margem até a outra.",
+    });
+    return;
+  }
+  try {
+    const { faces } = commitSolidShape(ctx, { shape, faceSide: strokeFaceSize(params), seed: Math.floor(params.seed ?? 1) || 1 });
+    ctx.reportFeedback({ tone: "success", message: `${params.mode === "tunnel" ? "Túnel" : "Ponte"}: ${faces} faces.` });
+  } catch (error) {
+    ctx.reportFeedback({ tone: "error", message: `Terreno preservado: ${error instanceof Error ? error.message : String(error)}` });
+  }
+}
 
 function sculptStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams, causeId: string): void {
   const faceSize = strokeFaceSize(params);

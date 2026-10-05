@@ -42,6 +42,8 @@ import type {
   ConstructionGraphSnapshot,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
+  ConstructionSolidGround,
+  ConstructionSolidGroundRequest,
   ConstructionNodeId,
   ConstructionHostPoint,
   ConstructionPatch,
@@ -184,6 +186,8 @@ export interface TabletopRuntime extends BezierPort {
   generateIrregularQuadGrid(
     request: ConstructionIrregularQuadGridRequest,
   ): ConstructionIrregularQuadGrid | undefined;
+  /** Solid ground split into pieces and laid. See `ConstructionSessionPort.solidGround`. */
+  solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Region boundaries near a local edit, resolved in one engine call. */
@@ -1008,6 +1012,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): ConstructionIrregularQuadGrid | undefined {
     this.#requireReady("generating a terrain grid");
     return this.#construction.generateIrregularQuadGrid(request);
+  }
+
+  solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined {
+    this.#requireReady("laying solid ground");
+    return this.#construction.solidGround(request);
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {

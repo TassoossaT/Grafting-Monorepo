@@ -83,9 +83,11 @@ export interface WallParams {
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
 /**
- * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
+ * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
+ * or makes ground over ground: a tunnel pushed into the hill from where it starts ("tunnel"), an earth bridge from where it
+ * starts to where it ends ("bridge").
  */
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "tunnel" | "bridge";
 
 /**
  * Derives a recommended face size proportionally from the brush radius.

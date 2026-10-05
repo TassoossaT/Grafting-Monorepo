@@ -76,19 +76,37 @@ The height part alone: ground as if no shape stood anywhere.
 Polynomial smooth minimum (Inigo Quilez): `min(a, b)` with the corner
 rounded over a width of `k`. `k = 0` is the plain minimum.
 
-### `pub fn grafting_procgen_solid_field::lay::lay_ground<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions, face_side: f64, seed: u32) -> grafting_procgen_solid_field::lay::LaidGround`
+### `pub fn grafting_procgen_solid_field::lay::lay_ground<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions, face_side: f64, shape_face_side: f64, seed: u32) -> grafting_procgen_solid_field::lay::LaidGround`
 
-The whole pipeline, end to end: split, borders at `face_side`, each piece
-laid at `face_side`.
+The whole pipeline, end to end: split, borders laid, each piece laid.
+
+Open ground -- the piece facing up with nothing over or under it -- is
+laid at `face_side`, the size ground has everywhere else. Every other
+piece is what a shape made, and is laid at `shape_face_side`: a cave three
+metres across laid in two-metre faces is a box. Borders are laid at the
+finer of the two, so both sides of each one meet on its points.
+
+Where the grid still puts a corner partway along a border, the border
+takes it -- both pieces' rings -- and the pieces are laid again: the same
+adoption the tabletop's ground already does for a road it meets.
 
 ### `pub fn grafting_procgen_solid_field::lay::lay_piece<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, split: &grafting_procgen_solid_field::pieces::Split, seams: &grafting_procgen_solid_field::seams::Seams, index: usize, face_side: f64, seed: u32) -> core::result::Result<grafting_procgen_solid_field::lay::LaidPiece, alloc::string::String>`
 
 Lays piece `index` of `split` with faces `face_side` wide.
 
-### `pub fn grafting_procgen_solid_field::lay_ground<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions, face_side: f64, seed: u32) -> grafting_procgen_solid_field::lay::LaidGround`
+### `pub fn grafting_procgen_solid_field::lay_ground<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions, face_side: f64, shape_face_side: f64, seed: u32) -> grafting_procgen_solid_field::lay::LaidGround`
 
-The whole pipeline, end to end: split, borders at `face_side`, each piece
-laid at `face_side`.
+The whole pipeline, end to end: split, borders laid, each piece laid.
+
+Open ground -- the piece facing up with nothing over or under it -- is
+laid at `face_side`, the size ground has everywhere else. Every other
+piece is what a shape made, and is laid at `shape_face_side`: a cave three
+metres across laid in two-metre faces is a box. Borders are laid at the
+finer of the two, so both sides of each one meet on its points.
+
+Where the grid still puts a corner partway along a border, the border
+takes it -- both pieces' rings -- and the pieces are laid again: the same
+adoption the tabletop's ground already does for a road it meets.
 
 ### `pub fn grafting_procgen_solid_field::lay_piece<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, split: &grafting_procgen_solid_field::pieces::Split, seams: &grafting_procgen_solid_field::seams::Seams, index: usize, face_side: f64, seed: u32) -> core::result::Result<grafting_procgen_solid_field::lay::LaidPiece, alloc::string::String>`
 
@@ -109,15 +127,20 @@ The plane the piece is laid in, as `(u, v)` with `u x v = axis`: a
 ring counter-clockwise in `(u, v)` is counter-clockwise seen from
 outside the solid, so faces laid there need no flipping when lifted.
 
+### `pub fn grafting_procgen_solid_field::pieces::PieceKey::is_open_ground(&self) -> bool`
+
+Ground under open sky with nothing beneath it: what a height map alone
+already is, and the one piece that is not a shape's.
+
 ### `pub fn grafting_procgen_solid_field::pieces::split<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, region: &grafting_procgen_solid_field::pieces::Region, options: &grafting_procgen_solid_field::pieces::SplitOptions) -> grafting_procgen_solid_field::pieces::Split`
 
 Reads the surface in `region` and splits it into pieces.
 
-### `pub fn grafting_procgen_solid_field::seams::seams<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, split: &grafting_procgen_solid_field::pieces::Split, spacing: f64, step: f64) -> grafting_procgen_solid_field::seams::Seams`
+### `pub fn grafting_procgen_solid_field::seams::seams<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, split: &grafting_procgen_solid_field::pieces::Split, region: &grafting_procgen_solid_field::pieces::Region, spacing: f64, step: f64) -> grafting_procgen_solid_field::seams::Seams`
 
 Lays every border in `split` at `spacing`.
 
-### `pub fn grafting_procgen_solid_field::seams<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, split: &grafting_procgen_solid_field::pieces::Split, spacing: f64, step: f64) -> grafting_procgen_solid_field::seams::Seams`
+### `pub fn grafting_procgen_solid_field::seams<H: grafting_procgen_solid_field::field::HeightSource>(field: &grafting_procgen_solid_field::field::SolidField<H>, split: &grafting_procgen_solid_field::pieces::Split, region: &grafting_procgen_solid_field::pieces::Region, spacing: f64, step: f64) -> grafting_procgen_solid_field::seams::Seams`
 
 Lays every border in `split` at `spacing`.
 
@@ -155,6 +178,16 @@ Reads the surface in `region` and splits it into pieces.
 ### `pub fn grafting_procgen_solid_field::vector::Vec3::normalized(self) -> Self`
 
 ### `pub fn grafting_procgen_solid_field::vector::Vec3::sub(self, other: Self) -> Self`
+
+### `pub grafting_procgen_solid_field::BorderSplit::position: grafting_procgen_solid_field::vector::Vec3`
+
+### `pub grafting_procgen_solid_field::BorderSplit::ring: usize`
+
+Index into the piece's rings in [`Seams::rings`].
+
+### `pub grafting_procgen_solid_field::BorderSplit::segment: usize`
+
+The segment from point `segment` of that ring to the next.
 
 ### `pub grafting_procgen_solid_field::Effect::Carve`
 
@@ -209,6 +242,11 @@ have: each one a crack. Zero when the borders were laid fine enough.
 
 Index-aligned with `vertices`: the border point a corner is, where it
 is one.
+
+### `pub grafting_procgen_solid_field::LaidPiece::border_splits: alloc::vec::Vec<grafting_procgen_solid_field::lay::BorderSplit>`
+
+Corners the grid put partway along a border segment, which the piece
+across has to take too: see [`lay_ground`].
 
 ### `pub grafting_procgen_solid_field::LaidPiece::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
@@ -357,6 +395,16 @@ rounds the lip of a tunnel mouth. `0` cuts it sharp.
 
 ### `pub grafting_procgen_solid_field::field::SolidField::shapes: alloc::vec::Vec<grafting_procgen_solid_field::field::Shape>`
 
+### `pub grafting_procgen_solid_field::lay::BorderSplit::position: grafting_procgen_solid_field::vector::Vec3`
+
+### `pub grafting_procgen_solid_field::lay::BorderSplit::ring: usize`
+
+Index into the piece's rings in [`Seams::rings`].
+
+### `pub grafting_procgen_solid_field::lay::BorderSplit::segment: usize`
+
+The segment from point `segment` of that ring to the next.
+
 ### `pub grafting_procgen_solid_field::lay::LaidGround::border_points: alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>`
 
 The border points every piece shares.
@@ -372,6 +420,11 @@ have: each one a crack. Zero when the borders were laid fine enough.
 
 Index-aligned with `vertices`: the border point a corner is, where it
 is one.
+
+### `pub grafting_procgen_solid_field::lay::LaidPiece::border_splits: alloc::vec::Vec<grafting_procgen_solid_field::lay::BorderSplit>`
+
+Corners the grid put partway along a border segment, which the piece
+across has to take too: see [`lay_ground`].
 
 ### `pub grafting_procgen_solid_field::lay::LaidPiece::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
@@ -575,6 +628,10 @@ border that ends there ends on the same point.
 The one 3D vector this crate needs, kept local so no vector library's type
 crosses its public API.
 
+### `pub struct grafting_procgen_solid_field::BorderSplit`
+
+A corner the grid put partway along one of a piece's border segments.
+
 ### `pub struct grafting_procgen_solid_field::HeightGrid`
 
 Heights sampled on a regular grid of the plane, read back bilinearly and
@@ -634,6 +691,10 @@ so the list grows with what was made, not with how long the drag took.
 ### `pub struct grafting_procgen_solid_field::field::SolidField<H: grafting_procgen_solid_field::field::HeightSource>`
 
 Where there is solid.
+
+### `pub struct grafting_procgen_solid_field::lay::BorderSplit`
+
+A corner the grid put partway along one of a piece's border segments.
 
 ### `pub struct grafting_procgen_solid_field::lay::LaidGround`
 

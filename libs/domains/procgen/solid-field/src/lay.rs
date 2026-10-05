@@ -46,6 +46,19 @@ pub struct LaidPiece {
     pub seams_kept: bool,
     /// Crossings left in the rings after untangling.
     pub tangled: usize,
+    /// Corners the grid put partway along a border segment, which the piece
+    /// across has to take too: see [`lay_ground`].
+    pub border_splits: Vec<BorderSplit>,
+}
+
+/// A corner the grid put partway along one of a piece's border segments.
+#[derive(Debug, Clone, Copy)]
+pub struct BorderSplit {
+    /// Index into the piece's rings in [`Seams::rings`].
+    pub ring: usize,
+    /// The segment from point `segment` of that ring to the next.
+    pub segment: usize,
+    pub position: Vec3,
 }
 
 /// Every pair of ring segments that cross, as `(ring, segment)` pairs.
@@ -146,6 +159,7 @@ pub fn lay_piece<H: HeightSource>(
             added_on_border: 0,
             seams_kept: true,
             tangled: 0,
+            border_splits: Vec::new(),
         });
     }
     let tangled = untangle(&mut rings);
@@ -155,6 +169,10 @@ pub fn lay_piece<H: HeightSource>(
             area(&rings[a]).total_cmp(&area(&rings[b]))
         })
         .unwrap();
+    // Where each ring went: the outer one first, the holes after it in the
+    // order `swap_remove` leaves them.
+    let mut order: Vec<usize> = (0..rings.len()).collect();
+    order.swap_remove(outer);
     let boundary = vec![rings.swap_remove(outer)];
     let holes = rings;
 
@@ -177,6 +195,12 @@ pub fn lay_piece<H: HeightSource>(
     let relax = RelaxOptions { pin_boundary: false, ..RelaxOptions::standard() };
     let grid = build_constrained_quad_grid(&options, seed, &relax)
         .ok_or_else(|| format!("piece {index} ({key:?}): its rings describe no ground"))?;
+    if !grid.seams_kept {
+        // The grid could not keep the borders as given -- two of them cross
+        // in the plane -- and would put a corner on every segment, each one a
+        // crack. The piece is laid from its own border points instead.
+        return Ok(laid_from_rings(&options, seams, tangled));
+    }
 
     // The lift: from the region's face in front of the piece, back along the
     // axis, to the crossing with `in_front` crossings before it.
@@ -225,8 +249,24 @@ pub fn lay_piece<H: HeightSource>(
         }
         local.clear();
         earcut::Earcut::new().earcut(face.iter().map(|&i| [grid.mesh.vertices[i].x, grid.mesh.vertices[i].y]), &[], &mut local);
-        triangles.extend(local.chunks_exact(3).map(|t| [face[t[0] as usize], face[t[1] as usize], face[t[2] as usize]]));
+        if local.len() / 3 == face.len() - 2 {
+            triangles.extend(local.chunks_exact(3).map(|t| [face[t[0] as usize], face[t[1] as usize], face[t[2] as usize]]));
+        } else {
+            // A face touching itself in the plane, which earcut leaves partly
+            // bare: a fan at least covers it.
+            triangles.extend((1..face.len() - 1).map(|k| [face[0], face[k], face[k + 1]]));
+        }
     }
+
+    let border_splits = grid
+        .on_contour
+        .iter()
+        .map(|node| BorderSplit {
+            ring: if node.location.in_holes { order[node.location.ring] } else { outer },
+            segment: node.location.segment,
+            position: vertices[node.vertex],
+        })
+        .collect();
 
     Ok(LaidPiece {
         vertices,
@@ -237,7 +277,46 @@ pub fn lay_piece<H: HeightSource>(
         added_on_border: grid.on_contour.len(),
         tangled,
         seams_kept: grid.seams_kept,
+        border_splits,
     })
+}
+
+/// A piece laid from its border points alone, cut into triangles in its
+/// plane: no corner of its own, so nothing the pieces round it lack.
+fn laid_from_rings(options: &ConstrainedOptions, seams: &Seams, tangled: usize) -> LaidPiece {
+    let mut flat: Vec<[f64; 2]> = Vec::new();
+    let mut ids: Vec<usize> = Vec::new();
+    let mut holes: Vec<u32> = Vec::new();
+    for (index, ring) in options.boundary.iter().chain(options.holes.iter()).enumerate() {
+        if index > 0 {
+            holes.push(flat.len() as u32);
+        }
+        for point in ring {
+            flat.push([point.position.x, point.position.y]);
+            ids.push(point.source.expect("every ring point is a border point") as usize);
+        }
+    }
+    let mut local: Vec<u32> = Vec::new();
+    earcut::Earcut::new().earcut(flat.iter().copied(), &holes, &mut local);
+    let triangles: Vec<[usize; 3]> = local
+        .chunks_exact(3)
+        .map(|t| {
+            let [a, b, c] = [t[0] as usize, t[1] as usize, t[2] as usize];
+            let turn = (flat[b][0] - flat[a][0]) * (flat[c][1] - flat[a][1]) - (flat[b][1] - flat[a][1]) * (flat[c][0] - flat[a][0]);
+            if turn < 0.0 { [a, c, b] } else { [a, b, c] }
+        })
+        .collect();
+    LaidPiece {
+        vertices: ids.iter().map(|&id| seams.points[id]).collect(),
+        faces: triangles.iter().map(|t| t.to_vec()).collect(),
+        triangles,
+        border_point: ids.into_iter().map(Some).collect(),
+        settled_by_projection: 0,
+        added_on_border: 0,
+        seams_kept: false,
+        tangled,
+        border_splits: Vec::new(),
+    }
 }
 
 trait PlaneDistance {
@@ -259,19 +338,98 @@ pub struct LaidGround {
     pub pieces: Vec<(crate::pieces::PieceKey, Result<LaidPiece, String>)>,
 }
 
-/// The whole pipeline, end to end: split, borders at `face_side`, each piece
-/// laid at `face_side`.
+/// The whole pipeline, end to end: split, borders laid, each piece laid.
+///
+/// Open ground -- the piece facing up with nothing over or under it -- is
+/// laid at `face_side`, the size ground has everywhere else. Every other
+/// piece is what a shape made, and is laid at `shape_face_side`: a cave three
+/// metres across laid in two-metre faces is a box. Borders are laid at the
+/// finer of the two, so both sides of each one meet on its points.
+///
+/// Where the grid still puts a corner partway along a border, the border
+/// takes it -- both pieces' rings -- and the pieces are laid again: the same
+/// adoption the tabletop's ground already does for a road it meets.
 pub fn lay_ground<H: HeightSource>(
     field: &SolidField<H>,
     region: &Region,
     options: &crate::pieces::SplitOptions,
     face_side: f64,
+    shape_face_side: f64,
     seed: u32,
 ) -> LaidGround {
     let split = crate::pieces::split(field, region, options);
-    let seams = crate::seams::seams(field, &split, face_side, region.cell * 0.25);
-    let pieces = (0..split.pieces.len())
-        .map(|index| (split.pieces[index].key, lay_piece(field, region, &split, &seams, index, face_side, seed)))
-        .collect();
-    LaidGround { border_points: seams.points, pieces }
+    let mut seams = crate::seams::seams(field, &split, region, face_side.min(shape_face_side), region.cell * 0.25);
+    let lay_all = |seams: &Seams| -> Vec<Result<LaidPiece, String>> {
+        (0..split.pieces.len())
+            .map(|index| {
+                let side = if split.pieces[index].key.is_open_ground() { face_side } else { shape_face_side };
+                lay_piece(field, region, &split, seams, index, side, seed)
+            })
+            .collect()
+    };
+    let mut laid = lay_all(&seams);
+    for _ in 0..ADOPTION_ROUNDS {
+        if !adopt_border_splits(&mut seams, &laid) {
+            break;
+        }
+        laid = lay_all(&seams);
+    }
+    LaidGround {
+        border_points: seams.points,
+        pieces: split.pieces.iter().map(|piece| piece.key).zip(laid).collect(),
+    }
+}
+
+/// How many times the pieces are laid again to take the corners the grid put
+/// on the borders between them.
+const ADOPTION_ROUNDS: usize = 4;
+
+/// Puts every corner the grid laid partway along a border into that border,
+/// in every ring that walks it. `false` when there was none.
+fn adopt_border_splits(seams: &mut Seams, laid: &[Result<LaidPiece, String>]) -> bool {
+    use std::collections::HashMap;
+    // Per segment, keyed low point first, the positions to put on it.
+    let mut wanted: HashMap<(usize, usize), Vec<Vec3>> = HashMap::new();
+    for (index, piece) in laid.iter().enumerate() {
+        let Ok(piece) = piece else { continue };
+        for split in &piece.border_splits {
+            let ring = &seams.rings[index][split.ring];
+            let (a, b) = (ring[split.segment], ring[(split.segment + 1) % ring.len()]);
+            wanted.entry((a.min(b), a.max(b))).or_default().push(split.position);
+        }
+    }
+    if wanted.is_empty() {
+        return false;
+    }
+    let mut inserted: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+    for ((low, high), mut positions) in wanted {
+        let (a, b) = (seams.points[low], seams.points[high]);
+        let along = b - a;
+        let t = |p: &Vec3| (*p - a).dot(along) / along.dot(along).max(1e-12);
+        positions.sort_by(|p, q| t(p).total_cmp(&t(q)));
+        positions.dedup_by(|p, q| p.distance(*q) < 1e-6);
+        let ids: Vec<usize> = positions
+            .into_iter()
+            .map(|position| {
+                seams.points.push(position);
+                seams.points.len() - 1
+            })
+            .collect();
+        inserted.insert((high, low), ids.iter().rev().copied().collect());
+        inserted.insert((low, high), ids);
+    }
+    for rings in seams.rings.iter_mut() {
+        for ring in rings.iter_mut() {
+            let n = ring.len();
+            let mut grown = Vec::with_capacity(n);
+            for i in 0..n {
+                grown.push(ring[i]);
+                if let Some(ids) = inserted.get(&(ring[i], ring[(i + 1) % n])) {
+                    grown.extend_from_slice(ids);
+                }
+            }
+            *ring = grown;
+        }
+    }
+    true
 }

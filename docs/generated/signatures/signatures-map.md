@@ -3964,6 +3964,30 @@ export function buildConstraintRings(
   * a place a cut gave way partway along it. Such a corner is exactly where
   * the ground must meet that side, so it takes a node only standing right
 
+// src/composition/tabletop/terrain/solid-ground.ts
+export interface SolidShapeStroke {
+  readonly shape: ConstructionSolidShape;
+  /** Face size of ground under open sky round it. */
+  readonly faceSide: number;
+  readonly seed: number;
+  }
+export function commitSolidShape(ctx: ToolContext, stroke: SolidShapeStroke): { readonly faces: number } {
+  const { shape, faceSide } = stroke;
+  const all = ctx.runtime.getAllRegionTopologies();
+export type ZoneHeightEdit = "raise" | "lower" | "flatten";
+export function reshapeZoneGround(
+  ctx: ToolContext,
+  path: readonly ConstructionPosition[],
+  radius: number,
+  edit: ZoneHeightEdit,
+  step: number,
+  ): { readonly faces: number } | undefined {
+  // No zone was ever laid: an ordinary stroke has nothing more to do here.
+export function tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function bridgeShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionSolidShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+
 // src/composition/tabletop/terrain/structure-contact.ts
 export interface StructureMeeting {
   /** Where the structures rest on the ground: the area the ground goes round. */
@@ -7523,6 +7547,17 @@ export const roofTransitionStructureType: StructureTypeDefinition = Object.freez
   validateMotion: undefined,
   recipe: roofRecipeGeneration,
 
+// src/features/edit-construction/structure-types/solid/solid-ground-structure.ts
+export const SOLID_GROUND_SURFACE_TYPE = "solid-ground";
+export const solidGroundStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
+  surfaceType: SOLID_GROUND_SURFACE_TYPE,
+  label: "Terreno escavado",
+  creation: "every piece of the surface a shape made, each a height over a plane of its own, laid by the irregular quad grid",
+  traits: Object.freeze([]),
+  rigid: true,
+  sealedOutline: true,
+  interactionOver: cutsGround,
+
 // src/features/edit-construction/structure-types/structural-cut.ts
 export type CutProfile =
 export interface StructuralCutArea {
@@ -7774,9 +7809,8 @@ export interface WallParams {
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
   /**
-  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
-  */
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
+  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "tunnel" | "bridge";
 export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
   if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
   return faceSizeOverride;

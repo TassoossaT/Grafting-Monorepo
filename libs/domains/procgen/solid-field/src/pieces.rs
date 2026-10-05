@@ -136,6 +136,14 @@ pub struct PieceKey {
     pub behind: usize,
 }
 
+impl PieceKey {
+    /// Ground under open sky with nothing beneath it: what a height map alone
+    /// already is, and the one piece that is not a shape's.
+    pub fn is_open_ground(&self) -> bool {
+        self.facing == Facing::Up && self.in_front == 0 && self.behind == 0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Piece {
     pub key: PieceKey,

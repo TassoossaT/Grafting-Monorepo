@@ -14,11 +14,15 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::field::{HeightSource, SolidField};
-use crate::pieces::Split;
+use crate::pieces::{Region, Split};
 use crate::vector::Vec3;
 
 /// No piece: the edge of the region.
 const OUTSIDE: usize = usize::MAX;
+
+/// The share of the asked spacing border points are actually laid at, so a
+/// segment settled onto a curve still comes out shorter than the grid cuts.
+const SPACING_ROOM: f64 = 0.85;
 
 #[derive(Debug, Clone)]
 pub struct Seams {
@@ -36,7 +40,7 @@ struct Run {
 }
 
 /// Lays every border in `split` at `spacing`.
-pub fn seams<H: HeightSource>(field: &SolidField<H>, split: &Split, spacing: f64, step: f64) -> Seams {
+pub fn seams<H: HeightSource>(field: &SolidField<H>, split: &Split, region: &Region, spacing: f64, step: f64) -> Seams {
     // Directed border edges: a triangle side whose twin is in another piece,
     // or that has no twin at all.
     let mut owner: HashMap<(usize, usize), usize> = HashMap::new();
@@ -112,7 +116,9 @@ pub fn seams<H: HeightSource>(field: &SolidField<H>, split: &Split, spacing: f64
                 walked.insert((here.min(onward), here.max(onward)));
                 chain.push(onward);
             }
-            let laid = lay_run(field, split, &chain, spacing, step, point_of_vertex, points);
+            let (p, q) = label[&(chain[0].min(chain[1]), chain[0].max(chain[1]))];
+            let on_edge = q == OUTSIDE && split.pieces[p].key.is_open_ground();
+            let laid = lay_run(field, split, &chain, spacing, step, on_edge.then_some(region), point_of_vertex, points);
             let run = Run { laid: laid_runs.len() };
             for pair in chain.windows(2) {
                 run_of_edge.insert((pair[0], pair[1]), (run, true));
@@ -188,15 +194,60 @@ pub fn seams<H: HeightSource>(field: &SolidField<H>, split: &Split, spacing: f64
     Seams { points, rings }
 }
 
+/// Which side of the region's box a point is nearest, in plan: 0 and 1 the
+/// low and high x sides, 2 and 3 the low and high z sides.
+fn nearest_side(region: &Region, point: Vec3) -> usize {
+    [
+        (point.x - region.min.x).abs(),
+        (region.max.x - point.x).abs(),
+        (point.z - region.min.z).abs(),
+        (region.max.z - point.z).abs(),
+    ]
+    .iter()
+    .enumerate()
+    .min_by(|a, b| a.1.total_cmp(b.1))
+    .map_or(0, |(side, _)| side)
+}
+
+/// `point` put on side `side` of the region's box, at the height the ground
+/// has there: the first crossing walking down from the top of the box.
+fn onto_side<H: HeightSource>(field: &SolidField<H>, region: &Region, side: usize, point: Vec3, step: f64) -> Vec3 {
+    let (x, z) = match side {
+        0 => (region.min.x, point.z),
+        1 => (region.max.x, point.z),
+        2 => (point.x, region.min.z),
+        _ => (point.x, region.max.z),
+    };
+    let x = x.clamp(region.min.x, region.max.x);
+    let z = z.clamp(region.min.z, region.max.z);
+    let top = Vec3::new(x, region.max.y, z);
+    field
+        .crossing(top, Vec3::new(0.0, -1.0, 0.0), region.max.y - region.min.y, step, 0)
+        .unwrap_or_else(|| field.project(Vec3::new(x, point.y, z), step))
+}
+
+/// The box corner two sides of it meet at, when they meet.
+fn corner_between(region: &Region, a: usize, b: usize) -> Option<(f64, f64)> {
+    let (along_x, along_z) = if a < 2 && b >= 2 { (a, b) } else if b < 2 && a >= 2 { (b, a) } else { return None };
+    Some((if along_x == 0 { region.min.x } else { region.max.x }, if along_z == 2 { region.min.z } else { region.max.z }))
+}
+
 /// One run, smoothed off the staircase, resampled at `spacing` and settled
 /// onto the surface. Its two ends are the junction points every run ending
 /// there shares.
+///
+/// A run along the edge of the region bounding open ground is settled onto
+/// the box itself instead, its corners included: what is laid there is met
+/// by ground outside the region, and a straight edge is one it meets exactly
+/// -- the split's own border wanders half a cell inside the box.
+#[allow(clippy::too_many_arguments)]
 fn lay_run<H: HeightSource>(
     field: &SolidField<H>,
     split: &Split,
     chain: &[usize],
     spacing: f64,
     step: f64,
+    on_edge: Option<&Region>,
     point_of_vertex: &mut HashMap<usize, usize>,
     points: &mut Vec<Vec3>,
 ) -> Vec<usize> {
@@ -214,23 +265,24 @@ fn lay_run<H: HeightSource>(
         }
     }
 
+    // Measured on the surface, not on the smoothed chain: smoothing pulls a
+    // curve in and settling pushes it back out, so lengths taken before
+    // settling come back short.
+    if on_edge.is_none() {
+        for point in path.iter_mut() {
+            *point = field.project(*point, step);
+        }
+    }
     let mut lengths = vec![0.0];
     for pair in path.windows(2) {
         lengths.push(lengths.last().unwrap() + pair[0].distance(pair[1]));
     }
     let total = *lengths.last().unwrap();
-    // Never longer than `spacing`: a border segment the grid finds too long
-    // it cuts, and the corner it puts there is one the piece across lacks.
-    let segments = ((total / spacing).ceil() as usize).max(1);
-
-    let mut end_point = |vertex: usize, position: Vec3, points: &mut Vec<Vec3>| {
-        *point_of_vertex.entry(vertex).or_insert_with(|| {
-            points.push(field.project(position, step));
-            points.len() - 1
-        })
-    };
-    let first = end_point(chain[0], path[0], points);
-    let mut laid = vec![first];
+    // Never longer than `spacing`, with room to spare: a border segment the
+    // grid finds too long it cuts, and the corner it puts there is one the
+    // piece across lacks.
+    let segments = ((total / (spacing * SPACING_ROOM)).ceil() as usize).max(1);
+    let mut along: Vec<Vec3> = vec![path[0]];
     let mut cursor = 0;
     for s in 1..segments {
         let target = total * s as f64 / segments as f64;
@@ -238,10 +290,43 @@ fn lay_run<H: HeightSource>(
             cursor += 1;
         }
         let t = (target - lengths[cursor]) / (lengths[cursor + 1] - lengths[cursor]).max(1e-12);
-        points.push(field.project(path[cursor].lerp(path[cursor + 1], t), step));
+        along.push(path[cursor].lerp(path[cursor + 1], t));
+    }
+    along.push(*path.last().unwrap());
+
+    // Settled: onto the surface, or onto the box with its corners put back.
+    let settled: Vec<Vec3> = match on_edge {
+        None => along.iter().map(|&p| field.project(p, step)).collect(),
+        Some(region) => {
+            let sides: Vec<usize> = along.iter().map(|&p| nearest_side(region, p)).collect();
+            let mut out = Vec::with_capacity(along.len() + 4);
+            for i in 0..along.len() {
+                if i > 0
+                    && sides[i] != sides[i - 1]
+                    && let Some((x, z)) = corner_between(region, sides[i - 1], sides[i])
+                {
+                    out.push(onto_side(field, region, if x == region.min.x { 0 } else { 1 }, Vec3::new(x, along[i].y, z), step));
+                }
+                out.push(onto_side(field, region, sides[i], along[i], step));
+            }
+            out
+        }
+    };
+
+    let n = settled.len();
+    let mut end_point = |vertex: usize, position: Vec3, points: &mut Vec<Vec3>| {
+        *point_of_vertex.entry(vertex).or_insert_with(|| {
+            points.push(position);
+            points.len() - 1
+        })
+    };
+    let first = end_point(chain[0], settled[0], points);
+    let mut laid = vec![first];
+    for &position in &settled[1..n - 1] {
+        points.push(position);
         laid.push(points.len() - 1);
     }
-    let last = if closed { first } else { end_point(*chain.last().unwrap(), *path.last().unwrap(), points) };
+    let last = if closed { first } else { end_point(*chain.last().unwrap(), settled[n - 1], points) };
     laid.push(last);
     laid
 }
