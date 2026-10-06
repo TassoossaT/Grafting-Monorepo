@@ -1,3 +1,4 @@
+import { curveAnchorId } from "../src/features/edit-construction/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sessionFixture } from "./platform-session-fixture.mjs";
@@ -91,16 +92,16 @@ test("moving a road endpoint connects and welds into another road on sloped terr
     const toolParams = { shape: "circle", radius: 0.5, rotationDegrees: 0, pathKind: "road", bedWidth: 1.0, shoulderWidth: 0.1, shoulderHeight: 0, miterLimit: 4 };
     f.calls.feedback = [];
 
-    pathPointsTool.onPointerDown(f.ctx, { nodeId: nodeA.id, point: nodeA.position }, toolParams);
+    pathPointsTool.onPointerDown(f.ctx, { nodeId: curveAnchorId(nodeA.id), point: nodeA.position }, toolParams);
     pathPointsTool.onPointerMove(f.ctx, {
-      start: { nodeId: nodeA.id, point: nodeA.position },
+      start: { nodeId: curveAnchorId(nodeA.id), point: nodeA.position },
       current: { point: nodeB.position },
-      samples: [{ nodeId: nodeA.id, point: nodeA.position }, { point: nodeB.position }],
+      samples: [{ nodeId: curveAnchorId(nodeA.id), point: nodeA.position }, { point: nodeB.position }],
     }, toolParams);
     pathPointsTool.onPointerUp(f.ctx, {
-      start: { nodeId: nodeA.id, point: nodeA.position },
+      start: { nodeId: curveAnchorId(nodeA.id), point: nodeA.position },
       current: { point: nodeB.position },
-      samples: [{ nodeId: nodeA.id, point: nodeA.position }, { point: nodeB.position }],
+      samples: [{ nodeId: curveAnchorId(nodeA.id), point: nodeA.position }, { point: nodeB.position }],
     }, toolParams);
 
     // Verify that the operation succeeded without rollback

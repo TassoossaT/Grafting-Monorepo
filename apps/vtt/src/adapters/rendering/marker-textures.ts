@@ -181,6 +181,16 @@ export function createUnlinkHandleTexture(): HTMLCanvasElement {
   });
 }
 
+/** Removes a selected span; distinct from disconnecting its shared anchor. */
+export function createDeleteHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#b4533a", (context) => {
+    context.beginPath();
+    context.moveTo(22, 22); context.lineTo(42, 42);
+    context.moveTo(42, 22); context.lineTo(22, 42);
+    context.stroke();
+  });
+}
+
 /** A span's midpoint: a small diamond, lighter than a point, so it reads as "in between". */
 export function createMidpointHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");

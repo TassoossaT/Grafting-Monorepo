@@ -494,6 +494,10 @@ export interface StructureTypeDefinition {
   readonly settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>) => ReadonlyMap<string, ConstructionPosition>;
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
+  /** Authoring graph owned by deleted faces, removed in the same transaction. */
+  readonly removalPatch?: (regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot) => ConstructionGraphPatch;
+  /** A face pinned to a removed host cannot survive without that host. */
+  readonly removeWithHost?: boolean;
   /** Present when this type is regenerated whole from a recipe its faces keep -- see {@link RecipeGeneration}. */
   readonly recipe?: RecipeGeneration;
   /** Whether this type also exposes its connected cloud's handles when it carries a recipe. */

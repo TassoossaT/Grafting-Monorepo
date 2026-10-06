@@ -76,6 +76,10 @@ export interface WallParams {
   readonly height: number;
 }
 
+export interface WallLineParams extends WallParams {
+  readonly mode?: "straight" | "curve";
+}
+
 /**
  * A free wall stroke. The brush footprint is not a footprint here -- it is
  * the *fitting tolerance*: a radius of 0 commits the contour literally, and
@@ -249,7 +253,7 @@ export interface ToolParamsByTool {
   readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral" };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
-  readonly "wall-line": WallParams;
+  readonly "wall-line": WallLineParams;
   readonly "tower-stamp": TowerStampParams;
   readonly opening: OpeningParams;
   readonly "terrain-sculpt": TerrainSculptParams;

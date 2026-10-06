@@ -1,4 +1,5 @@
 import {
+  curveAnchorPick,
   contourCurve,
   contourGeometry,
   curvePick,
@@ -64,6 +65,7 @@ export interface AnchorSnap {
 }
 
 export type CurveGestureOptions = StructureEditParams & {
+  readonly widthAtEnd?: boolean;
   /** How a dragged anchor snaps; absent, it never does. */
   readonly snap?: AnchorSnap;
   /** A scene manipulator supplies an authoritative XYZ target, unlike a ground pointer. */
@@ -111,6 +113,8 @@ export function beginCurveGesture(
   const ownsType = typeof ownsTypeOrParams === "function" ? ownsTypeOrParams : () => true;
   const actualParams = typeof ownsTypeOrParams === "function" ? params : ownsTypeOrParams;
   if (!sample.nodeId) return undefined;
+  const anchorId = curveAnchorPick(sample.nodeId);
+  if (anchorId) return beginCurveGesture(ctx, { ...sample, nodeId: anchorId }, ownsTypeOrParams, params);
   const snapshot = ctx.runtime.getGraphSnapshot();
   // A whole-structure handle is dragged by the one gesture every structure shares.
   if (globalHandleOf(sample.nodeId)) return beginGlobalHandleGesture(ctx, sample, ownsType, actualParams);
@@ -139,7 +143,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
   let lastRenderedTarget: ConstructionPosition | undefined;
   const pick = curvePick(targetId);
   const isWidthDrag = params?.curveAction === "width";
-  let currentWidth = params?.curveWidth ?? 4;
+  let currentWidth = (params?.widthAtEnd ? params.curveEndWidth : params?.curveWidth) ?? 4;
   /** The width the road had when the drag began, and the line across it where the width is read: the ruler is drawn along it. */
   const startWidth = currentWidth;
   let widthAcross: { readonly from: ConstructionPosition; readonly to: ConstructionPosition } | undefined;
@@ -171,8 +175,8 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
     parameter: params?.parameter,
     mode: params?.curveMode,
     action: isWidthDrag ? ("width" as const) : params?.curveAction,
-    width: currentWidth,
-    endWidth: params?.curveEndWidth,
+    width: params?.widthAtEnd ? params.curveWidth : currentWidth,
+    endWidth: params?.widthAtEnd ? currentWidth : params?.curveEndWidth,
   });
 
   /** What the drag joined on its last move: shown with its measures. */
@@ -271,7 +275,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       params?.snap?.show(ctx);
       ctx.runtime.clearPreview(CHANNEL);
       if (dragged && !moved) return;
-      if (!dragged && params?.insertOnClick === false) return;
+      if (!dragged && params?.insertOnClick === false && (!params.curveAction || params.curveAction === "edit" || params.curveAction === "width")) return;
       if (!moved && curvePick(targetId)?.index !== "midpoint" && (!params?.curveAction || params.curveAction === "edit")) return;
       try {
         const draft = planBezierEdit(input(!moved && (!params?.curveAction || params.curveAction === "edit")));

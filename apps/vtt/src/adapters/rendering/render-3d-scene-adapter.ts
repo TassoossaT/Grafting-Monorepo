@@ -57,7 +57,7 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture, createRulerLabelTexture } from "./marker-textures.ts";
+import { createDeleteHandleTexture, createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture, createRulerLabelTexture } from "./marker-textures.ts";
 import { RULER_LABEL_VISUAL_KIND, rulerLabelSceneItem, rulerLabelSceneItemId, type RulerLabelVisualParams } from "./ruler-label-scene-item.ts";
 import {
   HANDLE_SCALE,
@@ -182,6 +182,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       side: createSideHandleTexture(),
       corner: createCornerHandleTexture(),
       unlink: createUnlinkHandleTexture(),
+      delete: createDeleteHandleTexture(),
     } as const;
     registry.register<NodeHandleVisualParams>({
       kind: NODE_HANDLE_VISUAL_KIND,

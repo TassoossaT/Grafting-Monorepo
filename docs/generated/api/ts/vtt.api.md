@@ -254,6 +254,10 @@ Invisible pick proxy retaining one canonical SurfaceRef per render item.
 
 Pushes a corner -- both its sides at once: the corner, and a double arrow across it.
 
+### `function vtt.marker-textures.createDeleteHandleTexture(): HTMLCanvasElement`
+
+Removes a selected span; distinct from disconnecting its shared anchor.
+
 ### `function vtt.marker-textures.createHeightHandleTexture(): HTMLCanvasElement`
 
 Sets a height: a double arrow up and down.
@@ -800,9 +804,9 @@ first -- a weld paused -- the ops are then worked out on the table as
 `after` finishes the change -- the weld made again. Throwing anywhere
 rolls all of it back.
 
-### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey, options: CommitOptions): TransactionResult<RegionEditOutcome>`
+### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey | readonly ConstructionSurfaceKey[], options: CommitOptions): TransactionResult<RegionEditOutcome>`
 
-Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically.
+Deletes surfaces and lets their own clouds and every cloud they had cut answer, atomically.
 
 ### `function vtt.effect-commit.dispatchEffects(runtime: EffectCommitRuntime, effects: readonly Effect[], reactions: TabletopReactions): readonly ReactionRecord[]`
 
@@ -1066,6 +1070,8 @@ Host `(u, v)` pairs back to world positions. Pure.
 
 Local editing presentation; never changes the graph or persistence.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandleSelection(id: string | undefined): void`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
 
 Which types' whole-structure handles the scene shows -- the active tool's
@@ -1268,6 +1274,8 @@ Host `(u, v)` pairs back to world positions. Pure.
 ### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandleSelection(id: string | undefined): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
 
@@ -2562,7 +2570,7 @@ Screen coordinate used by explicit elevation gestures.
 
 ### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
 
-### `type vtt.curve-edit-gesture.CurveGestureOptions = StructureEditParams & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; snap?: AnchorSnap; spatialTarget?: boolean }`
+### `type vtt.curve-edit-gesture.CurveGestureOptions = StructureEditParams & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; snap?: AnchorSnap; spatialTarget?: boolean; widthAtEnd?: boolean }`
 
 ### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, ownsTypeOrParams?: CurveGestureOptions | ((surfaceType: string) => boolean), params?: CurveGestureOptions): CurveGesture | undefined`
 
@@ -3460,8 +3468,7 @@ spine-built type shares, whatever surface it regenerates from the spine:
 - drag a span's midpoint to bend it, or double-click it to insert a point there;
 - push a span's width handle out or in to widen or narrow it;
 - Delete/Backspace removes the selected control point;
-- whatever the shared edit panel asks for instead: raising or lowering,
-  or a curve action such as a span's width.
+- contextual curve actions and a separate width handle at the span end.
 
 A press on the body is never an edit: it belongs to the tool, which
 builds against what it lands on. Handles show on the spine under the
@@ -3477,10 +3484,6 @@ While this answers true -- a tool midway through drawing -- presses belong to th
 ### `property vtt.spine-edit-behavior.SpineEditOptions.ownsSpine: (surfaceType: string) => boolean`
 
 Only spines owned by a type this accepts are edited; anything else falls through to the tool.
-
-### `property vtt.spine-edit-behavior.SpineEditOptions.panelActions?: boolean`
-
-Whether this tool reads the ambient legacy curve-action panel.
 
 ### `property vtt.spine-edit-behavior.SpineEditOptions.snap?: AnchorSnap`
 
@@ -3515,19 +3518,24 @@ Whether the *last* `tryGrab` succeeded -- read after pointer-up, once `isActive(
 
 ### `interface vtt.structure-edit-behavior.StructureEditOptions`
 
+Edit an existing structure through a curve or type-specific handle --
+filtered to whichever types `options.ownsType` accepts, so
+`withStructureEditing` below can fold it into every creation tool's own
+pointer lifecycle.
+
+The tool composing this still contains **no** per-type behaviour: the
+`ownsType` filter is the only thing that varies between callers, and it
+asks a trait or a type's own identity constant, never a type name --
+`no-type-name-comparisons.test.mjs` holds here exactly as it does
+everywhere else `hasTrait` is the question to ask.
+
 ### `property vtt.structure-edit-behavior.StructureEditOptions.drafting?: (ctx: ToolContext) => boolean`
 
 Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands.
 
-### `property vtt.structure-edit-behavior.StructureEditOptions.handlesOnly?: boolean`
-
-Edited only by its handles: a press on a vertex, an edge or the body is
-the tool's own -- it builds against what stands -- and only a handle
-edits. Handles show on the structure under the pointer.
-
 ### `property vtt.structure-edit-behavior.StructureEditOptions.ownsType: (surfaceType: string) => boolean`
 
-Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture.
+Only a handle of an accepted type edits; every other press belongs to creation.
 
 ### `function vtt.structure-edit-behavior.createStructureEditBehavior(options: StructureEditOptions): StructureEditBehavior`
 
@@ -3830,6 +3838,15 @@ One failed stage, on the console, with everything known about it.
 Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
+
+### `variable vtt.demolish-tool.demolishTool: ConstructionTool<"demolish">`
+
+Generic demolish/delete tool.
+
+Resolves surface deletion scope ("cloud" or "surface") through each picked
+type's declared `StructureTypeDefinition` and policy, without hardcoding
+specific type names. Commits deletion atomically via `commitSurfaceRemoval`,
+triggering registered type reactions (e.g. ground/path lattice regeneration).
 
 ### `variable vtt.opening-stands.openingStands: readonly OpeningStand[]`
 
@@ -4713,7 +4730,7 @@ lands on the same position as `pointAt(0)`'s (`0`).
 
 ### `variable vtt.tower-stamp-tool.towerStampTool: ConstructionTool<"tower-stamp">`
 
-Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- a tower is an ordinary wall, see `structure-edit-behavior.ts`.
+Edits existing walls only through their handles; a tower is an ordinary wall.
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
@@ -6577,9 +6594,11 @@ Absent without the curve engine: then no curve has a handle.
 
 Places an opening's handles on its whole box along the walls it crosses; absent, on the part on its first wall.
 
+### `property vtt.scene-handles.SceneHandleInput.selected?: string`
+
 ### `property vtt.scene-handles.SceneHandleInput.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | GlobalHandleKind`
+### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind`
 
 Every edit handle the scene shows, in one list: what each one is for --
 its kind, which is also what its look is chosen by -- and where it stands.
@@ -8132,6 +8151,10 @@ contour faces one edit replaces (`standingRegionsForCloud`, below).
 
 ### `function vtt.path-cloud-scope.extractCorridorsFromEdgeId(edgeId: string): readonly string[]`
 
+### `function vtt.path-cloud-scope.removalPatchForRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot): ConstructionGraphPatch`
+
+Retires the authoring spans owned by deleted contour faces, including disconnected remnants.
+
 ### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], corridorIds: ReadonlySet<string>): readonly ConstructionRegionTopology[]`
 
 Every standing path face the touched spine cloud owns: the faces whose
@@ -8521,6 +8544,10 @@ instead of kinking at the moved end.
 ### `function vtt.platform-slope-spine.regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration`
 
 Regenerates every sloped-platform span on the spine a graph patch touches, re-graded between its ends.
+
+### `function vtt.platform-slope-spine.removalPatchForSlopeRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot): ConstructionGraphPatch`
+
+The authoring spans belonging to exactly the sloped faces being deleted.
 
 ### `function vtt.platform-slope-spine.slopeFaceId(edgeId: string): string`
 
@@ -9485,6 +9512,14 @@ cloud as the change left it.
 
 Present when this type is regenerated whole from a recipe its faces keep -- see RecipeGeneration.
 
+### `property vtt.structure-type.StructureTypeDefinition.removalPatch?: (regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot) => ConstructionGraphPatch`
+
+Authoring graph owned by deleted faces, removed in the same transaction.
+
+### `property vtt.structure-type.StructureTypeDefinition.removeWithHost?: boolean`
+
+A face pinned to a removed host cannot survive without that host.
+
 ### `property vtt.structure-type.StructureTypeDefinition.requiresMotionSolver?: boolean`
 
 Whether a gesture on this type can only be planned through the session's
@@ -9696,6 +9731,20 @@ Rotation around world Y; ignored by circles.
 
 Convex footprint shared by terrain and path brushes.
 
+### `interface vtt.tool-types.DemolishParams`
+
+### `property vtt.tool-types.DemolishParams.radius: number`
+
+Circle/hexagon radius, or square half-size, in world units.
+
+### `property vtt.tool-types.DemolishParams.rotationDegrees: number`
+
+Rotation around world Y; ignored by circles.
+
+### `property vtt.tool-types.DemolishParams.shape: BrushShapeKind`
+
+Convex footprint shared by terrain and path brushes.
+
 ### `interface vtt.tool-types.OpeningParams`
 
 One opening stamped onto a wall panel: a door or a window.
@@ -9777,7 +9826,7 @@ which type owns the grabbed part. Used to live as one tool's own params
 ambiently via `ToolContext.structureEditParams` instead of declaring it
 as its own.
 
-### `property vtt.tool-types.StructureEditParams.curveAction?: "width" | "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close"`
+### `property vtt.tool-types.StructureEditParams.curveAction?: "disconnect" | "delete-segment" | "close" | "width" | "edit" | "remove-anchor"`
 
 ### `property vtt.tool-types.StructureEditParams.curveEndWidth?: number`
 
@@ -9835,6 +9884,8 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `interface vtt.tool-types.ToolParamsByTool`
 
+### `property vtt.tool-types.ToolParamsByTool.demolish: DemolishParams`
+
 ### `property vtt.tool-types.ToolParamsByTool.navigate: NoToolParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.opening: OpeningParams`
@@ -9866,7 +9917,7 @@ slope picked for editing: changing it edits that slope.
 
 ### `property vtt.tool-types.ToolParamsByTool.wall-brush: WallBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.wall-line: WallParams`
+### `property vtt.tool-types.ToolParamsByTool.wall-line: WallLineParams`
 
 ### `interface vtt.tool-types.TowerStampParams`
 
@@ -9913,6 +9964,25 @@ Convex footprint shared by terrain and path brushes.
 
 ### `property vtt.tool-types.WallBrushParams.wallType: "wall-white" | "wall-gray"`
 
+### `interface vtt.tool-types.WallLineParams`
+
+What every wall-producing tool needs and nothing else: which wall type,
+and how tall. There is one wall type in the engine, so a free stroke, a
+straight run and a tower preset all commit through the same builder with
+the same parameters -- a preset is a shape, never its own kind of wall.
+
+`height` is the length of each panel's own vertical edge, which is all a
+height ever is here: the graph stores the two horizontal edges and their
+connection, and the distance between them is this number.
+
+### `property vtt.tool-types.WallLineParams.height: number`
+
+Length of a panel's own vertical edge, in world units.
+
+### `property vtt.tool-types.WallLineParams.mode?: "straight" | "curve"`
+
+### `property vtt.tool-types.WallLineParams.wallType: "wall-white" | "wall-gray"`
+
 ### `interface vtt.tool-types.WallParams`
 
 What every wall-producing tool needs and nothing else: which wall type,
@@ -9932,7 +10002,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "slope-curve" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "slope-curve" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt" | "demolish"`
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
 
@@ -10279,6 +10349,8 @@ A curve halfway along: where it stands, and which way it runs there.
 
 ### `property vtt.curve-handles.CurveMidframe.tangent: CurvePoint`
 
+### `type vtt.curve-handles.CurveHandleAction = "disconnect" | "delete-segment" | "close"`
+
 ### `type vtt.curve-handles.CurveHandleIndex = 1 | 2 | "midpoint"`
 
 ### `type vtt.curve-handles.CurveStore = "spine" | "contour"`
@@ -10293,9 +10365,21 @@ A contour edge's cubic in 3D: its XZ handles, at the height the edge climbs thro
 
 The boundary geometry a contour edge keeps for `curve`, walked from its own start node.
 
+### `function vtt.curve-handles.curveActionId(targetId: string, action: CurveHandleAction): string`
+
+### `function vtt.curve-handles.curveActionPick(id: string): { action: CurveHandleAction; targetId: string } | undefined`
+
+### `function vtt.curve-handles.curveAnchorId(nodeId: string): string`
+
+### `function vtt.curve-handles.curveAnchorPick(id: string): string | undefined`
+
 ### `function vtt.curve-handles.curveEdgesOf(snapshot: ConstructionGraphSnapshot, contour: readonly ConstructionCurvedEdge[], port: Pick<BezierPort, "curveBatch">): readonly CurveEdge[]`
 
 Every curve on the table: spine spans resolved from their stored handles, and curved contour edges.
+
+### `function vtt.curve-handles.curveEndWidthId(edgeId: string): string`
+
+### `function vtt.curve-handles.curveEndWidthPick(id: string): string | undefined`
 
 ### `function vtt.curve-handles.curveHandles(frames: readonly CurveMidframe[]): readonly { id: string; position: ConstructionPosition }[]`
 
@@ -12497,7 +12581,7 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink" | "delete"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something
@@ -13495,13 +13579,7 @@ Which terrain stroke the Terreno blocks show as picked.
 
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.onParamsChange: (toolId: Id, next: ToolParamsByTool[Id]) => void`
 
-### `property vtt.widgets.ConstructionToolParamsPanelProps.onStructureEditParamsChange: (next: StructureEditParams) => void`
-
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.params: ToolParamsByTool`
-
-### `property vtt.widgets.ConstructionToolParamsPanelProps.structureEditParams: StructureEditParams`
-
-How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns.
 
 ### `interface vtt.widgets.DebugPanelProps`
 
@@ -13579,8 +13657,6 @@ The unit the table writes every distance in.
 
 ### `property vtt.widgets.SettingsDrawerProps.onRulerSettingsChange: (settings: RulerSettings) => void`
 
-### `property vtt.widgets.SettingsDrawerProps.onStructureEditParamsChange: (next: StructureEditParams) => void`
-
 ### `property vtt.widgets.SettingsDrawerProps.onToolParamsChange: (toolId: Id, next: ToolParamsByTool[Id]) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.open?: boolean`
@@ -13590,8 +13666,6 @@ The unit the table writes every distance in.
 What the table asks of its ruler: what catches, the angle's step and the round number a length lands on.
 
 ### `property vtt.widgets.SettingsDrawerProps.selectedNodeInfo: SelectedNodeInfo | null`
-
-### `property vtt.widgets.SettingsDrawerProps.structureEditParams: StructureEditParams`
 
 ### `property vtt.widgets.SettingsDrawerProps.tokenCount: number`
 
@@ -13633,7 +13707,7 @@ Houses the 8 core construction verbs in a centered, glassmorphic dock:
 5. ⛰️ Terreno & Água (Escultura de Terreno)
 6. 🌲 Vegetação (Adornos & Flora)
 7. 🎨 Estilo & Paleta (Materiais & Temas)
-8. 🔨 Demolir (disabled until the generic delete tool exists)
+8. 🔨 Demolir (click or brush)
 
 ### `function vtt.widgets.ConstructionHotbar(props: ConstructionHotbarProps): Element`
 

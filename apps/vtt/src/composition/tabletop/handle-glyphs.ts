@@ -16,6 +16,9 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>>
   midpoint: "midpoint",
   /** On the edge of a span's band: push it out or in. */
   width: "side",
+  disconnect: "unlink",
+  deleteSegment: "delete",
+  closeCurve: "link",
   /** A wall run's own height widget. */
   panelHeight: "height",
   /** Whole-structure handles. */

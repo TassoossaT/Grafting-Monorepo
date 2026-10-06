@@ -1,4 +1,4 @@
-import { curvePick, sceneHandles, type HandleFocus } from "../../features/edit-construction/index.ts";
+import { curvePick, curveEdgesOf, curveSegments, sceneHandles, type HandleFocus } from "../../features/edit-construction/index.ts";
 import type { RenderHandleGlyph } from "../../ports/index.ts";
 import { HANDLE_GLYPHS } from "./handle-glyphs.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
@@ -232,6 +232,7 @@ export interface TabletopRuntime extends BezierPort {
   ): Float32Array;
   /** Local editing presentation; never changes the graph or persistence. */
   setConstructionHandlePresentation?(mode: "all" | "spine-points"): void;
+  setConstructionHandleSelection?(id: string | undefined): void;
   /**
    * Which types' whole-structure handles the scene shows -- the active tool's
    * own; `undefined` shows none.
@@ -358,6 +359,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #globalHandleOwners: ((surfaceType: string) => boolean) | undefined = undefined;
   /** Whose handles show -- see `setHandleFocus`. */
   #handleFocus: HandleFocus | undefined = undefined;
+  #handleSelection: string | undefined = undefined;
+  #spineHandlePreviewShown = false;
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
   #generation = 0;
@@ -665,6 +668,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const graph = this.#construction.getGraphSnapshot();
     const handles = sceneHandles({
       graph,
+      ...(this.#handleSelection ? { selected: this.#handleSelection } : {}),
       topologies: this.#construction.getAllRegionTopologies(),
       contour: typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [],
       ...(typeof this.#construction.curveBatch === "function" ? { port: this.#construction } : {}),
@@ -684,6 +688,29 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#sceneHandleGlyphs = new Map(handles.map((handle) => [handle.id, HANDLE_GLYPHS[handle.kind]]));
     for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, HANDLE_GLYPHS[handle.kind]);
     this.#sceneHandleIds = live;
+    // The edit spine is its own presentation, independent of graph debug.
+    if (this.#pointHandlesOnly && typeof this.#construction.curveBatch === "function") {
+      const focus = this.#handleFocus;
+      const edges = curveEdgesOf(graph, [], this.#construction).filter((edge) => !focus || (focus.spineNodes.has(edge.startNodeId) && focus.spineNodes.has(edge.endNodeId)));
+      const positions = Float32Array.from(edges.flatMap((edge) => [...curveSegments(this.#construction, edge.curve)]));
+      for (let index = 1; index < positions.length; index += 3) positions[index] += 0.025;
+      if (positions.length) {
+        this.showPreview({ kind: "segments", positions, color: 0xffbc55, opacity: 0.95 }, "spine-handles");
+        this.#spineHandlePreviewShown = true;
+      } else if (this.#spineHandlePreviewShown) {
+        this.clearPreview("spine-handles");
+        this.#spineHandlePreviewShown = false;
+      }
+    } else if (this.#spineHandlePreviewShown) {
+      this.clearPreview("spine-handles");
+      this.#spineHandlePreviewShown = false;
+    }
+  }
+
+  setConstructionHandleSelection(id: string | undefined): void {
+    if (id === this.#handleSelection) return;
+    this.#handleSelection = id;
+    this.#syncSceneHandles("programmatic", "handle-selection", this.#generation);
   }
 
   /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */

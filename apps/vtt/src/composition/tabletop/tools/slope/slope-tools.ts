@@ -159,7 +159,7 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
 };
 
 /** Also edits an existing ramp by its handles -- see `structure-edit-behavior.ts`; a press on the ramp itself builds against it. */
-export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime), handlesOnly: true });
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime) });
 
 /** A finished draft, committed as a sloped platform: laid-out spans as they are, points as a smooth run through them. */
 function commitDraft(ctx: ToolContext, draft: FinishedSpineDraft, params: { readonly width: number }): void {

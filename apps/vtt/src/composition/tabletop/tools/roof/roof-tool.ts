@@ -312,4 +312,4 @@ const rawRoofTool: ConstructionTool<"roof"> = {
 };
 
 /** Also edits an existing roof, through its handles only -- see `structure-edit-behavior.ts` and `roof-recipe.ts`. */
-export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "roof-generated"), handlesOnly: true });
+export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "roof-generated") });

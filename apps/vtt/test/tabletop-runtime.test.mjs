@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
 import { createTokenProjection } from "../src/entities/token/index.ts";
+import { curveAnchorId, curveEndWidthId } from "../src/features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 
 function createFakeTerrainNoisePort() {
@@ -39,6 +40,7 @@ function createTabletopRuntime(options) {
 
 function createFakeRenderPort() {
   const changes = [];
+  const previews = new Map();
   const clipHeights = [];
   let started = false;
   let creates = 0;
@@ -47,6 +49,7 @@ function createFakeRenderPort() {
 
   return {
     changes,
+    previews,
     async start() {
       if (started) throw new Error("already started");
       started = true;
@@ -61,6 +64,8 @@ function createFakeRenderPort() {
       attachedViews = Math.max(0, attachedViews - 1);
     },
     resizeView() {},
+    showPreview(descriptor, channel) { previews.set(channel, descriptor); },
+    clearPreview(channel) { previews.delete(channel); },
     applyConfirmed(change) {
       changes.push(change);
     },
@@ -1102,7 +1107,7 @@ test("road presentation exposes only spine anchors, insertion points and width h
   const {sessionFixture}=await import("./platform-session-fixture.mjs");
   const {curvePickId,curveWidthPickId}=await import("../src/features/edit-construction/index.ts");
   const real=sessionFixture(),render=createFakeRenderPort(),construction=createFakeConstructionPort();
-  const spineHandles=["spine:a","spine:b",curvePickId("spine-edge:a","midpoint"),curveWidthPickId("spine-edge:a")].sort();
+  const spineHandles=[curveAnchorId("spine:a"),curveAnchorId("spine:b"),curveEndWidthId("spine-edge:a"),curvePickId("spine-edge:a","midpoint"),curveWidthPickId("spine-edge:a")].sort();
   let graph={
     nodes:[{id:"spine:a",position:{x:0,y:0,z:0}},{id:"spine:b",position:{x:10,y:0,z:0}},{id:"mesh:vertex",position:{x:5,y:0,z:1}}],
     edges:[{edgeId:"spine-edge:a",startNodeId:"spine:a",endNodeId:"spine:b",curve:{start:[3,0,0],end:[-3,0,0],mode:"free",bandOffsets:[-1,1],surfaceType:"path"}}],
@@ -1129,6 +1134,7 @@ test("road presentation exposes only spine anchors, insertion points and width h
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
+    assert.equal(render.previews.has("spine-handles"),false);
     // A plain vertex is no handle: only the topology overlay draws it, so nothing comes back for it here.
     assert.ok(!shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
     // The active tool edits sloped platforms: their whole-structure handles show.
@@ -1137,7 +1143,7 @@ test("road presentation exposes only spine anchors, insertion points and width h
     graph={...graph,nodes:graph.nodes.map(n=>n.id==="spine:b"?{...n,position:{x:11,y:0,z:2}}:n)};
     runtime.addPatch(EMPTY_PATCH,"local","updated-spine");
     assert.deepEqual(shown(),spineHandles);
-    assert.deepEqual(render.changes.filter(c=>c.type==="node-handle-upserted"&&c.handle.nodeId==="spine:b").at(-1).handle.position,{x:11,y:0,z:2});
+    assert.deepEqual(render.changes.filter(c=>c.type==="node-handle-upserted"&&c.handle.nodeId===curveAnchorId("spine:b")).at(-1).handle.position,{x:11,y:0,z:2});
   }finally{await runtime.dispose();real.session.free();}
 });
 
@@ -1170,12 +1176,12 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
     const pivot = upserted.find((handle) => handle.nodeId === "structure-pivot:spine:s:0");
     assert.ok(pivot, `pivot handle uploaded: ${JSON.stringify(upserted.map((h) => h.nodeId))}`);
     assert.ok(Math.hypot(pivot.position.x, pivot.position.z) < 1e-9, "at the spiral's centre");
-    assert.ok(upserted.some((handle) => handle.nodeId === "spine:s:1"), "with the spine's own points");
+    assert.ok(upserted.some((handle) => handle.nodeId === curveAnchorId("spine:s:1")), "with the spine's own points");
     assert.ok(upserted.some((handle) => handle.nodeId === "structure-height:spine:s:0"), "and its end's height handle");
     assert.ok(upserted.some((handle) => handle.nodeId === "structure-turns:spine:s:0"), "and, a spiral, its turns handle");
     const glyphOf = (id) => upserted.find((handle) => handle.nodeId === id)?.glyph;
     assert.deepEqual(
-      [glyphOf("structure-pivot:spine:s:0"), glyphOf("structure-rotate:spine:s:0"), glyphOf("structure-height:spine:s:0"), glyphOf("structure-turns:spine:s:0"), glyphOf("spine:s:1")],
+      [glyphOf("structure-pivot:spine:s:0"), glyphOf("structure-rotate:spine:s:0"), glyphOf("structure-height:spine:s:0"), glyphOf("structure-turns:spine:s:0"), glyphOf(curveAnchorId("spine:s:1"))],
       ["move", "rotate", "height", "turns", "point"],
       "each whole-spine handle reads as what it does; a control point is drawn as a point",
     );

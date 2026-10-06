@@ -14,7 +14,7 @@ import type {
 import type { AtomicEditOp, Effect, Reaction, ReactionId, ReactionRecord, ShapeChange } from "@/features/edit-construction";
 import type { TransactionResult } from "../tabletop-runtime.ts";
 
-import { EMPTY_OUTCOME, hasTrait, mergeOutcomes, runEffects, settlePatch, simplifyCollinearVertices } from "../../../features/edit-construction/index.ts";
+import { EMPTY_OUTCOME, surfaceKeyText, structureTypeFor, hasTrait, mergeOutcomes, runEffects, settlePatch, simplifyCollinearVertices } from "../../../features/edit-construction/index.ts";
 import { timePhase } from "../commit-timing.ts";
 import { TABLETOP_REACTIONS, type TabletopReactionRuntime } from "./reactions.ts";
 import { shapeChangeOfRemoval, shapeChangeOfReplacement, topologiesOf } from "./shape-change.ts";
@@ -200,9 +200,23 @@ export function commitSurfaceRemoval(
       : (surfaceKey as readonly ConstructionSurfaceKey[]);
 
   return runtime.transact(options.transactionId, origin, () => {
-    const removed = topologiesOf(runtime, keys);
+    const targets = new Map(keys.map((key) => [surfaceKeyText(key), key]));
+    const standing = runtime.getAllRegionTopologies();
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const region of standing) {
+        const id = surfaceKeyText(region.surfaceKey);
+        if (targets.has(id) || !structureTypeFor(region.surfaceType)?.removeWithHost) continue;
+        if (!region.nodes.some((node) => node.pin && targets.has(surfaceKeyText(node.pin.hostSurfaceKey)))) continue;
+        targets.set(id, region.surfaceKey);
+        expanded = true;
+      }
+    }
+    const removed = topologiesOf(runtime, [...targets.values()]);
+    const authoring = runtime.getGraphSnapshot();
     let outcome = EMPTY_OUTCOME;
-    for (const key of keys) {
+    for (const key of targets.values()) {
       const res = runtime.removeSurface({ surfaceKey: key }, origin, options.transactionId);
       outcome = mergeOutcomes(outcome, res);
     }
@@ -213,6 +227,11 @@ export function commitSurfaceRemoval(
       byType.set(topology.surfaceType, list);
     }
     for (const [, group] of byType) {
+      const graphPatch = structureTypeFor(group[0]!.surfaceType)?.removalPatch?.(group, authoring);
+      if (graphPatch && (graphPatch.removedEdgeIds?.length ?? 0) > 0) {
+        const cleanup = runtime.applyPatchReplacement({ operationId: options.transactionId + ":authoring:" + encodeURIComponent(group[0]!.surfaceType), sourceSurfaceKeys: [], patch: { nodes: [], edges: [], regions: [] }, graphPatch }, origin, options.transactionId);
+        outcome = mergeOutcomes(outcome, cleanup);
+      }
       const change = shapeChangeOfRemoval(group, outcome.removedNodeIds);
       if (change !== undefined) {
         dispatchEffects(

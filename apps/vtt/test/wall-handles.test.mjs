@@ -413,3 +413,9 @@ test("pushing a platform's side says how long each side beside it becomes and wh
     assert.ok(was.some((m) => Math.abs(m.now - m.was) > 0.1), "and they grew: the near ends moved with the pushed side");
   } finally { f.session.free(); }
 });
+
+test("wall curve mode creates true curved panels and tower never grabs a raw graph vertex",async()=>{
+ const {towerStampTool}=await import("../src/composition/tabletop/tools/tower/tower-stamp-tool.ts");
+ const f=sessionFixture();
+ try {const points=Array.from({length:17},(_,i)=>({point:{x:2+2*Math.cos(Math.PI-Math.PI*i/16),y:0,z:2*Math.sin(Math.PI*i/16)}}));const curved={...params,mode:"curve"};wallLineTool.onPointerDown(f.ctx,points[0],curved);wallLineTool.onPointerUp(f.ctx,{start:points[0],current:points.at(-1),samples:points},curved);assert.ok(f.runtime.getAllRegionTopologies().some(t=>t.outerLoops.flat().some(e=>e.geometry.kind==="bezier")));const before=f.runtime.getGraphSnapshot().nodes;const node=before[0];const start={nodeId:node.id,node:{id:node.id,position:node.position},point:node.position};towerStampTool.onPointerDown(f.ctx,start,towerStampTool.defaultParams());towerStampTool.onPointerMove(f.ctx,{start,current:{point:{...node.position,x:node.position.x+4}},samples:[start]},towerStampTool.defaultParams());towerStampTool.onPointerUp(f.ctx,{start,current:start,samples:[start]},towerStampTool.defaultParams());assert.deepEqual(f.runtime.getGraphSnapshot().nodes,before,"raw vertex did not drag existing wall");towerStampTool.onCancel(f.ctx);}finally{wallLineTool.onCancel(f.ctx);f.session.free();}
+});

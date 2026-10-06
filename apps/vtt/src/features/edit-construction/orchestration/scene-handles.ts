@@ -3,7 +3,10 @@ import type { BezierPort, ConstructionCurvedEdge, ConstructionGraphSnapshot, Con
 import type { GlobalHandleKind } from "../global-handles/index.ts";
 import { spineWidthHandles } from "../spine/spine-handles.ts";
 import { spineDefaultOffsets } from "../structure-types/index.ts";
-import { curveEdgesOf, curveHandles, curveMidframes } from "../topology/curve-handles.ts";
+import { curveEdgesOf, curveHandles, curveMidframes, curveAnchorId, curveActionId, curvePickId, curveEndWidthId } from "../topology/curve-handles.ts";
+import { spanOffsets } from "../spine/spine-ribbons.ts";
+import { openSpineChain } from "../spine/spine-open-chain.ts";
+import { spineComponent } from "../spine/spine-owner.ts";
 import { openingHandles, type OpeningRunPort } from "../topology/opening-handles.ts";
 import { panelHeightWidgets } from "../topology/panel-height-widget.ts";
 import { shownGlobalHandles } from "./global-handles/index.ts";
@@ -22,7 +25,7 @@ import { shownGlobalHandles } from "./global-handles/index.ts";
  *   resize it (`topology/opening-handles.ts`);
  * - every whole-structure handle, by its own kind (`global-handles/`).
  */
-export type SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | GlobalHandleKind;
+export type SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
 
 export interface SceneHandle {
   readonly id: string;
@@ -47,6 +50,7 @@ function focused(handle: { readonly nodeIds: readonly string[]; readonly faces?:
 }
 
 export interface SceneHandleInput {
+  readonly selected?: string;
   readonly graph: ConstructionGraphSnapshot;
   readonly topologies: readonly ConstructionRegionTopology[];
   /** The session's curved contour edges, whose midpoints are handles too. */
@@ -75,8 +79,28 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
     const frames = curveMidframes(shown, input.port);
     if (input.pointsOnly) {
       const anchors = new Set(shown.flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
-      for (const node of input.graph.nodes) if (anchors.has(node.id)) handles.push({ id: node.id, kind: "anchor", position: node.position });
+      for (const node of input.graph.nodes) if (anchors.has(node.id)) handles.push({ id: curveAnchorId(node.id), kind: "anchor", position: node.position });
       for (const handle of spineWidthHandles(frames, input.graph, spineDefaultOffsets)) handles.push({ id: handle.id, kind: "width", position: handle.position });
+      for (const frame of frames) {
+        const span = input.graph.edges.find((edge) => edge.edgeId === frame.edge.edgeId);
+        const defaults = span?.curve?.surfaceType ? spineDefaultOffsets(span.curve.surfaceType) : undefined;
+        if (!span?.curve || !defaults) continue;
+        const { endOffsets } = spanOffsets(span.curve, defaults);
+        const [, , before, end] = frame.edge.curve.points;
+        const length = Math.hypot(end[0] - before[0], end[2] - before[2]);
+        if (length > 1e-9) handles.push({ id: curveEndWidthId(span.edgeId), kind: "width", position: { x: end[0] - (end[2] - before[2]) / length * endOffsets[1], y: end[1], z: end[2] + (end[0] - before[0]) / length * endOffsets[1] } });
+        const midpointId = curvePickId(span.edgeId, "midpoint");
+        if (input.selected === midpointId) handles.push({ id: curveActionId(midpointId, "delete-segment"), kind: "deleteSegment", position: { ...frame.position, y: frame.position.y + 0.6 } });
+      }
+      const node = input.graph.nodes.find((node) => node.id === input.selected && anchors.has(node.id));
+      if (node) {
+        const graph = { ...input.graph, edges: input.graph.edges.filter((edge) => shown.some((span) => span.edgeId === edge.edgeId)) };
+        const component = spineComponent(graph, [node.id]);
+        const incident = component.edges.filter((edge) => edge.startNodeId === node.id || edge.endNodeId === node.id);
+        if (incident.length > 1) handles.push({ id: curveActionId(node.id, "disconnect"), kind: "disconnect", position: { ...node.position, y: node.position.y + 0.6 } });
+        const chain = openSpineChain(component.edges);
+        if (incident.length === 1 && chain && component.edges.length >= 2) handles.push({ id: curveActionId(node.id, "close"), kind: "closeCurve", position: { ...node.position, y: node.position.y + 0.6 } });
+      }
     }
     for (const handle of curveHandles(frames)) handles.push({ id: handle.id, kind: "midpoint", position: handle.position });
   }

@@ -1,3 +1,4 @@
+import { curveAnchorId } from "../src/features/edit-construction/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registerHooks } from "node:module";
@@ -125,7 +126,7 @@ test("road pointer lifecycle: one selected tool creates and edits the curve, and
     listeners.get("keydown")({key:"Enter",preventDefault(){consumed=true;}});
     assert.ok(consumed,"Enter ends the run");
     assert.ok(edge,JSON.stringify(f.calls.feedback));
-    pickedId=edge.startNodeId;
+    pickedId=curveAnchorId(edge.startNodeId);
     handlers.onPointerDown(event(0,0));pickedId=undefined;
     handlers.onPointerUp(event(30,30));handlers.onClick(event(30,30));
     assert.deepEqual(f.runtime.getGraphSnapshot().nodes.find(n=>n.id===edge.startNodeId).position,{x:3,y:0,z:3});

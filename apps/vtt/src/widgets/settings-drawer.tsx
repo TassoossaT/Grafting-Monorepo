@@ -36,8 +36,6 @@ export interface SettingsDrawerProps {
   readonly activeTool: ConstructionToolId;
   readonly toolParams: ToolParamsByTool;
   readonly onToolParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
-  readonly structureEditParams: StructureEditParams;
-  readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
   readonly tokenCount: number;
   /** The unit the table writes every distance in. */
   readonly measureUnit: MeasureUnitId;
@@ -101,8 +99,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         activeTool={props.activeTool}
         params={props.toolParams}
         onParamsChange={props.onToolParamsChange}
-        structureEditParams={props.structureEditParams}
-        onStructureEditParamsChange={props.onStructureEditParamsChange}
       />
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">

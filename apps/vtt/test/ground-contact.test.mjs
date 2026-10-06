@@ -292,3 +292,19 @@ test("a floor standing clear of the ground, moved to where it rests on it, cuts 
     assert.deepEqual(terrain(runtime).filter(whereItStood).map(keyOf).sort(), [...before].sort(), "the valley where it stood is left exactly as it was");
   } finally { session.free(); }
 }));
+
+test("deleting a ground-level path restores terrain and one undo restores the path and its cut", quiet(async()=>{
+ const {createPathBrushEffect,pathFormationFor,DEFAULT_TOOL_PARAMS}=await import("../src/features/edit-construction/index.ts");
+ const {commitPathCloudIntent}=await import("../src/composition/tabletop/path/path-cloud-transaction.ts");
+ const {demolishTool}=await import("../src/composition/tabletop/tools/demolish/demolish-tool.ts");
+ const {surfaceRefFromNodeSet}=await import("../src/entities/map/index.ts");
+ const f=setup(()=>0);
+ try { f.runtime.getFootprintCoverage=()=>[];const coords=[[-6,0,0],[6,0,0]];const curves=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"automatic",points:coords}]})[0].curves;
+ const effect=createPathBrushEffect({brushShape:{kind:"circle",radius:0.025},brushRegion:{samples:coords.map(([x,y,z])=>({x,y,z}))},authoredCurves:curves,curveMode:"automatic",parameters:pathFormationFor({...DEFAULT_TOOL_PARAMS["path-brush"],pathKind:"trail",bedWidth:4,shoulderWidth:0})},{operationId:"platform-test:delete-ground-road:1",tableId:f.ctx.tableId,initiatedBy:"test"});
+ assert.ok(commitPathCloudIntent(f.ctx,effect,0.025),JSON.stringify(f.calls.feedback));assert.ok(!groundUnder(f.runtime,[-4,-1.9,4,1.9]),"road cut the terrain");
+ const before=f.session.snapshot_json(),face=of(f.runtime,"path"),sample={point:{x:0,y:0,z:0},surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
+ demolishTool.onPointerUp(f.ctx,{start:sample,current:sample,samples:[sample],moved:false},demolishTool.defaultParams());
+ assert.equal(of(f.runtime,"path"),undefined);assert.ok(groundUnder(f.runtime,[-4,-1.9,4,1.9]),JSON.stringify(f.calls.feedback));
+ const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId);assert.equal(f.session.snapshot_json(),before);
+ }finally{f.session.free();}
+}));

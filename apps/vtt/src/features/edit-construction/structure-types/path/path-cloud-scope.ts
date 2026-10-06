@@ -157,3 +157,17 @@ export function standingRegionsForCloud(
     return owners !== undefined && owners.some((id) => corridorIds.has(id));
   });
 }
+
+/** Retires the authoring spans owned by deleted contour faces, including disconnected remnants. */
+export function removalPatchForRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot): ConstructionGraphPatch {
+  const edges = graph.edges.filter((edge) => {
+    if (!isRoadSpan(edge)) return false;
+    const owners = new Set(extractCorridorsFromEdgeId(edge.edgeId));
+    for (const id of [edge.startNodeId, edge.endNodeId]) {
+      const owner = parseSpineControlNodeId(id)?.operationId;
+      if (owner) owners.add(owner);
+    }
+    return standingRegionsForCloud(regions, owners).length > 0;
+  });
+  return { nodes: [], edges: [], removedEdgeIds: edges.map((edge) => edge.edgeId) };
+}

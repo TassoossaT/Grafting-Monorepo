@@ -32,5 +32,6 @@ export type {
   ToolParamsFor,
   TowerStampParams,
   WallBrushParams,
+  WallLineParams,
   WallParams,
 } from "./tool-types.ts";

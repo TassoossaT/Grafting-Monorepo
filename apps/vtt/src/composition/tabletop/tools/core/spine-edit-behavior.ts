@@ -1,6 +1,6 @@
-import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
+import type { ConstructionToolId } from "@/features/edit-construction";
 
-import { curveEdgesOf, curveHandles, curveMidframes, curvePick, curvePickId, curveWidthPick, globalHandleOf, shownGlobalHandleAt, spanWidth, spineDefaultOffsets, spineWidthHandles, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { curveAnchorPick, curveActionPick, curveEndWidthPick, curveEdgesOf, curveHandles, curveMidframes, curvePick, curvePickId, curveWidthPick, globalHandleOf, shownGlobalHandleAt, spanWidth, spineDefaultOffsets, spineWidthHandles, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import { beginCurveGesture, type AnchorSnap, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
 import type { ConstructionTool, PointerSample, ReleasedGesture, ToolContext, ToolGesture } from "./tool-context.ts";
 
@@ -13,8 +13,7 @@ import type { ConstructionTool, PointerSample, ReleasedGesture, ToolContext, Too
  * - drag a span's midpoint to bend it, or double-click it to insert a point there;
  * - push a span's width handle out or in to widen or narrow it;
  * - Delete/Backspace removes the selected control point;
- * - whatever the shared edit panel asks for instead: raising or lowering,
- *   or a curve action such as a span's width.
+ * - contextual curve actions and a separate width handle at the span end.
  *
  * A press on the body is never an edit: it belongs to the tool, which
  * builds against what it lands on. Handles show on the spine under the
@@ -30,8 +29,6 @@ export interface SpineEditOptions {
   readonly drafting?: (ctx: ToolContext) => boolean;
   /** How a dragged anchor snaps; absent, anchors never snap. */
   readonly snap?: AnchorSnap;
-  /** Whether this tool reads the ambient legacy curve-action panel. */
-  readonly panelActions?: boolean;
 }
 
 /** What a press on a spine resolved to: the handle it actually takes, and how to drag it. */
@@ -64,7 +61,7 @@ interface SpineEditBehavior {
 const dragOf = (sample: PointerSample, extra: Partial<CurveGestureOptions> = {}): CurveGestureOptions => ({ mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point, ...extra });
 const sceneOf = (ctx: ToolContext) => ({ graph: ctx.runtime.getGraphSnapshot(), topologies: ctx.runtime.getAllRegionTopologies(), cloudFor: ctx.runtime.cloudFor.bind(ctx.runtime) });
 
-function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: SpineEditOptions): SpineEditBehavior {
+function createSpineEditBehavior({ ownsSpine, snap }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], { readonly edit: CurveGesture; readonly picked: SpinePick }>();
   const selections = new WeakMap<ToolContext["runtime"], string>();
   const owned = (surfaceType: string | undefined) => surfaceType !== undefined && structureTypeFor(surfaceType)?.spine !== undefined && ownsSpine(surfaceType);
@@ -90,27 +87,42 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
       const handle = edge && curveHandles(curveMidframes(curveEdgesOf({ ...graph, edges: [edge] }, [], ctx.runtime), ctx.runtime))[0];
       return handle && { ...sample, point: handle.position };
     }
-    if (!edges.some((e) => e.startNodeId === sample.nodeId || e.endNodeId === sample.nodeId)) return;
-    const node = graph.nodes.find((n) => n.id === sample.nodeId);
-    return node && { ...sample, point: node.position };
+    const anchorId = curveAnchorPick(sample.nodeId);
+    if (!anchorId || !edges.some((e) => e.startNodeId === anchorId || e.endNodeId === anchorId)) return;
+    const node = graph.nodes.find((n) => n.id === anchorId);
+    return node && { ...sample, nodeId: anchorId, point: node.position };
   }
 
   /** A span's width handle, standing where it is drawn: a width drag of that span. */
-  function widthPick(ctx: ToolContext, sample: PointerSample, edgeId: string): SpinePick | undefined {
+  function widthPick(ctx: ToolContext, sample: PointerSample, edgeId: string, atEnd = false): SpinePick | undefined {
     const graph = ctx.runtime.getGraphSnapshot();
     const edge = graph.edges.find((e) => e.edgeId === edgeId && owned(e.curve?.surfaceType));
     const width = edge && spanWidth(edge, spineDefaultOffsets);
     if (!width) return undefined;
     const frames = curveMidframes(curveEdgesOf({ ...graph, edges: [edge] }, [], ctx.runtime), ctx.runtime);
     const handle = spineWidthHandles(frames, graph, spineDefaultOffsets)[0];
+    const defaults = edge?.curve?.surfaceType ? spineDefaultOffsets(edge.curve.surfaceType) : undefined;
+    const startOffsets = edge?.curve?.bandOffsets ?? defaults;
+    const endOffsets = edge?.curve?.endBandOffsets ?? startOffsets;
+    const endWidth = endOffsets && endOffsets[1] - endOffsets[0];
     return handle && {
-      sample: { ...sample, nodeId: curvePickId(edgeId, "midpoint"), point: handle.position },
-      options: dragOf(sample, { curveAction: "width", curveWidth: width.width, allowShapeChange: true }),
+      sample: { ...sample, nodeId: curvePickId(edgeId, "midpoint"), point: atEnd ? sample.point : handle.position },
+      options: dragOf(sample, { curveAction: "width", curveWidth: atEnd && startOffsets ? startOffsets[1] - startOffsets[0] : width.width, ...(atEnd ? { curveEndWidth: endWidth, widthAtEnd: true } : {}), allowShapeChange: true }),
     };
   }
 
   return {
     pick(ctx, sample) {
+      const action = sample.nodeId ? curveActionPick(sample.nodeId) : undefined;
+      if (action) {
+        const graph = ctx.runtime.getGraphSnapshot();
+        const midpoint = curvePick(action.targetId);
+        const owner = midpoint ? graph.edges.find((edge) => edge.edgeId === midpoint.edgeId)?.curve?.surfaceType : graph.edges.find((edge) => edge.startNodeId === action.targetId || edge.endNodeId === action.targetId)?.curve?.surfaceType;
+        if (!owned(owner)) return;
+        return { sample: { ...sample, nodeId: action.targetId }, options: dragOf(sample, { curveAction: action.action, allowShapeChange: true }) };
+      }
+      const endWidthOf = sample.nodeId ? curveEndWidthPick(sample.nodeId) : undefined;
+      if (endWidthOf) return widthPick(ctx, sample, endWidthOf, true);
       const widthOf = sample.nodeId ? curveWidthPick(sample.nodeId) : undefined;
       if (widthOf !== undefined) return widthPick(ctx, sample, widthOf);
       if (sample.nodeId && globalHandleOf(sample.nodeId)) {
@@ -128,20 +140,13 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
     },
     isHandle(ctx, sample) {
       if (sample.nodeId && globalHandleOf(sample.nodeId)) return owned(shownGlobalHandleAt(sceneOf(ctx), sample.nodeId)?.owner);
-      const edgeId = sample.nodeId ? curveWidthPick(sample.nodeId) ?? curvePick(sample.nodeId)?.edgeId : undefined;
+      if (sample.nodeId && (curveAnchorPick(sample.nodeId) || curveActionPick(sample.nodeId))) return this.pick(ctx, sample) !== undefined;
+      const edgeId = sample.nodeId ? curveEndWidthPick(sample.nodeId) ?? curveWidthPick(sample.nodeId) ?? curvePick(sample.nodeId)?.edgeId : undefined;
       return edgeId !== undefined && owned(ctx.runtime.getGraphSnapshot().edges.find((e) => e.edgeId === edgeId)?.curve?.surfaceType);
     },
     begin(ctx, picked) {
       select(ctx, picked.sample);
-      // The shared "edit existing structure" panel: elevation mode, and a
-      // curve action other than plain editing -- remove, disconnect, close,
-      // delete a span, set its width -- applied to whatever was picked.
-      // Absent where a host never wired the panel; plain shape editing then.
-      const panel: Partial<StructureEditParams> = panelActions ? ctx.structureEditParams ?? {} : {};
-      const action = panel.curveAction && panel.curveAction !== "edit"
-        ? { curveAction: panel.curveAction, curveWidth: panel.curveWidth, curveEndWidth: panel.curveEndWidth, allowShapeChange: true }
-        : {};
-      const edit = beginEdit(ctx, picked.sample, { ...picked.options, mode: panel.mode ?? picked.options.mode, ...action });
+      const edit = beginEdit(ctx, picked.sample, picked.options);
       if (edit) drags.set(ctx.runtime, { edit, picked });
       return edit !== undefined;
     },
@@ -159,7 +164,7 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
       drag.edit.commit();
       // The second click of a double-click on a span's midpoint inserts a point there, the curve unchanged.
       const { sample, options } = drag.picked;
-      if (!gesture.moved && (gesture.clicks ?? 0) >= 2 && curvePick(sample.nodeId!)?.index === "midpoint") {
+      if (!gesture.moved && (gesture.clicks ?? 0) >= 2 && (!options.curveAction || options.curveAction === "edit") && curvePick(sample.nodeId!)?.index === "midpoint") {
         beginEdit(ctx, sample, { ...options, insertOnClick: true })?.commit();
       }
       return true;

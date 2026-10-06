@@ -1,3 +1,4 @@
+import { curveAnchorId } from "../src/features/edit-construction/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { slopeCurveTool, slopeSpiralTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
@@ -112,7 +113,7 @@ test("dragging a point moves it in plan only; the ends keep their heights and th
     commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 0 }, { x: 12, y: 4, z: 0 }], { width: 1.5 });
     const steps = walk(runtime);
     const inner = steps[2];
-    const start = { nodeId: inner.id, point: node(runtime, inner.id).position };
+    const start = { nodeId: curveAnchorId(inner.id), point: node(runtime, inner.id).position };
     // The pointer is over the ground: a road would take its height, a ramp keeps its own.
     const target = { point: { x: start.point.x + 1, y: 0, z: start.point.z + 2 } };
     slopeCurveTool.onPointerDown(ctx, start, { width: 1.5, rise: 2 });

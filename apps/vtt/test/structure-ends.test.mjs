@@ -1,3 +1,4 @@
+import { curveAnchorId } from "../src/features/edit-construction/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { shownGlobalHandles } from "../src/features/edit-construction/index.ts";
@@ -102,7 +103,7 @@ test("a curved ramp's free end dragged onto a floor's edge connects there", asyn
     const end = controls.find((n) => Math.abs(n.position.x - 7) < 1e-6);
     const origin = controls.find((n) => Math.abs(n.position.x - 4) < 1e-6);
     assert.ok(sharesEnd(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), origin.id), "the start is welded at creation");
-    const start = { nodeId: end.id, point: end.position };
+    const start = { nodeId: curveAnchorId(end.id), point: end.position };
     const target = { point: { x: 10.3, y: 0, z: 2.5 } };
     slopeCurveTool.onPointerDown(ctx, start, curve);
     slopeCurveTool.onPointerMove(ctx, { start, current: target, samples: [start, target] }, curve);
@@ -127,7 +128,7 @@ test("a curved ramp's welded end dragged away from its floor comes off it", asyn
     floor(runtime, "low", 0, 0);
     commitPlatformSlope(ctx, [{ x: 4, y: 0, z: 2 }, { x: 8, y: 2, z: 2 }], curve);
     const origin = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x - 4) < 1e-6);
-    const start = { nodeId: origin.id, point: origin.position };
+    const start = { nodeId: curveAnchorId(origin.id), point: origin.position };
     const target = { point: { x: 5.5, y: 0, z: 6 } };
     slopeCurveTool.onPointerDown(ctx, start, curve);
     slopeCurveTool.onPointerMove(ctx, { start, current: target, samples: [start, target] }, curve);
@@ -413,7 +414,7 @@ test("a curved ramp's end dragged onto a straight ramp's free end joins it: the 
     // A curved ramp further east, its west end free.
     commitPlatformSlope(ctx, [{ x: 10, y: 2, z: 3 }, { x: 14, y: 4, z: 3 }], curve);
     const end = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x - 10) < 1e-6);
-    const start = { nodeId: end.id, point: end.position };
+    const start = { nodeId: curveAnchorId(end.id), point: end.position };
     const target = { point: { x: 6.3, y: 0, z: 0.2 } };
     slopeCurveTool.onPointerDown(ctx, start, curve);
     slopeCurveTool.onPointerMove(ctx, { start, current: target, samples: [start, target] }, curve);
@@ -426,7 +427,7 @@ test("a curved ramp's end dragged onto a straight ramp's free end joins it: the 
     const straight = ramp(runtime);
     assert.ok(["min", "max"].every((side) => straight.nodes.some((n) => n.id === controlSectionId(end.id, side))), "the straight ramp's top is the curved one's end");
     // Pulled away again, the straight ramp keeps an end of its own where it stood.
-    const again = { nodeId: end.id, point: placed };
+    const again = { nodeId: curveAnchorId(end.id), point: placed };
     const away = { point: { x: 8, y: 0, z: 5 } };
     slopeCurveTool.onPointerDown(ctx, again, curve);
     slopeCurveTool.onPointerMove(ctx, { start: again, current: away, samples: [again, away] }, curve);

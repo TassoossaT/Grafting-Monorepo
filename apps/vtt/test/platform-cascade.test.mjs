@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planEdit, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
+import { shownGlobalHandles, planEdit, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
 import { createStructureEditBehavior } from "../src/composition/tabletop/tools/core/structure-edit-behavior.ts";
 import { commitPlatformContour, commitPlatformShape, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
@@ -75,18 +75,16 @@ test("invalid absolute batches are atomic; equal cycles converge and conflicting
     assert.equal(session.snapshot_json(), before);
   } finally { session.free(); }
 });
-test("one drag history covers every storey, including after a rejected tick", () => {
+test("one height handle drag history covers every storey", () => {
   const { ctx, runtime, session } = building();
   try {
-    const surfaceRef = surfaceRefFromNodeSet(platform(runtime,1).surfaceKey);
-    const start = { point: {x:2,y:3,z:2}, surfaceRef, screenY:200 };
-    const behavior = createStructureEditBehavior({ ownsType: () => true });
-    behavior.tryGrab(ctx,start,{mode:"shape"});
-    const current = {...start, screenY:160};
-    behavior.onPointerMove(ctx,{start,current,samples:[start,current]},{mode:"elevation"});
-    const bad = {...start, screenY:400};
-    behavior.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
-    behavior.onPointerUp(ctx);
+    const handle = shownGlobalHandles({graph:runtime.getGraphSnapshot(),topologies:runtime.getAllRegionTopologies(),cloudFor:q=>runtime.cloudFor(q)}).find(h=>h.kind==="height" && h.faces?.includes(platform(runtime,1).surfaceKey.join("\u0000")));
+    assert.ok(handle,"middle floor height handle");
+    const start = {point:handle.position,nodeId:handle.id,screenY:200,screenX:100};
+    const current = {...start,screenY:160};
+    platformContourTool.onPointerDown(ctx,start,platformContourTool.defaultParams());
+    platformContourTool.onPointerMove(ctx,{start,current,samples:[start,current]},platformContourTool.defaultParams());
+    platformContourTool.onPointerUp(ctx,{start,current,samples:[start,current]},platformContourTool.defaultParams());
     assert.deepEqual(heights(runtime),[0,4,7]);
     // The whole drag, every storey it carried, is one transaction.
     const history = ctx.history.undo();
@@ -276,7 +274,10 @@ test("platform circle shares the tower contour, welds cut holes, and refuses a f
   const {ctx,runtime,session,calls}=sessionFixture();
   const curves=()=>runtime.getAllRegionTopologies().flatMap(t=>[...t.outerLoops,...t.holes].flat());
   try {
-    platformContourTool.onClick(ctx,{point:{x:0,y:0,z:0}},{mode:"create",elevation:3,shape:"circle",radius:2.5});
+    const sample={point:{x:0,y:0,z:0}}, params={mode:"create",elevation:3,shape:"circle",radius:2.5};
+    platformContourTool.onPointerDown(ctx,sample,params);
+    platformContourTool.onPointerUp(ctx,{start:sample,current:sample,samples:[sample]},params);
+    platformContourTool.onClick(ctx,sample,params);
     assert.equal(curves().length,4,JSON.stringify(calls.feedback));
     assert.ok(curves().every(c=>c.geometry.kind==="arc"));
     const before = session.snapshot_json();

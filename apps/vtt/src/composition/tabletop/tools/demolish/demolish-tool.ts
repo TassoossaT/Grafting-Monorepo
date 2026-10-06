@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, hasTrait, resolvePolicy } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, surfaceKeyText, resolvePolicy } from "../../../../features/edit-construction/index.ts";
 import type { DemolishParams } from "@/features/edit-construction";
 import type { ConstructionSurfaceKey } from "@/ports";
 
@@ -14,31 +14,24 @@ function strokeChord(params: DemolishParams): number {
   return Math.max(0.2, params.radius * 0.25);
 }
 
-function keyString(key: ConstructionSurfaceKey): string {
-  return key.join("\u0000");
-}
-
 function resolveScopeForSurface(
   ctx: ToolContext,
   seedKey: ConstructionSurfaceKey,
   targetKeysSet: Set<string>,
   targetKeysList: ConstructionSurfaceKey[],
 ): void {
-  const strKey = keyString(seedKey);
+  const strKey = surfaceKeyText(seedKey);
   if (targetKeysSet.has(strKey)) return;
 
   const topology = ctx.runtime.getRegionTopology(seedKey);
   if (topology === undefined) return;
-
-  // Skip pure ground base cells (e.g. natural terrain / terrain-grass)
-  if (hasTrait(topology.surfaceType, "ground")) return;
 
   const policy = resolvePolicy(topology, { kind: "region" });
   if (policy.scope === "cloud") {
     const cloudOutcome = ctx.runtime.cloudFor({ seed: seedKey, surfaceType: topology.surfaceType });
     const keys = cloudOutcome.surfaceKeys.length > 0 ? cloudOutcome.surfaceKeys : [seedKey];
     for (const key of keys) {
-      const s = keyString(key);
+      const s = surfaceKeyText(key);
       if (!targetKeysSet.has(s)) {
         targetKeysSet.add(s);
         targetKeysList.push(key);
@@ -65,10 +58,11 @@ export const demolishTool: ConstructionTool<"demolish"> = {
   previewOnHover: true,
 
   previewFor(gesture: ToolGesture, params: DemolishParams, ctx: ToolContext) {
+    const shape = { kind: "circle" as const, radius: params.radius };
     return brushSweptRegionFill(
       ctx.runtime,
-      gesture.samples.map((sample) => sample.point),
-      { kind: params.shape, radius: params.radius },
+      gesture.samples.map((s) => s.point),
+      shape,
       DEMOLISH_COLOR,
       0.4,
       strokeChord(params),
@@ -81,23 +75,25 @@ export const demolishTool: ConstructionTool<"demolish"> = {
     const causeId = scopedToolId(ctx, "demolish", ctx.nextSequence());
     const targetKeysSet = new Set<string>();
     const targetKeysList: ConstructionSurfaceKey[] = [];
-
-    const strokePoints = gesture.samples.map((sample) => sample.point);
+    const picked = new Map(ctx.runtime.getAllRegionTopologies().map((topology) => [surfaceRefFromNodeSet(topology.surfaceKey), topology.surfaceKey]));
 
     if (gesture.moved) {
-      // Drag/brush demolition across swept area
-      const swept = brushSweptOutlinePolygons(
+      // Upright faces have no planar footprint; picked stroke samples still select them.
+      for (const sample of gesture.samples) {
+        const key = sample.surfaceRef ? picked.get(sample.surfaceRef) : undefined;
+        if (key) resolveScopeForSurface(ctx, key, targetKeysSet, targetKeysList);
+      }
+      const samplePoints = gesture.samples.map((s) => s.point);
+      const outlinePolygons = brushSweptOutlinePolygons(
         ctx.runtime,
-        strokePoints,
+        samplePoints,
         params.radius,
         strokeChord(params),
       );
-
-      for (const polygon of swept) {
+      for (const polygon of outlinePolygons) {
         const ring = polygon[0];
         if (ring === undefined || ring.length < 3) continue;
-        const covered = ctx.runtime.getFootprintCoverage(ring);
-        for (const region of covered) {
+        for (const region of ctx.runtime.getFootprintCoverage(ring)) {
           resolveScopeForSurface(ctx, region.surfaceKey, targetKeysSet, targetKeysList);
         }
       }
@@ -106,14 +102,7 @@ export const demolishTool: ConstructionTool<"demolish"> = {
       const sample = gesture.start;
       let hitKey: ConstructionSurfaceKey | undefined;
 
-      if (sample.surfaceRef !== undefined) {
-        const topology = ctx.runtime
-          .getAllRegionTopologies()
-          .find((t) => surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef);
-        if (topology !== undefined) {
-          hitKey = topology.surfaceKey;
-        }
-      }
+      if (sample.surfaceRef !== undefined) hitKey = picked.get(sample.surfaceRef);
 
       if (hitKey !== undefined) {
         resolveScopeForSurface(ctx, hitKey, targetKeysSet, targetKeysList);

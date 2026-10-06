@@ -99,6 +99,6 @@ const draft = createSpineDraftTool<"path-brush", RoadDraftState>({
 export const pathBrushTool = withSpineEditing(draft, {
   ownsSpine: (surfaceType) => surfaceType === PATH_SURFACE_TYPE,
   snap: roadAnchorSnap,
-  panelActions: false,
+  
   drafting: draft.drafting,
 });

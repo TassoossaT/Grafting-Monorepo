@@ -1,10 +1,10 @@
 import { DEFAULT_TOOL_PARAMS, hasTrait } from "@/features/edit-construction";
-import type { WallParams } from "@/features/edit-construction";
+import type { WallLineParams } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
-import { WALL_COLOR, commitWallContour, wallFootAt, pinnedToBaseline, wallCorrectionPreview, wallStartAt } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallContour, commitWallStroke, wallFootAt, pinnedToBaseline, wallCorrectionPreview, wallStartAt } from "./wall-shared.ts";
 
 /**
  * The pressed drag's own anchor, or `undefined` before a press. Cleared the
@@ -33,8 +33,9 @@ const rawWallLineTool: ConstructionTool<"wall-line"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
   rulerAnchor: () => anchor,
 
-  previewFor(gesture: ToolGesture, params: WallParams, ctx: ToolContext) {
+  previewFor(gesture: ToolGesture, params: WallLineParams, ctx: ToolContext) {
     if (anchor === undefined) return undefined;
+    if (params.mode === "curve") return wallCorrectionPreview(ctx, gesture.samples.map((sample) => pinnedToBaseline(anchor!, wallFootAt(ctx, sample))), 0.15, WALL_COLOR[params.wallType]);
     // Same correction-and-weld band the brush preview draws from -- the raw
     // press/cursor points never showed where the run will actually land, or
     // the reach that let it land there.
@@ -46,13 +47,19 @@ const rawWallLineTool: ConstructionTool<"wall-line"> = {
     anchor = wallStartAt(ctx, sample);
   },
 
-  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallParams): void {
+  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallLineParams): void {
     if (anchor === undefined) return;
+    if (params.mode === "curve") {
+      commitWallStroke(ctx, gesture.samples.map((sample) => pinnedToBaseline(anchor!, wallFootAt(ctx, sample))), 0.15, params, "wall-line");
+      anchor = undefined;
+      return;
+    }
     const end = pinnedToBaseline(anchor, wallFootAt(ctx, gesture.current));
     commitWallContour(ctx, [{ start: anchor, end, geometry: { kind: "line" } }], params, "wall-line");
     anchor = undefined;
   },
+  onCancel() { anchor = undefined; },
 };
 
 /** Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it. */
-export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition"), handlesOnly: true });
+export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
