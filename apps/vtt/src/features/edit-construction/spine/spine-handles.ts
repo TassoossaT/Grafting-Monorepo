@@ -1,6 +1,6 @@
 import type { ConstructionCurvedEdge, ConstructionEdgeSnapshot, ConstructionGraphSnapshot, ConstructionPosition } from "@/ports";
 
-import { curvePick, curveWidthPickId, type CurveMidframe } from "../topology/curve-handles.ts";
+import { curvePick, curveEndWidthId, curveWidthPickId, type CurveMidframe } from "../topology/curve-handles.ts";
 import { spanOffsets } from "./spine-ribbons.ts";
 
 export { curvePick, curvePickId, curveWidthPick, curveWidthPickId } from "../topology/curve-handles.ts";
@@ -25,15 +25,21 @@ export function spineWidthHandles(
   frames: readonly CurveMidframe[],
   graph: ConstructionGraphSnapshot,
   defaultsFor: SpineDefaultOffsets,
+  atEnd = false,
 ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
   const edges = new Map(graph.edges.map((edge) => [edge.edgeId, edge]));
-  return frames.flatMap(({ edge: span, position, tangent }) => {
+  return frames.flatMap(({ edge: span, position: midpoint, tangent: midTangent }) => {
     const edge = span.store === "spine" ? edges.get(span.edgeId) : undefined;
     const width = edge && spanWidth(edge, defaultsFor);
+    const defaults = edge?.curve?.surfaceType ? defaultsFor(edge.curve.surfaceType) : undefined;
+    const [, , before, end] = span.curve.points;
+    const position = atEnd ? { x: end[0], y: end[1], z: end[2] } : midpoint;
+    const tangent = atEnd ? [end[0] - before[0], end[1] - before[1], end[2] - before[2]] : midTangent;
     const length = Math.hypot(tangent[0], tangent[2]);
     if (!width || length < 1e-9) return [];
+    const reach = atEnd && edge?.curve && defaults ? spanOffsets(edge.curve, defaults).endOffsets[1] : width.reach;
     const side = { x: -tangent[2] / length, z: tangent[0] / length };
-    return [{ id: curveWidthPickId(span.edgeId), position: { x: position.x + side.x * width.reach, y: position.y, z: position.z + side.z * width.reach } }];
+    return [{ id: atEnd ? curveEndWidthId(span.edgeId) : curveWidthPickId(span.edgeId), position: { x: position.x + side.x * reach, y: position.y, z: position.z + side.z * reach } }];
   });
 }
 

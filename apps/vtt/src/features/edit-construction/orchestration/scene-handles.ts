@@ -3,8 +3,7 @@ import type { BezierPort, ConstructionCurvedEdge, ConstructionGraphSnapshot, Con
 import type { GlobalHandleKind } from "../global-handles/index.ts";
 import { spineWidthHandles } from "../spine/spine-handles.ts";
 import { spineDefaultOffsets } from "../structure-types/index.ts";
-import { curveEdgesOf, curveHandles, curveMidframes, curveAnchorId, curveActionId, curvePickId, curveEndWidthId } from "../topology/curve-handles.ts";
-import { spanOffsets } from "../spine/spine-ribbons.ts";
+import { curveEdgesOf, curveHandles, curveMidframes, curveAnchorId, curveActionId, curvePickId } from "../topology/curve-handles.ts";
 import { openSpineChain } from "../spine/spine-open-chain.ts";
 import { spineComponent } from "../spine/spine-owner.ts";
 import { openingHandles, type OpeningRunPort } from "../topology/opening-handles.ts";
@@ -81,15 +80,9 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
       const anchors = new Set(shown.flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
       for (const node of input.graph.nodes) if (anchors.has(node.id)) handles.push({ id: curveAnchorId(node.id), kind: "anchor", position: node.position });
       for (const handle of spineWidthHandles(frames, input.graph, spineDefaultOffsets)) handles.push({ id: handle.id, kind: "width", position: handle.position });
+      for (const handle of spineWidthHandles(frames, input.graph, spineDefaultOffsets, true)) handles.push({ id: handle.id, kind: "width", position: handle.position });
       for (const frame of frames) {
-        const span = input.graph.edges.find((edge) => edge.edgeId === frame.edge.edgeId);
-        const defaults = span?.curve?.surfaceType ? spineDefaultOffsets(span.curve.surfaceType) : undefined;
-        if (!span?.curve || !defaults) continue;
-        const { endOffsets } = spanOffsets(span.curve, defaults);
-        const [, , before, end] = frame.edge.curve.points;
-        const length = Math.hypot(end[0] - before[0], end[2] - before[2]);
-        if (length > 1e-9) handles.push({ id: curveEndWidthId(span.edgeId), kind: "width", position: { x: end[0] - (end[2] - before[2]) / length * endOffsets[1], y: end[1], z: end[2] + (end[0] - before[0]) / length * endOffsets[1] } });
-        const midpointId = curvePickId(span.edgeId, "midpoint");
+        const midpointId = curvePickId(frame.edge.edgeId, "midpoint");
         if (input.selected === midpointId) handles.push({ id: curveActionId(midpointId, "delete-segment"), kind: "deleteSegment", position: { ...frame.position, y: frame.position.y + 0.6 } });
       }
       const node = input.graph.nodes.find((node) => node.id === input.selected && anchors.has(node.id));

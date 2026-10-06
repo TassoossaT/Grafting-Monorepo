@@ -6703,6 +6703,7 @@ export function spineWidthHandles(
   frames: readonly CurveMidframe[],
   graph: ConstructionGraphSnapshot,
   defaultsFor: SpineDefaultOffsets,
+  atEnd = false,
   ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
   const edges = new Map(graph.edges.map((edge) => [edge.edgeId, edge]));
 export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string, contour: readonly Pick<ConstructionCurvedEdge, "edgeId">[] = []): boolean {

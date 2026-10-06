@@ -7393,7 +7393,7 @@ contour edge are ordinary vertices, edited through their own role.
 
 How wide the band `edge` sweeps is halfway along it, and how far its farther side stands from the spine there.
 
-### `function vtt.spine-handles.spineWidthHandles(frames: readonly CurveMidframe[], graph: ConstructionGraphSnapshot, defaultsFor: SpineDefaultOffsets): readonly { id: string; position: ConstructionPosition }[]`
+### `function vtt.spine-handles.spineWidthHandles(frames: readonly CurveMidframe[], graph: ConstructionGraphSnapshot, defaultsFor: SpineDefaultOffsets, atEnd: boolean): readonly { id: string; position: ConstructionPosition }[]`
 
 Each spine span's width handle: on the edge of its band, halfway along
 it -- pushed out or in, it widens or narrows that span.
