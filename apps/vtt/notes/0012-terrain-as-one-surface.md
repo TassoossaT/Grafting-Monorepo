@@ -1,7 +1,7 @@
 # Note 0012 — Terrain as one surface in 3D
 
 - Recorded: 2026-10-05
-- Status: approved plan (owner, 2026-10-05); implementation in TASK VTT-TERRAIN-REGEN-CALIBRATION, PR #353
+- Status: implemented 2026-10-06 (TASK VTT-TERRAIN-REGEN-CALIBRATION, PR #353); see **As built** for where it differs from the plan, and **Open** for what is left
 - Related: note 0011 (cut before TASK-333), ground contact law, terrain regen as a brush stroke, 3D carve/fill (`solid-field`)
 
 ## Verdict
@@ -113,6 +113,68 @@ Delete these, together with their tests or with the tests rewritten against the 
 - `groundSurfaceOf` as a ground-height source;
 - the sculpt brush's `brushSweptOutlinePolygons` / `getFootprintCoverage` use for ground;
 - `structural-cut.ts` `calculateProfile*` once nothing reads them.
+
+## As built (2026-10-06)
+
+Read this before the plan sections above; where they disagree, this wins.
+
+- **No new session queries.** `terrain_patch` and `ground_below` were not added to the Rust session. Selection walks the surface in TS over bounded region queries:
+  - `ground-surface.ts` holds `walkSurface`, `closedPatch` and `surfaceComponents`;
+  - `closedPatch` takes in the faces round a pinched corner, steps one ring out where a structure's hole meets the border, and takes in islands of ground the patch rings round.
+- **Layered contact law** (I5). The sunk-or-resting decision lives in `ground-contact.ts`:
+  - `groundSurfaceOf(ground, own)(point, reference)`, with `groundLayerAt` choosing the layer;
+  - the first surface over the reference counts when it faces up, because the thing is sunk there; otherwise the first surface under it counts; a ceiling alone over it means no ground;
+  - `facesUp` is read from the tabletop winding, whose right-hand normal points down.
+
+  `groundContactOf` passes the structure's own height at each sample, and the reaction's departing-contact read uses the same rule.
+- **Regrow** (`terrain-regrow.ts`), which replaces `repairTerrainCut`:
+  1. Band: the structure's heights, from the contact reach below to 1.5 faces above.
+  2. Faces with an open side inside the vacated area always join, whatever their height. A floor half sunk in a hill leaves a rim that climbs over the band; a ceiling holds no such side.
+  3. Dragged faces are replaced but never read as the surface. They are ringed by neighbours, so the hole they leave is capped.
+  4. Contact rings come straight from `meetStructures().area`, never resampled.
+  5. Face size is the median side of the square of each face's area, measured in 3D and clamped to 2–6 m.
+  6. One E2 call runs per connected piece.
+- **E2** (`solid-field/src/regenerate.rs`):
+  - Faces are ear-clipped across the patch normal; a fan would turn concave contour cells over.
+  - Holes are capped by ear-clipping the rim; concentric rings are the fallback.
+  - The chart is the projection when its rim is simple and at most 1% of the area turns over; otherwise it is a mean-value embedding solved by plain Gauss-Seidel. Over-relaxation diverged on these non-symmetric weights.
+  - The ground is computed in the chart as the rim minus the holes, by `i_overlay`, with collinear rim corners restored. Raw overlapping constraints panicked spade, and in wasm that panic kills the session.
+  - A corner landing on a side is lifted through the chart and projected onto the side in 3D. It is dropped as a landing when it lies more than a face away.
+  - There is no 3D relax: it measured no better and folded a cell at a structure's corner.
+- **E1** (`edit.rs`, `field.rs`, `table.rs`):
+  - Adicionar and Remover are `Effect::Raise` / `Effect::Lower` with `Form::Profile { height }`. The surface moves out or in by a cosine layer, with its depth read at the point's foot on the old surface.
+    - A squashed capsule was tried first. It overhung on slopes and stood vertical at its foot.
+    - Faces are refined to `min(r, 2r²/(πh))` for sharp ridges.
+  - Aplainar is two `Form::Column` shapes: a fill below and a carve above the stroke's first height, reaching `max(2·step, radius)` either way.
+  - The table floor is solid below y = 0 only where no ground covers the plan point. There the ground distance counts as unsigned, because the sign past an open border lies.
+  - A free border side is released only where a shape reaches it. The read's foot is set down on the table and locked.
+  - Ring chains handle partly held rings, stitched with `zipper_open`.
+  - Structure faces arrive as `neighbours`: their sides are held, but they are never solid.
+  - A layer's depth is read across the ground at the nearest point of the path, using the ground's normal there. The along-normal offset is left out, so a point over the path gets the whole depth.
+  - The read keeps only what lies inside the ring, nearer the patch than the ground round it.
+  - Rings are paired with borders by the mean gap measured both ways.
+  - The stitch picks its diagonal by length alone. A preference for the triangle facing out of the solid drifted it out of phase and fanned triangles 13 m across.
+- **Volume-edit patch** (`terrain-volume-edit.ts`): it grows over the surface from the face nearest each point of the stroke, never from whatever lies near in 3D. Through a thin roof, a tunnel's ceiling lies a metre under the hill.
+  - When the engine refuses, the patch grows inward from its holes, one ring of faces at a time, twice at most. This covers a layer laid across a gap cut in a tunnel's roof, which the edit closes over.
+  - `unfold` runs before the remesh, which then evens out the corners it drew close together. Run after the remesh, it left micro-edges that the commit dropped as faces with repeated corners, opening holes.
+  - A layer reaches a quarter face past its radius.
+  - A level reaches one face.
+  - A bore or an arch reaches two faces.
+- **Regrow walks restable ground only.** It takes faces whose outward normal points up by at least 0.2, plus the vacated rim and dragged faces, so a tunnel's walls and ceiling are never relaid. `test/terrain-layers.test.mjs` holds this for a floor laid in a tunnel, the same floor moved, and a layer laid on the tunnel floor.
+- **Determinism.** `indexedFaces` orders faces by key. Wasm `HashMap` order shifts with process history, which changed region order from the session and, with it, the meshes.
+- **Render.** A fan fallback covers a single-loop face that flattens onto no plane. Surfaces were already double-sided, so orientation needed no change.
+- **Roads.** Spine heights come from pointer hits, which are already layer-correct; nothing changed.
+- **Deleted** with their tests: the planar executor, `terrain-regenerate`, `terrain-fill`, `terrain-restack`, `terrain-overhang`, `terrain-diagnostics`, `terrain-neighborhood`, `structural-cut`, `buildConstraintRings` and the plan halves of `terrain-constraints`.
+
+## Open
+
+- The heightmap noise the planar Adicionar added was dropped; the layer is smooth.
+- A raise beside a structure keeps its contact edges but does not re-run the contact law: ground raised under a floor standing clear is not cut.
+- A ridge steeper than 45° (a layer taller than its radius) can fold up to about 2% of its sides where the stitch meets the ring. The remaining inversions start at the concave corners of the ring of square faces, which the read's smooth border cuts across; no flip of a locked ring side undoes them.
+  - The fix is to cut the read mesh along the ring itself instead of stitching a strip between two loops.
+  - `untangle` (flips) and `unfold` (free corners to their neighbours' middle) already take it from about 2.5% down to well under 1% at default settings.
+  - The arc tests allow 2% for such ridges.
+- The arc that nearly closes now goes through E1, which has no plan outline to slit. The arc tests' wide C (1.7π) and closed ring (2.05π) hold it on the empty table, on flat ground and over a hill.
 
 ## Order of work (one task, one PR)
 

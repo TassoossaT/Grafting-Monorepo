@@ -121,6 +121,106 @@ pub fn zipper_open(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[
     triangles
 }
 
+/// Turns over the triangles facing into the solid where a flip of the edge
+/// they share with a neighbour leaves both facing out: the strip stitched to
+/// a ring folds where the ring and the new surface's border run unevenly
+/// beside each other, and a flip undoes the fold. Locked edges never flip.
+pub fn untangle(triangles: &mut [[usize; 3]], vertices: &[Vec3], locked: &HashSet<(usize, usize)>, facing: &dyn Fn(Vec3) -> Vec3) {
+    let faces_out = |[a, b, c]: [usize; 3]| {
+        let normal = (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]);
+        normal.length() > 1e-12 && normal.dot(facing((vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0))) > 0.0
+    };
+    for _ in 0..4 {
+        let mut by_edge: HashMap<(usize, usize), usize> = HashMap::new();
+        for (t, &[a, b, c]) in triangles.iter().enumerate() {
+            for edge in [(a, b), (b, c), (c, a)] {
+                by_edge.insert(edge, t);
+            }
+        }
+        let mut edges: Vec<(usize, usize)> = by_edge.keys().copied().filter(|&(a, b)| a < b).collect();
+        edges.sort_unstable();
+        let mut touched: HashSet<usize> = HashSet::new();
+        let mut flipped = 0;
+        for (a, b) in edges {
+            if locked.contains(&(a, b)) {
+                continue;
+            }
+            let (Some(&one), Some(&two)) = (by_edge.get(&(a, b)), by_edge.get(&(b, a))) else { continue };
+            if touched.contains(&one) || touched.contains(&two) || (faces_out(triangles[one]) && faces_out(triangles[two])) {
+                continue;
+            }
+            // A triangle with no corner off the edge is degenerate: nothing to flip.
+            let (Some(c), Some(d)) = (
+                triangles[one].iter().copied().find(|&v| v != a && v != b),
+                triangles[two].iter().copied().find(|&v| v != a && v != b),
+            ) else {
+                continue;
+            };
+            if c == d || by_edge.contains_key(&(c, d)) || by_edge.contains_key(&(d, c)) {
+                continue;
+            }
+            // `one` walks a -> b -> c, `two` walks b -> a -> d; flipped they walk c -> d.
+            let (first, second) = ([c, a, d], [d, b, c]);
+            if faces_out(first) && faces_out(second) {
+                triangles[one] = first;
+                triangles[two] = second;
+                touched.insert(one);
+                touched.insert(two);
+                flipped += 1;
+            }
+        }
+        if flipped == 0 {
+            break;
+        }
+    }
+}
+
+/// Unfolds what flips alone cannot: every free corner of a triangle facing
+/// into the solid moved to the middle of its neighbours and settled back on
+/// the surface, flips tried again after each round, until none faces in or
+/// the rounds run out.
+pub fn unfold(
+    vertices: &mut [Vec3],
+    triangles: &mut [[usize; 3]],
+    locked: &[bool],
+    locked_edges: &HashSet<(usize, usize)>,
+    facing: &dyn Fn(Vec3) -> Vec3,
+    settle: &dyn Fn(Vec3) -> Vec3,
+) {
+    for _ in 0..UNFOLD_ROUNDS {
+        untangle(triangles, vertices, locked_edges, facing);
+        let inward: Vec<[usize; 3]> = triangles
+            .iter()
+            .copied()
+            .filter(|&[a, b, c]| (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]).dot(facing((vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0))) <= 0.0)
+            .collect();
+        if inward.is_empty() {
+            return;
+        }
+        let mut neighbours: HashMap<usize, Vec<usize>> = HashMap::new();
+        for &[a, b, c] in triangles.iter() {
+            for (p, q) in [(a, b), (b, c), (c, a), (b, a), (c, b), (a, c)] {
+                neighbours.entry(p).or_default().push(q);
+            }
+        }
+        let mut moving: Vec<usize> = inward.iter().flatten().copied().filter(|&v| !locked[v]).collect();
+        moving.sort_unstable();
+        moving.dedup();
+        if moving.is_empty() {
+            return;
+        }
+        for v in moving {
+            let around = &neighbours[&v];
+            let middle = around.iter().fold(Vec3::default(), |sum, &n| sum + vertices[n]) * (1.0 / around.len() as f64);
+            vertices[v] = settle(middle);
+        }
+    }
+    untangle(triangles, vertices, locked_edges, facing);
+}
+
+/// Rounds [`unfold`] takes at most.
+const UNFOLD_ROUNDS: usize = 8;
+
 /// A triangle mesh with locked vertices and edges, being remeshed.
 pub struct Remesh<'a> {
     pub vertices: Vec<Vec3>,
@@ -304,8 +404,12 @@ impl Remesh<'_> {
             if touched.contains(&one) || touched.contains(&two) {
                 continue;
             }
-            let c = self.triangles[one].iter().copied().find(|&v| v != a && v != b).unwrap();
-            let d = self.triangles[two].iter().copied().find(|&v| v != a && v != b).unwrap();
+            let (Some(c), Some(d)) = (
+                self.triangles[one].iter().copied().find(|&v| v != a && v != b),
+                self.triangles[two].iter().copied().find(|&v| v != a && v != b),
+            ) else {
+                continue;
+            };
             // Never a new edge between two locked vertices: the ground beyond
             // may already hold one there, and a third face on it tears it.
             if c == d || edges.contains(&key(c, d)) || (self.locked[c] && self.locked[d]) {

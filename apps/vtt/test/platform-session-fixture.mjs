@@ -88,7 +88,11 @@ export function sessionFixture() {
     editTerrainVolume(request) {
       try {
         return JSON.parse(session.edit_terrain_volume_json(JSON.stringify(request)));
-      } catch {
+      } catch (error) {
+        if (process.env.REGROW_DEBUG) {
+          console.error("[volume]", String(error?.message ?? error));
+          if (process.env.REGROW_DUMP) require_fs().writeFileSync(`${process.env.REGROW_DUMP}-volume-${Date.now()}.json`, JSON.stringify(request));
+        }
         return undefined;
       }
     },

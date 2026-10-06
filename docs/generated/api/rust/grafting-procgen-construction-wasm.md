@@ -186,6 +186,13 @@ World points as unclamped `(u, v)` on an upright host face.
 
 Restores the state immediately after one undone generic overlay.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::regenerate_terrain_surface_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Lays a patch of ground again on its own surface, its shape unchanged:
+the repair round a structure, wherever the ground is. Pure -- reads
+nothing from this session and mutates nothing in it; the caller
+registers the result. See `terrain_regenerate`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::region_topologies_in_bounds_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Region boundaries intersecting a local XZ extent, serialized once.

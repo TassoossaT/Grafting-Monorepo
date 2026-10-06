@@ -1,5 +1,5 @@
 import type { ConstructionNodeId, ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology, ConstructionTopologyBoundsQuery } from "@/ports";
-import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
+import type { PlanarArea, PlanarPolygon, PlanarPort } from "@/features/edit-construction";
 import {
   faceRings,
   GROUND_CONTACT_CELL,
@@ -19,7 +19,6 @@ import {
 
 import { anchoredConstraints } from "./constraint-rings.ts";
 import type { ConstraintTable } from "./terrain-constraints.ts";
-import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
 import { paintedFalloutOf } from "../interference/painted-topologies.ts";
 import { timePhase } from "../commit-timing.ts";
 
@@ -69,6 +68,11 @@ export interface StructureMeeting {
   heightAt(point: { readonly x: number; readonly z: number }): number | undefined;
 }
 
+/** What meeting the structures needs of the runtime: the regions in a box, and the plane's boolean. */
+export interface StructureContactRuntime extends PlanarPort {
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+}
+
 /** No structure in the ground: nothing to go round, nothing to meet. */
 export const NO_STRUCTURES: StructureMeeting = Object.freeze({
   area: [],
@@ -101,7 +105,7 @@ function polygonOf(topology: ConstructionRegionTopology, positionOf: ReadonlyMap
  * read for the ground's own height.
  */
 export function meetStructures(
-  runtime: TerrainCutRuntime,
+  runtime: StructureContactRuntime,
   bounds: ConstructionTopologyBoundsQuery,
   groundType: string,
   terrainStanding: readonly ConstructionRegionTopology[],

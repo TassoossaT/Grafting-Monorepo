@@ -106,7 +106,7 @@ pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainV
                 (Some(column), _, _) => Form::Column { low: column.low, high: column.high },
                 (None, _, _) => Form::Swept { squash: shape.squash.unwrap_or(1.0) },
             };
-            Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form })
+            Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form, up: Vec::new() })
         })
         .collect::<Result<Vec<_>, String>>()?;
     let edited = edit_surface(

@@ -121,7 +121,7 @@ test("ground repaired around a platform already stored clockwise leaves the plat
   // along the ring, which runs against this edge, and inserted in that order
   // came back as fragments overlapping each other -- a side of 5 walked as
   // four spans of 3.75. Its sides are no longer split at all.
-  const { repairTerrainCut } = await import("../src/composition/tabletop/terrain/terrain-regenerate.ts");
+  const { regrowGround: repairTerrainCut } = await import("../src/composition/tabletop/terrain/terrain-regrow.ts");
   const { session, runtime } = sessionFixture();
   const info = console.info;
   const warn = console.warn;

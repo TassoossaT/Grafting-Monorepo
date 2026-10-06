@@ -7,6 +7,7 @@ import type {
 
 import { hasTrait } from "../../../features/edit-construction/index.ts";
 import { commitGround, indexedFaces } from "./ground-commit.ts";
+import { grownInward, walkSurface } from "./ground-surface.ts";
 import type { ToolContext } from "../tools/core/tool-context.ts";
 
 /**
@@ -23,6 +24,8 @@ import type { ToolContext } from "../tools/core/tool-context.ts";
  * the next stroke, carving or not, edits it the same way.
  */
 
+/** How far past a layer's radius, in faces, the faces laid again reach: it changes nothing past it. */
+const LAYER_MARGIN_FACES = 0.25;
 /** How far past a shape's reach, in faces, the faces laid again reach. */
 const PATCH_MARGIN_FACES = 2;
 /** How far past the faces laid again, in faces, the ground asked where solid is reaches. */
@@ -113,31 +116,61 @@ export function commitTerrainVolumeEdit(
   const nearby = standing.filter((topology) => hasTrait(topology.surfaceType, "ground") && ringOf(topology) !== undefined);
   // Structures standing in the ground: the sides of it they hold are kept.
   const structures = standing.filter((topology) => !hasTrait(topology.surfaceType, "ground") && ringOf(topology) !== undefined);
-  // The faces within the shapes' reach in three dimensions: a cave's ceiling
-  // over a pile laid on its floor is out of reach, and never laid again.
-  const patchFaces = nearby.filter((topology) => topology.nodes.some((node) => shapes.some((shape) => shapeDistance(node.position, shape) < margin)));
-  if (patchFaces.length === 0 && options.table === undefined) return { faces: 0 };
-  const patchKeys = new Set(patchFaces.map((face) => face.surfaceKey.join("\u0000")));
-  const contextFaces = nearby.filter((topology) => !patchKeys.has(topology.surfaceKey.join("\u0000")));
-  // The ground's own face size; the engine lays finer where the shape is narrow.
-  const faceSide = options.faceSide ?? (patchFaces.length > 0 ? faceSideOf(patchFaces) : options.emptyFaceSide ?? 2);
-  const surfaceType = patchFaces[0]?.surfaceType ?? options.surfaceType ?? "terrain";
-
-  const patch = indexedFaces(patchFaces);
-  const context = indexedFaces(contextFaces);
+  // The faces the shapes change, and round them, over the surface, as far as
+  // the shapes reach in three dimensions: a cave's ceiling over a layer laid
+  // on its floor is neither changed nor reached, and never laid again. A
+  // layer or a level changes only what it covers, so it reaches a face
+  // further; a bore or an arch is given more room to blend.
+  const reachOf = (shape: ConstructionVolumeShape) =>
+    blend + (shape.effect === "raise" || shape.effect === "lower" ? LAYER_MARGIN_FACES : shape.column ? 1 : PATCH_MARGIN_FACES) * guess;
+  const within = (topology: ConstructionRegionTopology, extra: (shape: ConstructionVolumeShape) => number) =>
+    topology.nodes.some((node) => shapes.some((shape) => shapeDistance(node.position, shape) < extra(shape)));
+  // Grown from the ground under the stroke itself -- the face nearest each
+  // point of every path -- never from whatever lies near in three dimensions:
+  // through a thin roof, a tunnel's ceiling lies a metre under the hill a
+  // stroke is laid on, and is no part of it.
+  const under = (point: readonly [number, number, number]) => {
+    let best: ConstructionRegionTopology | undefined, bestDistance = Infinity;
+    for (const topology of nearby) {
+      for (const node of topology.nodes) {
+        const d = Math.hypot(node.position.x - point[0], node.position.y - point[1], node.position.z - point[2]);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = topology;
+        }
+      }
+    }
+    return best;
+  };
+  const core = shapes.flatMap((shape) => shape.path.map(under)).filter((topology): topology is ConstructionRegionTopology => topology !== undefined && within(topology, reachOf));
+  const walked = walkSurface(nearby, core.length > 0 ? core : nearby.filter((topology) => within(topology, reachOf)), (topology) => within(topology, reachOf));
+  if (walked.length === 0 && options.table === undefined) return { faces: 0 };
   const neighbours = indexedFaces(structures);
-
-  const edited = ctx.runtime.editTerrainVolume({
-    patch: { vertices: patch.vertices, faces: patch.faces },
-    context: { vertices: context.vertices, faces: context.faces },
-    shapes,
-    blend,
-    faceSide,
-    seed: options.seed,
-    ...(options.table !== undefined ? { table: options.table } : {}),
-    neighbours: { vertices: neighbours.vertices, faces: neighbours.faces },
-  });
-  if (!edited) throw new Error("o núcleo recusou a edição");
+  const attempt = (patchFaces: readonly ConstructionRegionTopology[]) => {
+    const patchKeys = new Set(patchFaces.map((face) => face.surfaceKey.join("\u0000")));
+    const contextFaces = nearby.filter((topology) => !patchKeys.has(topology.surfaceKey.join("\u0000")));
+    // The ground's own face size; the engine lays finer where the shape is narrow.
+    const faceSide = options.faceSide ?? (patchFaces.length > 0 ? faceSideOf(patchFaces) : options.emptyFaceSide ?? 2);
+    const patch = indexedFaces(patchFaces);
+    const context = indexedFaces(contextFaces);
+    const edited = ctx.runtime.editTerrainVolume({
+      patch: { vertices: patch.vertices, faces: patch.faces },
+      context: { vertices: context.vertices, faces: context.faces },
+      shapes,
+      blend,
+      faceSide,
+      seed: options.seed,
+      ...(options.table !== undefined ? { table: options.table } : {}),
+      neighbours: { vertices: neighbours.vertices, faces: neighbours.faces },
+    });
+    return edited ? { edited, patch, patchFaces, contextFaces, faceSide } : undefined;
+  };
+  // A hole in the patch the edit closes over is laid again with it: tried as
+  // walked first, then grown inward from its holes a ring at a time.
+  const laid = attempt(walked) ?? attempt(grownInward(walked, nearby, 1)) ?? attempt(grownInward(walked, nearby, 2));
+  if (!laid) throw new Error("o núcleo recusou a edição");
+  const { edited, patch, patchFaces, contextFaces, faceSide } = laid;
+  const surfaceType = patchFaces[0]?.surfaceType ?? options.surfaceType ?? "terrain";
 
   const operationId = `${ctx.tableId}:terrain-volume:${ctx.nextSequence()}`;
   let built = 0;

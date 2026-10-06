@@ -1,7 +1,6 @@
 export * from "./registry.ts";
 export * from "./structure-type.ts";
 export * from "./creation-interaction.ts";
-export * from "./structural-cut.ts";
 export * from "./panel/index.ts";
 export * from "./organic/index.ts";
 export * from "./path/index.ts";

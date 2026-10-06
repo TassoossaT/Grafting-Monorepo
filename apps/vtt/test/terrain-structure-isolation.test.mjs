@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { hasTrait, surfaceTypesWithTrait } from "../src/features/edit-construction/structure-types/registry.ts";
-import { executeTerrainCut } from "../src/composition/tabletop/terrain/terrain-cut-executor.ts";
 import { terrainSculptTool } from "../src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts";
 import { DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/tools/tool-types.ts";
 import { sessionFixture } from "./platform-session-fixture.mjs";
@@ -15,89 +14,6 @@ test("ground is a declared trait, not a name prefix", () => {
   for (const surfaceType of ["wall-white", "wall-gray", "platform", "platform-slope", "roof", "path", "opening"]) {
     assert.equal(hasTrait(surfaceType, "ground"), false, `${surfaceType} is not ground`);
   }
-});
-
-test("executeTerrainCut: isolates non-terrain structures (never splits edges or mutates vertices of walls/platforms)", () => {
-  const wallTopology = {
-    surfaceKey: ["wall", "w1"],
-    surfaceType: "wall-white",
-    physical: true,
-    nodes: [
-      { id: "w0", position: { x: 0, y: 0, z: 0 } },
-      { id: "w1", position: { x: 4, y: 0, z: 0 } },
-      { id: "w2", position: { x: 4, y: 3, z: 0 } },
-      { id: "w3", position: { x: 0, y: 3, z: 0 } },
-    ],
-    outerLoops: [
-      [
-        { startNodeId: "w0", endNodeId: "w1", forward: true },
-        { startNodeId: "w1", endNodeId: "w2", forward: true },
-        { startNodeId: "w2", endNodeId: "w3", forward: true },
-        { startNodeId: "w3", endNodeId: "w0", forward: true },
-      ],
-    ],
-    holes: [],
-  };
-
-  const appliedPatches = [];
-  const appliedReplacements = [];
-  const regionEditOps = [];
-
-  const mockRuntime = {
-    getFootprintCoverage: () => [{ surfaceKey: ["wall", "w1"], surfaceType: "wall-white", coverage: "centroid" }],
-    getAllRegionTopologies: () => [wallTopology],
-    getRegionTopologiesInBounds: () => [wallTopology],
-    getSnapshot: () => ({ tableId: "t", map: { nodePositions: new Map() } }),
-    generateIrregularQuadGrid: () => ({
-      vertices: [
-        { x: 1, z: 1 },
-        { x: 3, z: 1 },
-        { x: 3, z: 3 },
-        { x: 1, z: 3 },
-      ],
-      quads: [[0, 1, 2, 3]],
-      onContour: [],
-    }),
-    addPatch: (patch) => {
-      appliedPatches.push(patch);
-      return { createdSurfaceKeys: [["terrain", "t1"]], removedSurfaceKeys: [], skippedRegionIds: [] };
-    },
-    applyPatchReplacement: (req) => {
-      appliedReplacements.push(req);
-      return { createdSurfaceKeys: [["terrain", "t1"]], removedSurfaceKeys: [], skippedRegionIds: [] };
-    },
-    applyRegionEdit: (ops) => {
-      regionEditOps.push(...ops);
-    },
-  };
-
-  // Calling with targetSurfaceType as a non-terrain type (e.g. wall-white) falls back to "terrain"
-  // and does NOT delete or replace the wall, and does NOT split its edges.
-  const outcome = executeTerrainCut(mockRuntime, {
-    area: {
-      outline: [
-        [0, 0],
-        [4, 0],
-        [4, 4],
-        [0, 4],
-      ],
-      radius: 4,
-    },
-    targetSurfaceType: "wall-white",
-    profile: { kind: "convex", height: 2 },
-    causeId: "test-cause",
-    tableId: "t",
-  });
-
-  assert.equal(outcome.success, true);
-  assert.equal(outcome.removedFaces, 0, "non-terrain faces must not be counted as affected or removed");
-  assert.equal(appliedReplacements.length, 0, "must not call applyPatchReplacement on non-terrain faces");
-  assert.equal(appliedPatches.length, 1, "adds fresh terrain patch");
-  assert.equal(appliedPatches[0].regions[0].surfaceType, "terrain", "generated terrain must have terrain surfaceType");
-
-  // CRITICAL: verify zero edge splits or vertex mutations on the wall
-  const edgeSplits = regionEditOps.filter((op) => op.kind === "split-edge");
-  assert.equal(edgeSplits.length, 0, "must never split edges of non-terrain topologies");
 });
 
 /** The brush dragged along `points` on the bare table, against the real engine. */

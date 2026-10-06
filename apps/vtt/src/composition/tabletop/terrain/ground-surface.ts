@@ -1,6 +1,10 @@
 import type { ConstructionRegionTopology } from "@/ports";
 
-import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
+/**
+ * The face size ground is laid at when nobody says otherwise: a repair has no
+ * brush to read it from, and the brush's own default is the same.
+ */
+export const DEFAULT_FACE_SIDE = 2;
 
 /**
  * The ground as a surface: which faces are reached from which, over the edges
@@ -207,6 +211,66 @@ export function closedPatch(
       for (const face of island) members.set(keyOf(face), face);
     }
     if (members.size === before) break;
+  }
+  return [...members.values()];
+}
+
+/**
+ * `patch` grown inward from every border loop but its outermost, `rounds`
+ * rings of the faces of `ground` holding those loops' sides: a hole in a
+ * patch that an edit closes over -- a layer laid across a gap cut in a
+ * tunnel's roof -- has to be laid again with the patch, or the new surface
+ * runs over ground left standing under it.
+ */
+export function grownInward(
+  patch: readonly ConstructionRegionTopology[],
+  ground: readonly ConstructionRegionTopology[],
+  rounds: number,
+): ConstructionRegionTopology[] {
+  const members = new Map(patch.map((face) => [keyOf(face), face] as const));
+  const facesAtEdge = new Map<string, ConstructionRegionTopology[]>();
+  for (const face of ground) for (const use of face.outerLoops.flat()) facesAtEdge.set(use.edgeId, [...(facesAtEdge.get(use.edgeId) ?? []), face]);
+  for (let round = 0; round < rounds; round += 1) {
+    const faces = [...members.values()];
+    const uses = new Map<string, number>();
+    for (const face of faces) for (const use of face.outerLoops.flat()) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
+    const next = new Map<string, { readonly to: string; readonly edgeId: string }>();
+    const position = new Map<string, { x: number; y: number; z: number }>();
+    for (const face of faces) {
+      for (const node of face.nodes) position.set(node.id, node.position);
+      for (const use of face.outerLoops.flat()) if (uses.get(use.edgeId) === 1) next.set(use.startNodeId, { to: use.endNodeId, edgeId: use.edgeId });
+    }
+    const loops: { readonly edges: string[]; readonly length: number }[] = [];
+    const seen = new Set<string>();
+    for (const start of [...next.keys()].sort()) {
+      if (seen.has(start)) continue;
+      const edges: string[] = [];
+      let length = 0;
+      let here = start;
+      while (!seen.has(here) && next.has(here)) {
+        seen.add(here);
+        const step = next.get(here)!;
+        edges.push(step.edgeId);
+        const a = position.get(here)!, b = position.get(step.to)!;
+        length += Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+        here = step.to;
+      }
+      if (edges.length >= 3) loops.push({ edges, length });
+    }
+    const outermost = loops.reduce((best, loop) => (best === undefined || loop.length > best.length ? loop : best), undefined as (typeof loops)[number] | undefined);
+    let grew = false;
+    for (const loop of loops) {
+      if (loop === outermost) continue;
+      for (const edge of loop.edges) {
+        for (const face of facesAtEdge.get(edge) ?? []) {
+          if (!members.has(keyOf(face))) {
+            members.set(keyOf(face), face);
+            grew = true;
+          }
+        }
+      }
+    }
+    if (!grew) break;
   }
   return [...members.values()];
 }

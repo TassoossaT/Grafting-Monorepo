@@ -8,6 +8,22 @@ Well below any distance the pipeline itself produces between two vertices
 that are meant to be distinct, and well above the float noise between two
 that are meant to be one.
 
+### `pub const grafting_procgen_irregular_grid::ground::FACE_SIDE_TO_LATTICE_SIDE: f64`
+
+How much wider the lattice triangle is than the face that descends from it.
+
+Two stages sit in between. Pairing turns two triangles into one rhombus,
+and the Conway ortho step cuts every cell into four, so four faces come out
+of every two triangles: geometrically a face is `sqrt(sqrt(3) / 8)` of a
+triangle side, about `0.47`. The refinement then adds its own points on top
+of the seeded lattice, which makes the real result finer again -- measured
+across four scales it settles at about a third rather than a half, and
+stays there, which is why this is one measured constant rather than the
+clean derivation.
+
+The bridge's `a_face_comes_back_the_size_it_was_asked_for` is what holds it
+honest; if the pipeline's stages ever change, that test moves this number.
+
 ### `pub fn grafting_procgen_irregular_grid::GridPoint::mean(points: &[Self]) -> Self`
 
 The average of `points`, summed in order -- for the plane, exactly the
@@ -120,6 +136,11 @@ float determinant and not an exact predicate on purpose: spade has already
 decided the topology by the time anything in this crate looks at winding,
 so a wrong answer on a triangle of near-zero area costs a face that carries
 no ground either way.
+
+### `pub fn grafting_procgen_irregular_grid::ground::ground_grid(boundary: alloc::vec::Vec<alloc::vec::Vec<grafting_procgen_irregular_grid::constrained::ConstraintPoint>>, holes: alloc::vec::Vec<alloc::vec::Vec<grafting_procgen_irregular_grid::constrained::ConstraintPoint>>, face_side: f64, seed: u32, refinement: &grafting_procgen_irregular_grid::ground::GroundRefinement, relax: &grafting_procgen_irregular_grid::relax::RelaxOptions) -> core::result::Result<grafting_procgen_irregular_grid::ConstrainedQuadGrid, alloc::string::String>`
+
+Ground enclosed by `boundary` and not taken back by `holes`, laid in
+irregular cells about `face_side` wide.
 
 ### `pub fn grafting_procgen_irregular_grid::hex::build_triangle_hex(options: grafting_procgen_irregular_grid::hex::TriangleHexOptions) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
 
@@ -578,6 +599,15 @@ node of its own (see [`SHORTEST_SPLIT`]).
 
 ### `pub grafting_procgen_irregular_grid::constrained::Seam::to: usize`
 
+### `pub grafting_procgen_irregular_grid::ground::GroundRefinement::max_additional_vertices: usize`
+
+### `pub grafting_procgen_irregular_grid::ground::GroundRefinement::min_angle_degrees: f64`
+
+### `pub grafting_procgen_irregular_grid::ground::GroundRefinement::min_area_ratio: f64`
+
+The smallest triangle worth improving, as a share of the largest one
+allowed. See `ConstrainedOptions::min_area` for what it buys.
+
 ### `pub grafting_procgen_irregular_grid::hex::TriangleHexOptions::triangle_side: f64`
 
 Edge length of one equilateral triangle.
@@ -731,6 +761,12 @@ others generic over the scalar, which is a workspace-wide change and does
 not belong to the terrain work. Kept together and named here so that
 refactor has one place to come and take them from.
 
+### `pub mod grafting_procgen_irregular_grid::ground`
+
+Ground at a face size: the one way every caller asks the constrained
+generator for ground, so ground laid in the plane and ground laid in a
+surface's own chart come out the same size and the same look.
+
 ### `pub mod grafting_procgen_irregular_grid::hex`
 
 Step 1 (unconstrained) -- a hexagon filled with equilateral triangles.
@@ -836,6 +872,10 @@ knows which of its own edges that is.
 ### `pub struct grafting_procgen_irregular_grid::constrained::Seam`
 
 A stretch of a supplied contour the triangulation saw as a single edge.
+
+### `pub struct grafting_procgen_irregular_grid::ground::GroundRefinement`
+
+How hard the refinement works; see [`ConstrainedOptions`] for each.
 
 ### `pub struct grafting_procgen_irregular_grid::hex::TriangleHexOptions`
 

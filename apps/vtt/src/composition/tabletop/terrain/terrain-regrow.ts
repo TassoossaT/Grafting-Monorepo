@@ -3,6 +3,7 @@ import type {
   ConstructionPosition,
   ConstructionRegionEdge,
   ConstructionRegionTopology,
+  ConstructionSurfaceKey,
   ConstructionSurfaceOrigin,
   ConstructionTerrainRegenerateRequest,
   ConstructionTerrainRegeneration,
@@ -19,10 +20,8 @@ import {
   nearestOnSegment,
 } from "../../../features/edit-construction/index.ts";
 import { commitGround, indexedFaces, type GroundCommitRuntime } from "./ground-commit.ts";
-import { closedPatch, heightRangeOf, regrowFaceSide, surfaceComponents, walkSurface } from "./ground-surface.ts";
-import { meetStructures } from "./structure-contact.ts";
-import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
-import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
+import { DEFAULT_FACE_SIDE, closedPatch, heightRangeOf, regrowFaceSide, surfaceComponents, walkSurface } from "./ground-surface.ts";
+import { meetStructures, type StructureContactRuntime } from "./structure-contact.ts";
 import { timePhase } from "../commit-timing.ts";
 
 /**
@@ -44,7 +43,8 @@ import { timePhase } from "../commit-timing.ts";
  */
 
 /** What growing the ground back needs of the runtime. */
-export interface TerrainRegrowRuntime extends TerrainCutRuntime, GroundCommitRuntime {
+export interface TerrainRegrowRuntime extends StructureContactRuntime, GroundCommitRuntime {
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined;
 }
 
@@ -54,6 +54,24 @@ export interface TerrainRegrowRuntime extends TerrainCutRuntime, GroundCommitRun
  * touched, so moving it back and forth does not grow the face count.
  */
 export const STROKE_MARGIN = 2 * DEFAULT_FACE_SIDE;
+
+/** How much of a face's normal has to point up for a structure to rest on it. */
+const RESTABLE_UP = 0.2;
+
+/** How much of a ground face's outward normal points up: 1 level, 0 upright, below 0 a ceiling. */
+function upwardShare(face: ConstructionRegionTopology): number {
+  const at = new Map(face.nodes.map((node) => [node.id, node.position]));
+  const ring = (face.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined);
+  let nx = 0, ny = 0, nz = 0;
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+    nx += (a.y - b.y) * (a.z + b.z);
+    ny += (a.z - b.z) * (a.x + b.x);
+    nz += (a.x - b.x) * (a.y + b.y);
+  }
+  // The tabletop winds ground with its right-hand normal pointing down.
+  return -ny / (Math.hypot(nx, ny, nz) || 1);
+}
 
 /** How far over a structure's top, in faces, the layer it stands on may rise. */
 const BAND_OVER_FACES = 1.5;
@@ -141,6 +159,9 @@ export function regrowGround(runtime: TerrainRegrowRuntime, fallout: CutFallout,
     const { low, high } = heightRangeOf(face);
     return high >= band.low && low <= band.high;
   };
+  // Structures rest on ground facing up. A tunnel's wall and its ceiling over
+  // a floor are none of the floor's business, however near in height.
+  const restable = (face: ConstructionRegionTopology) => upwardShare(face) >= RESTABLE_UP;
   const inStroke = (face: ConstructionRegionTopology) => {
     const c = centreOf(face);
     return strokes.some((box) => c.x >= box.minX && c.x <= box.maxX && c.z >= box.minZ && c.z <= box.maxZ);
@@ -164,18 +185,18 @@ export function regrowGround(runtime: TerrainRegrowRuntime, fallout: CutFallout,
   })).map((face) => face.surfaceKey.join("\u0000")));
   const onRimOfVacated = (face: ConstructionRegionTopology) => rimOfVacated.has(face.surfaceKey.join("\u0000"));
   const seeds = [
-    ...consumed.filter(inBand),
-    ...ground.filter((face) => inBand(face) && face.nodes.some((node) => painted.has(node.id))),
+    ...consumed.filter((face) => inBand(face) && restable(face)),
+    ...ground.filter((face) => inBand(face) && restable(face) && face.nodes.some((node) => painted.has(node.id))),
     ...ground.filter(onRimOfVacated),
   ];
-  const walked = walkSurface(ground, seeds, (face) => stale.has(face.surfaceKey.join("\u0000")) || onRimOfVacated(face) || (inBand(face) && (inStroke(face) || seeds.includes(face))));
+  const walked = walkSurface(ground, seeds, (face) => stale.has(face.surfaceKey.join("\u0000")) || onRimOfVacated(face) || (inBand(face) && restable(face) && (inStroke(face) || seeds.includes(face))));
   // A disk the engine can lay: no corner pinched, no island of ground left inside.
   // A face an edit dragged out of shape is laid again but never read as the
   // surface: it runs from where it lay to where the structure went. So it is
   // ringed by faces that are, and its ground comes back over the hole it leaves.
   const staleNodes = new Set(walked.filter((face) => stale.has(face.surfaceKey.join("\u0000"))).flatMap((face) => face.nodes.map((node) => node.id)));
-  const ringed = [...walked, ...ground.filter((face) => inBand(face) && face.nodes.some((node) => staleNodes.has(node.id)))];
-  const closable = ground.filter((face) => inBand(face) || onRimOfVacated(face) || stale.has(face.surfaceKey.join("\u0000")));
+  const ringed = [...walked, ...ground.filter((face) => inBand(face) && restable(face) && face.nodes.some((node) => staleNodes.has(node.id)))];
+  const closable = ground.filter((face) => (inBand(face) && restable(face)) || onRimOfVacated(face) || stale.has(face.surfaceKey.join("\u0000")));
   const closed = closedPatch(ringed, closable);
   // Every structure resting on it rests wholly inside it: its contact a hole
   // the patch rings round, never a side running on past the patch's rim.

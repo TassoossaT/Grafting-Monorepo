@@ -187,6 +187,7 @@ fn an_earth_bridge_filled_over_flat_ground_rises_from_it_on_the_same_ring() {
         path: vec![Vec3::new(-9.0, -0.5, 0.0), Vec3::new(-4.0, 3.0, 0.0), Vec3::new(4.0, 3.0, 0.0), Vec3::new(9.0, -0.5, 0.0)],
         radius: 1.2,
         form: Form::Swept { squash: 1.0 },
+        up: Vec::new(),
     }];
     let blend = 0.5;
     let (patch, context, _) = split(&all, &shapes, 1.2 + blend + 2.0 * 2.0);
@@ -212,7 +213,7 @@ fn a_tunnel_whose_patch_reaches_only_past_its_axis_still_lays() {
 /// A layer of earth laid along a stroke, or taken away along it.
 fn mound(effect: Effect, path: Vec<Vec3>, radius: f64, height: f64) -> Shape {
     let effect = if effect == Effect::Fill { Effect::Raise } else { Effect::Lower };
-    Shape { effect, path, radius, form: Form::Profile { height } }
+    Shape { effect, path, radius, form: Form::Profile { height }, up: Vec::new() }
 }
 
 fn no_folds(name: &str, out: &EditedSurface) {
@@ -285,8 +286,8 @@ fn a_hillside_levelled_comes_out_flat_where_it_was_levelled() {
     let level = 3.0;
     let path = vec![Vec3::new(-2.0, level, -2.0), Vec3::new(2.0, level, 2.0)];
     let shapes = vec![
-        Shape { effect: Effect::Fill, path: path.clone(), radius: 3.0, form: Form::Column { low: level - 4.0, high: level } },
-        Shape { effect: Effect::Carve, path, radius: 3.0, form: Form::Column { low: level, high: level + 4.0 } },
+        Shape { effect: Effect::Fill, path: path.clone(), radius: 3.0, form: Form::Column { low: level - 4.0, high: level }, up: Vec::new() },
+        Shape { effect: Effect::Carve, path, radius: 3.0, form: Form::Column { low: level, high: level + 4.0 }, up: Vec::new() },
     ];
     let (patch, context, _) = split(&all, &shapes, 3.0 + 0.6 + 4.0);
     let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.6, face_side: 2.0, seed: 3, table: None, neighbours: Faces::default() }).expect("levelled");
@@ -296,4 +297,43 @@ fn a_hillside_levelled_comes_out_flat_where_it_was_levelled() {
         println!("level: {} faces, {} corners inside, {:?}", out.faces.len(), inside.len(), inside.iter().map(|y| (y * 100.0).round() / 100.0).collect::<Vec<_>>());
     }
     assert!(!inside.is_empty() && inside.iter().all(|y| (y - level).abs() < 0.3), "flat at the level inside: {inside:?}");
+}
+
+fn folds(out: &EditedSurface) -> (usize, usize) {
+    let normal = |face: &Vec<usize>| {
+        let mut n = Vec3::default();
+        for i in 0..face.len() {
+            let (a, b) = (out.vertices[face[i]], out.vertices[face[(i + 1) % face.len()]]);
+            n = n + Vec3::new((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y));
+        }
+        n.normalized()
+    };
+    let mut beside: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+    for (f, face) in out.faces.iter().enumerate() {
+        for i in 0..face.len() {
+            let (a, b) = (face[i], face[(i + 1) % face.len()]);
+            beside.entry((a.min(b), a.max(b))).or_default().push(f);
+        }
+    }
+    let pairs: Vec<&Vec<usize>> = beside.values().filter(|fs| fs.len() == 2).collect();
+    (pairs.iter().filter(|fs| normal(&out.faces[fs[0]]).dot(normal(&out.faces[fs[1]])) < -0.2).count(), pairs.len())
+}
+
+#[test]
+fn a_narrow_tall_layer_over_a_hill_never_doubles_back() {
+    let all = ground(2.0, 20, hill);
+    let n = (8.0 * std::f64::consts::PI / 0.5).ceil() as usize;
+    let path: Vec<Vec3> = (0..=n).map(|i| {
+        let a = std::f64::consts::PI * i as f64 / n as f64;
+        let (x, z) = (8.0 * a.cos(), 8.0 * a.sin());
+        Vec3::new(x, hill(x, z), z)
+    }).collect();
+    let shapes = vec![mound(Effect::Fill, path, 1.5, 2.0)];
+    let (patch, context, _) = split(&all, &shapes, 1.5 + 0.5 + 0.5);
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.5, face_side: 2.0, seed: 3, table: Some(0.0), neighbours: Faces::default() }).expect("laid");
+    let (f, total) = folds(&out);
+    if probe() {
+        println!("narrow tall layer: {} faces, {f} folds of {total}", out.faces.len());
+    }
+    assert!(f * 100 <= total, "{f} folds of {total} sides");
 }

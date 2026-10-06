@@ -21,9 +21,9 @@ use grafting_procgen_irregular_grid::ortho::{ortho_along, weld_faces_tracked};
 use grafting_procgen_irregular_grid::pair::pair_triangles;
 use grafting_procgen_irregular_grid::{FaceMesh, Random, Vec2, regular_cell_targets};
 
-use crate::field::Shape;
+use crate::field::{Effect, Shape};
 use crate::mesh_distance::MeshDistance;
-use crate::trimesh::{Remesh, border_loops, zipper, zipper_open};
+use crate::trimesh::{Remesh, border_loops, unfold, untangle, zipper, zipper_open};
 use crate::vector::Vec3;
 use crate::table::TableFloor;
 use crate::volume::EditField;
@@ -124,8 +124,34 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         TableFloor::new(height, all_vertices.clone(), triangles, length)
     });
     let ground = MeshDistance::new(all_vertices, &all_faces, length);
+    // Each layer read across the ground at its path: the ground's normal out
+    // of the solid there, or the table's where it is the floor.
+    let layered: Vec<Shape> = edit
+        .shapes
+        .iter()
+        .map(|shape| {
+            let mut shape = shape.clone();
+            if matches!(shape.effect, Effect::Raise | Effect::Lower) && shape.up.len() != shape.path.len() {
+                let probe = cell * 0.25;
+                shape.up = shape
+                    .path
+                    .iter()
+                    .map(|&at| {
+                        if table.as_ref().is_some_and(|t| !t.covered(at)) {
+                            return Vec3::new(0.0, 1.0, 0.0);
+                        }
+                        let axis = |offset: Vec3| ground.signed_distance(at + offset) - ground.signed_distance(at - offset);
+                        let gradient = Vec3::new(axis(Vec3::new(probe, 0.0, 0.0)), axis(Vec3::new(0.0, probe, 0.0)), axis(Vec3::new(0.0, 0.0, probe)));
+                        if gradient.length() > 1e-9 { gradient.normalized() } else { Vec3::new(0.0, 1.0, 0.0) }
+                    })
+                    .collect();
+            }
+            shape
+        })
+        .collect();
     let patch_only = MeshDistance::new(patch.vertices.clone(), &patch.faces.iter().map(outward).collect::<Vec<_>>(), length);
-    let field = EditField { ground: &ground, shapes: &edit.shapes, blend: edit.blend, table: table.as_ref() };
+    let context_only = MeshDistance::new(context.vertices.clone(), &context.faces.iter().map(outward).collect::<Vec<_>>(), length);
+    let field = EditField { ground: &ground, shapes: &layered, blend: edit.blend, table: table.as_ref() };
     // A point of the new surface lying on the table where the table is the floor.
     let on_table = |point: Vec3| table.as_ref().is_some_and(|t| t.holds(point, cell * 0.3));
     let step = cell * 0.25;
@@ -236,7 +262,12 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
             .filter(|&[a, b, c]| {
                 let centre = (extracted[a] + extracted[b] + extracted[c]) * (1.0 / 3.0);
                 let near = patch_only.distance(centre) < cell * 1.5 || edit.shapes.iter().any(|s| s.distance(centre) < reach);
-                near && [a, b, c].iter().all(|&v| to_ring(extracted[v]) > clearance) && ![a, b, c].iter().all(|&v| on_table(extracted[v]))
+                // Inside the ring: nearer the ground being laid again than the
+                // ground round it. A shape reaching on past the patch is the
+                // ground beyond's business; read there, the new surface runs
+                // out past the ring and the stitch to it folds.
+                let inside = patch_only.distance(centre) <= context_only.distance(centre);
+                near && inside && [a, b, c].iter().all(|&v| to_ring(extracted[v]) > clearance) && ![a, b, c].iter().all(|&v| on_table(extracted[v]))
             })
             .collect();
         let whole = pruned(kept.clone()).len() == kept.len();
@@ -386,6 +417,12 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
     for &(a, b) in &foot {
         locked_edges.insert((a.min(b), a.max(b)));
     }
+    // The strip stitched to the ring, unfolded where it folded.
+    let facing = |point: Vec3| field.gradient(point, step);
+    // Unfolded before the remesh, which then evens out whatever the unfolding
+    // drew close together.
+    let locked_before: Vec<bool> = (0..vertices.len()).map(|v| v < ring_count || on_table_border.contains(&v)).collect();
+    unfold(&mut vertices, &mut triangles, &locked_before, &locked_edges, &facing, &settle);
     let mut remesh = Remesh {
         vertices,
         triangles,
@@ -394,6 +431,8 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         settle: &settle,
     };
     remesh.run(&size_at, REMESH_ROUNDS);
+    let locked_now = remesh.locked_edges.clone();
+    untangle(&mut remesh.triangles, &remesh.vertices, &locked_now, &facing);
     let source: Vec<Option<usize>> = (0..remesh.vertices.len()).map(|v| if v < ring_count { source[v] } else { None }).collect();
 
     // The irregular grid's own steps, over the surface.
@@ -426,6 +465,7 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
     let faces = welded.faces.iter().map(|face| if flip { face.iter().rev().copied().collect() } else { face.clone() }).collect();
     Ok(EditedSurface { vertices, faces, source: welded_source })
 }
+
 
 /// `triangles` without the ones on a malformed edge -- held by three, or
 /// walked the same way by two -- until none is left: where the grid read
@@ -468,8 +508,14 @@ fn newell(vertices: &[Vec3], face: &[usize]) -> Vec3 {
 }
 
 /// How far, on average, the points of `outer` are from the nearest of `inner`.
+/// How far apart two loops run: the mean gap from each to the other, both
+/// ways round -- measured one way only, a small ring beside a long border
+/// reads as near it though the border runs on far away.
 fn mean_gap(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> f64 {
-    outer.iter().map(|&o| inner.iter().map(|&i| vertices[o].distance(vertices[i])).fold(f64::INFINITY, f64::min)).sum::<f64>() / outer.len() as f64
+    let one_way = |from: &[usize], to: &[usize]| {
+        from.iter().map(|&o| to.iter().map(|&i| vertices[o].distance(vertices[i])).fold(f64::INFINITY, f64::min)).sum::<f64>() / from.len().max(1) as f64
+    };
+    0.5 * (one_way(outer, inner) + one_way(inner, outer))
 }
 
 /// Keeps only the connected stretches of `triangles` one of whose open

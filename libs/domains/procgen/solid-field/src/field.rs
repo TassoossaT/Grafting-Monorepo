@@ -48,6 +48,11 @@ pub struct Shape {
     pub path: Vec<Vec3>,
     pub radius: f64,
     pub form: Form,
+    /// For a layer: the ground's normal out of the solid at each point of the
+    /// path. A layer's depth is read across the ground there, not along its
+    /// normal, so a point over the path has the whole depth under it. Empty,
+    /// the depth is read by plain distance to the path.
+    pub up: Vec<Vec3>,
 }
 
 /// Distance from `point` to the polyline `path`, measured with heights
@@ -62,10 +67,39 @@ fn to_path(point: Vec3, path: &[Vec3], y_scale: f64) -> f64 {
     }
 }
 
+/// Distance from `point` to the polyline `path`, leaving out what lies along
+/// the ground's normal there: the nearest point of the path, and of the
+/// offset to it only the part across the ground.
+fn across_path(point: Vec3, path: &[Vec3], up: &[Vec3]) -> f64 {
+    let mut best = (f64::INFINITY, Vec3::default(), Vec3::new(0.0, 1.0, 0.0));
+    let mut consider = |at: Vec3, normal: Vec3| {
+        let d = point.distance(at);
+        if d < best.0 {
+            best = (d, at, normal);
+        }
+    };
+    match path.len() {
+        0 => return f64::INFINITY,
+        1 => consider(path[0], up[0]),
+        _ => {
+            for k in 0..path.len() - 1 {
+                let (a, b) = (path[k], path[k + 1]);
+                let along = b - a;
+                let length_squared = along.dot(along);
+                let t = if length_squared > 0.0 { ((point - a).dot(along) / length_squared).clamp(0.0, 1.0) } else { 0.0 };
+                consider(a.lerp(b, t), up[k].lerp(up[k + 1], t).normalized());
+            }
+        }
+    }
+    let (_, at, normal) = best;
+    let offset = point - at;
+    (offset - normal * offset.dot(normal)).length()
+}
+
 impl Shape {
     /// A round capsule along `path`.
     pub fn capsule(effect: Effect, path: Vec<Vec3>, radius: f64) -> Self {
-        Self { effect, path, radius, form: Form::Swept { squash: 1.0 } }
+        Self { effect, path, radius, form: Form::Swept { squash: 1.0 }, up: Vec::new() }
     }
 
     /// Signed distance to the shape: negative inside it. Bounded by the true
@@ -89,10 +123,13 @@ impl Shape {
     }
 
     /// How deep the layer is at `point`: the profile's height on the path,
-    /// a cosine down to nothing at the radius. Zero for any other form.
+    /// a cosine down to nothing at the radius -- the distance read across the
+    /// ground at the nearest point of the path (`up`), so it never jumps where
+    /// the ground below folds. Zero for any other form.
     pub fn depth(&self, point: Vec3) -> f64 {
         let Form::Profile { height } = self.form else { return 0.0 };
-        let along = to_path(point, &self.path, 1.0) / self.radius.max(1e-9);
+        let across = if self.up.len() == self.path.len() { across_path(point, &self.path, &self.up) } else { to_path(point, &self.path, 1.0) };
+        let along = across / self.radius.max(1e-9);
         if along >= 1.0 { 0.0 } else { height * 0.5 * (1.0 + (std::f64::consts::PI * along).cos()) }
     }
 
@@ -142,18 +179,16 @@ pub fn smooth_min(a: f64, b: f64, k: f64) -> f64 {
 
 /// `base` -- the signed distance to whatever already says where solid is --
 /// with every shape applied in order, so a fill made after a carve fills it
-/// back in. `foot` is where `point` stands on the ground it was asked about:
-/// a layer's depth is read there, so a pile is as deep as asked over the
-/// ground it lies on, not at the height it already rose to.
-pub fn with_shapes(base: f64, point: Vec3, foot: Vec3, shapes: &[Shape], blend: f64) -> f64 {
+/// back in.
+pub fn with_shapes(base: f64, point: Vec3, shapes: &[Shape], blend: f64) -> f64 {
     shapes.iter().fold(base, |field, shape| {
         let shape_distance = shape.distance(point);
         match shape.effect {
             Effect::Fill => smooth_min(field, shape_distance, blend),
             Effect::Carve => -smooth_min(-field, shape_distance, blend),
             // The surface moved out by the layer's depth, or in by it.
-            Effect::Raise => field - shape.depth(foot),
-            Effect::Lower => field + shape.depth(foot),
+            Effect::Raise => field - shape.depth(point),
+            Effect::Lower => field + shape.depth(point),
         }
     })
 }
