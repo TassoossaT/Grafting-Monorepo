@@ -351,6 +351,16 @@ impl Remesh<'_> {
                 .copied()
                 .collect();
             edges.sort_by(|x, y| self.vertices[x.0].distance(self.vertices[x.1]).total_cmp(&self.vertices[y.0].distance(self.vertices[y.1])).then(x.cmp(y)));
+            // A corner of an open border -- the new ground's foot, a hole the
+            // read left -- is never lost into the inside: collapsed, the border
+            // would creep inward round after round and take the ground with it.
+            let mut on_border = vec![false; self.vertices.len()];
+            for &(p, q) in directed.keys() {
+                if !directed.contains_key(&(q, p)) {
+                    on_border[p] = true;
+                    on_border[q] = true;
+                }
+            }
             let mut gone: HashSet<usize> = HashSet::new();
             let mut dirty: HashSet<usize> = HashSet::new();
             for (a, b) in edges {
@@ -358,12 +368,14 @@ impl Remesh<'_> {
                     continue;
                 }
                 // Into whichever end is locked; never both.
-                let (keep, lose) = match (self.locked[a], self.locked[b]) {
+                let (fixed_a, fixed_b) = (self.locked[a] || on_border[a], self.locked[b] || on_border[b]);
+                let (keep, lose) = match (fixed_a, fixed_b) {
                     (true, true) => continue,
                     (true, false) => (a, b),
                     (false, true) => (b, a),
                     (false, false) => (a, b),
                 };
+                let keep_fixed = fixed_a || fixed_b;
                 // Interior only, and the link condition: exactly the two apexes shared.
                 let (Some(&one), Some(&two)) = (directed.get(&(a, b)), directed.get(&(b, a))) else { continue };
                 let shared = neighbours[a].intersection(&neighbours[b]).count();
@@ -375,7 +387,7 @@ impl Remesh<'_> {
                 if self.locked[keep] && neighbours[lose].iter().any(|&n| n != keep && self.locked[n] && !neighbours[keep].contains(&n)) {
                     continue;
                 }
-                let target = if self.locked[keep] { self.vertices[keep] } else { (self.settle)((self.vertices[a] + self.vertices[b]) * 0.5) };
+                let target = if keep_fixed { self.vertices[keep] } else { (self.settle)((self.vertices[a] + self.vertices[b]) * 0.5) };
                 if neighbours[lose].iter().any(|&n| n != keep && target.distance(self.vertices[n]) > length((target + self.vertices[n]) * 0.5) * 4.0 / 3.0) {
                     continue;
                 }
@@ -481,6 +493,21 @@ impl Remesh<'_> {
                 neighbours[t[i]].insert(t[(i + 1) % 3]);
                 neighbours[t[i]].insert(t[(i + 2) % 3]);
                 normals[t[i]] = normals[t[i]] + n;
+            }
+        }
+        // A corner of an open border is drawn only by its neighbours along
+        // the border: drawn by the inside too, the border shrinks inward.
+        let directed = self.directed();
+        let mut along_border: Vec<HashSet<usize>> = vec![HashSet::new(); self.vertices.len()];
+        for &(p, q) in directed.keys() {
+            if !directed.contains_key(&(q, p)) {
+                along_border[p].insert(q);
+                along_border[q].insert(p);
+            }
+        }
+        for v in 0..self.vertices.len() {
+            if !along_border[v].is_empty() {
+                neighbours[v] = std::mem::take(&mut along_border[v]);
             }
         }
         let before = self.vertices.clone();

@@ -178,3 +178,33 @@ test("earth raised over a hill on the table leaves the hill standing past its re
     }
   } finally { fixture.session.free(); }
 });
+
+test("earth raised again and again from the bare table never takes ground away past its reach", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    const steps = [
+      [[-10, 0], [10, 0]], [[0, -10], [0, 10]], [[5, 0]], [[14, -6], [14, 6]], [[-12, 3], [-18, 8]],
+    ];
+    for (const points of steps) {
+      const before = [];
+      for (let x = -40; x <= 40; x += 1) for (let z = -40; z <= 40; z += 1) {
+        // Past the brush's reach and its blend, in plan, from every point of the stroke.
+        if (points.some(([px, pz]) => Math.hypot(px - x, pz - z) < 9) || (points.length > 1 && distanceToSegment(x, z, points[0], points[1]) < 9)) continue;
+        const y = topAt(runtime, x, z);
+        if (y !== undefined) before.push([x, z, y]);
+      }
+      stroke(fixture, points, { mode: "fill" });
+      const lost = before.filter(([x, z]) => topAt(runtime, x, z) === undefined).length;
+      probe(JSON.stringify(points), "lost", lost, "of", before.length);
+      assert.ok(lost <= 3, `${JSON.stringify(points)}: ${lost} of ${before.length} points of ground past the reach gone`);
+      assert.equal(meshOf(runtime).thrice, 0, "one mesh");
+    }
+  } finally { fixture.session.free(); }
+});
+
+function distanceToSegment(x, z, [ax, az], [bx, bz]) {
+  const dx = bx - ax, dz = bz - az, l = dx * dx + dz * dz;
+  const t = l > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l)) : 0;
+  return Math.hypot(x - ax - dx * t, z - az - dz * t);
+}
