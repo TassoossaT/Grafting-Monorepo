@@ -1,6 +1,6 @@
 import type { SceneItem, Transform } from "@grafting/render-3d";
 
-import type { ConstructionPosition, RenderHandleGlyph } from "@/ports";
+import type { ConstructionPosition, RenderHandleGlyph, RenderMeshData } from "@/ports";
 
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
 export const NODE_HANDLE_VISUAL_KIND = "vtt-construction-node-handle";
@@ -22,6 +22,8 @@ const GLYPH_SCALE = 0.44;
 
 export interface NodeHandleVisualParams {
   readonly glyph: RenderHandleGlyph;
+  readonly mesh?: RenderMeshData;
+  readonly emphasized?: boolean;
 }
 
 export function nodeHandleTransform(position: ConstructionPosition, glyph: RenderHandleGlyph = "point"): Transform {
@@ -32,12 +34,22 @@ export function nodeHandleSceneItem(
   nodeId: string,
   position: ConstructionPosition,
   glyph: RenderHandleGlyph = "point",
+  mesh?: RenderMeshData,
+  emphasized = false,
 ): SceneItem<NodeHandleVisualParams> {
   return {
     id: nodeHandleSceneItemId(nodeId),
     layer: NODE_HANDLE_LAYER_ID,
-    visual: { kind: NODE_HANDLE_VISUAL_KIND, params: { glyph } },
-    transform: nodeHandleTransform(position, glyph),
+    visual: { kind: NODE_HANDLE_VISUAL_KIND, params: { glyph, ...(mesh ? { mesh, emphasized } : {}) } },
+    transform: mesh ? { position: { x: 0, y: 0, z: 0 }, scale: 1 } : nodeHandleTransform(position, glyph),
     data: Object.freeze({ entity: "construction-node-handle", nodeId }) satisfies NodeHandlePickData,
   };
+}
+
+/** The continuous part of a handle coexists with its point control. */
+export function nodeHandleMeshSceneItemId(nodeId: string): string {
+  return `${nodeHandleSceneItemId(nodeId)}:mesh`;
+}
+export function nodeHandleMeshSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph, mesh: RenderMeshData, emphasized = false): SceneItem<NodeHandleVisualParams> {
+  return { ...nodeHandleSceneItem(nodeId, position, glyph, mesh, emphasized), id: nodeHandleMeshSceneItemId(nodeId) };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { recentCommits, type CommitRecord } from "./commit-timing.ts";
 import { countMap, createFrameMeter, diffMaps, EMPTY_FINGERPRINT, fingerprintMap, isNoChange, nameCommits, type FrameStats, type MapChange, type MapCounts, type MapFingerprint } from "./debug-stats.ts";
@@ -13,6 +13,8 @@ export const RECENT_CHANGES = 8;
 
 /** One change of the map, with the commits that made it and what it did. */
 export interface ChangeRecord {
+  /** Identity of this observation; multiple observations may share a map revision. */
+  readonly id: number;
   /** The map's revision once the change was read. */
   readonly revision: number;
   /** What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads. */
@@ -66,6 +68,7 @@ function slowestOf(commits: readonly CommitRecord[]): { readonly slowest?: { rea
  * graph and must not become a cost of its own.
  */
 export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats {
+  const changeSequence = useRef(0);
   const [frame, setFrame] = useState<FrameStats | undefined>(undefined);
   const [heap, setHeap] = useState<number | undefined>(undefined);
   const [map, setMap] = useState<Pick<DebugStats, "counts" | "readMs" | "changes">>({ changes: [] });
@@ -114,6 +117,7 @@ export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): Debug
       previous = print;
 
       const record: ChangeRecord = {
+        id: ++changeSequence.current,
         revision: snapshot.map.revision,
         label: commits.length > 0 ? nameCommits(commits.map((commit) => commit.label)) : first ? "mapa carregado" : "sem operação cronometrada",
         ...(commits.length > 0 ? { ms: commits.reduce((sum, commit) => sum + commit.ms, 0) } : {}),

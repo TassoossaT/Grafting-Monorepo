@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
 import { createTokenProjection } from "../src/entities/token/index.ts";
+import { curveAnchorId, curveEndWidthId } from "../src/features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 
 function createFakeTerrainNoisePort() {
@@ -39,6 +40,7 @@ function createTabletopRuntime(options) {
 
 function createFakeRenderPort() {
   const changes = [];
+  const previews = new Map();
   const clipHeights = [];
   let started = false;
   let creates = 0;
@@ -47,6 +49,7 @@ function createFakeRenderPort() {
 
   return {
     changes,
+    previews,
     async start() {
       if (started) throw new Error("already started");
       started = true;
@@ -61,6 +64,8 @@ function createFakeRenderPort() {
       attachedViews = Math.max(0, attachedViews - 1);
     },
     resizeView() {},
+    showPreview(descriptor, channel) { previews.set(channel, descriptor); },
+    clearPreview(channel) { previews.delete(channel); },
     applyConfirmed(change) {
       changes.push(change);
     },
@@ -1102,7 +1107,7 @@ test("road presentation exposes only spine anchors, insertion points and width h
   const {sessionFixture}=await import("./platform-session-fixture.mjs");
   const {curvePickId,curveWidthPickId}=await import("../src/features/edit-construction/index.ts");
   const real=sessionFixture(),render=createFakeRenderPort(),construction=createFakeConstructionPort();
-  const spineHandles=["spine:a","spine:b",curvePickId("spine-edge:a","midpoint"),curveWidthPickId("spine-edge:a")].sort();
+  const spineHandles=[curveAnchorId("spine:a"),curveAnchorId("spine:b"),curveEndWidthId("spine-edge:a"),curvePickId("spine-edge:a","midpoint"),curveWidthPickId("spine-edge:a")].sort();
   let graph={
     nodes:[{id:"spine:a",position:{x:0,y:0,z:0}},{id:"spine:b",position:{x:10,y:0,z:0}},{id:"mesh:vertex",position:{x:5,y:0,z:1}}],
     edges:[{edgeId:"spine-edge:a",startNodeId:"spine:a",endNodeId:"spine:b",curve:{start:[3,0,0],end:[-3,0,0],mode:"free",bandOffsets:[-1,1],surfaceType:"path"}}],
@@ -1126,9 +1131,22 @@ test("road presentation exposes only spine anchors, insertion points and width h
     runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
     assert.deepEqual(shown(),spineHandles);
+    assert.equal(render.changes.filter(change=>change.type==="node-handle-upserted"&&change.handle.nodeId===curveAnchorId("spine:a")).at(-1).handle.glyph,"midpoint","vertex anchors retain a diamond handle");
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
+    const strip=render.changes.filter(change=>change.type==="node-handle-upserted"&&change.handle.nodeId===curvePickId("spine-edge:a","midpoint")).at(-1).handle;
+    assert.ok(strip.mesh?.indices.length>0,"the curve itself is a pickable mesh handle");
+    assert.equal(render.previews.has("spine-handles"),false,"a decorative preview is no longer the spine presentation");
+    const positions=[...strip.mesh.positions];runtime.setConstructionHandleSelection(strip.nodeId);
+    const selectedStrip=render.changes.filter(change=>change.type==="node-handle-upserted"&&change.handle.nodeId===strip.nodeId).at(-1).handle;
+    assert.equal(selectedStrip.emphasized,true);assert.notDeepEqual([...selectedStrip.mesh.positions],positions,"selected curve has a wider hit area");
+    runtime.setConstructionHandleSelection(undefined);
+    runtime.setConstructionHandlePresentation("none");
+    assert.deepEqual(shown(), [], "direct selection has no edit handles intercepting picks");
+    runtime.setConstructionHandlePresentation("spine-points");
+    assert.deepEqual(shown(), spineHandles);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
+    assert.equal(render.previews.has("spine-handles"),false);
     // A plain vertex is no handle: only the topology overlay draws it, so nothing comes back for it here.
     assert.ok(!shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
     // The active tool edits sloped platforms: their whole-structure handles show.
@@ -1137,7 +1155,7 @@ test("road presentation exposes only spine anchors, insertion points and width h
     graph={...graph,nodes:graph.nodes.map(n=>n.id==="spine:b"?{...n,position:{x:11,y:0,z:2}}:n)};
     runtime.addPatch(EMPTY_PATCH,"local","updated-spine");
     assert.deepEqual(shown(),spineHandles);
-    assert.deepEqual(render.changes.filter(c=>c.type==="node-handle-upserted"&&c.handle.nodeId==="spine:b").at(-1).handle.position,{x:11,y:0,z:2});
+    assert.deepEqual(render.changes.filter(c=>c.type==="node-handle-upserted"&&c.handle.nodeId===curveAnchorId("spine:b")).at(-1).handle.position,{x:11,y:0,z:2});
   }finally{await runtime.dispose();real.session.free();}
 });
 
@@ -1170,14 +1188,14 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
     const pivot = upserted.find((handle) => handle.nodeId === "structure-pivot:spine:s:0");
     assert.ok(pivot, `pivot handle uploaded: ${JSON.stringify(upserted.map((h) => h.nodeId))}`);
     assert.ok(Math.hypot(pivot.position.x, pivot.position.z) < 1e-9, "at the spiral's centre");
-    assert.ok(upserted.some((handle) => handle.nodeId === "spine:s:1"), "with the spine's own points");
+    assert.ok(upserted.some((handle) => handle.nodeId === curveAnchorId("spine:s:1")), "with the spine's own points");
     assert.ok(upserted.some((handle) => handle.nodeId === "structure-height:spine:s:0"), "and its end's height handle");
     assert.ok(upserted.some((handle) => handle.nodeId === "structure-turns:spine:s:0"), "and, a spiral, its turns handle");
     const glyphOf = (id) => upserted.find((handle) => handle.nodeId === id)?.glyph;
     assert.deepEqual(
-      [glyphOf("structure-pivot:spine:s:0"), glyphOf("structure-rotate:spine:s:0"), glyphOf("structure-height:spine:s:0"), glyphOf("structure-turns:spine:s:0"), glyphOf("spine:s:1")],
-      ["move", "rotate", "height", "turns", "point"],
-      "each whole-spine handle reads as what it does; a control point is drawn as a point",
+      [glyphOf("structure-pivot:spine:s:0"), glyphOf("structure-rotate:spine:s:0"), glyphOf("structure-height:spine:s:0"), glyphOf("structure-turns:spine:s:0"), glyphOf(curveAnchorId("spine:s:1"))],
+      ["move", "rotate", "height", "turns", "midpoint"],
+      "each whole-spine handle reads as what it does; a control point is drawn as a diamond",
     );
   } finally { session.free(); }
 });
@@ -1211,4 +1229,62 @@ test("the handle layer holds edit handles only: a plain vertex never gets a dot 
     assert.ok(!shown().has("mesh:vertex"), "nor after the presentation went to points and back");
     assert.ok(shown().has(curvePickId("spine-edge:a", "midpoint")), "and the edit handle stays");
   } finally { await runtime.dispose(); real.session.free(); }
+});
+
+for (const surfaceType of ["terrain", "wall-white", "platform"]) for (const sameIdentity of [true,false]) test(`removed ${surfaceType} render chunk accepts a recreated face (${sameIdentity ? "same" : "new"} identity)`,async()=>{
+ const render=createFakeRenderPort(),construction=createFakeConstructionPort();
+ const key=["recreate:a","recreate:b","recreate:c"];
+ let liveKey=key,exists=true;
+ const face={surfaceKey:key,surfaceType,physical:true,mesh:{positions:new Float32Array([0,0,0,3,0,0,0,3,0]),indices:new Uint32Array([0,1,2])}};
+ construction.getSurfaceMeshesReport=keys=>({meshes:keys.length?[{...face,surfaceKey:liveKey}]:[],failed:[]});
+ construction.getAllSurfaceMeshes=()=>exists?[{...face,surfaceKey:liveKey}]:[];
+ construction.removeSurface=()=>{exists=false;return {...emptyRegionEdit(),removedSurfaceKeys:[liveKey]};};
+ construction.undoRegionOverlay=()=>{exists=true;};
+ construction.redoRegionOverlay=()=>{exists=false;};
+ const runtime=createTabletopRuntime({tableId:"recreate",renderPort:render,constructionPort:construction});
+ await runtime.start();
+ const add=()=>{exists=true;construction.createsNext([liveKey]);runtime.addPatch(EMPTY_PATCH,"local","add");};
+ try {add();runtime.removeSurface({surfaceKey:key},"local","remove");if(!sameIdentity)liveKey=["new:a","new:b","new:c"];add();
+ const revisions=new Map(),accepted=[];
+ for(const change of render.changes){const dep=change.dependency,id=dep.layer+":"+dep.scopeId;if(dep.revision<=(revisions.get(id)??-1))continue;revisions.set(id,dep.revision);accepted.push(change);}
+ assert.equal(accepted.filter(c=>c.type==="map-chunk-upserted").length,2,"recreated face reaches renderer");
+ assert.equal(accepted.filter(c=>c.type==="surface-pick-target-upserted").length,2,"recreated face stays pickable");
+ runtime.removeSurface({surfaceKey:liveKey},"local","remove-again");runtime.undoTransaction("remove-again","local");runtime.redoTransaction("remove-again","local");runtime.undoTransaction("remove-again","local");
+ const last=new Map();for(const change of render.changes){const dep=change.dependency,id=dep.layer+":"+dep.scopeId;assert.ok(dep.revision>(last.get(id)??-1),"every lifetime, including undo/redo, has newer render revisions");last.set(id,dep.revision);}
+ }finally{await runtime.dispose();}
+});
+
+test("undo, redo and rollback keep map revisions increasing and project the restored graph positions",async()=>{
+ const {sessionFixture,addFace}=await import("./platform-session-fixture.mjs");
+ const {vertexOverlayOf}=await import("../src/composition/tabletop/topology-overlay/vertex-overlay.ts");
+ const {edgeOverlayOf}=await import("../src/composition/tabletop/topology-overlay/edge-overlay.ts");
+ const real=sessionFixture(),construction=createFakeConstructionPort();
+ try {
+  addFace(real.runtime,"undo-position","platform",[[0,0],[4,0],[4,4],[0,4]].map(([x,z],i)=>({id:`undo:${i}`,position:{x,y:0,z}})));
+  Object.assign(construction,{
+   getGraphSnapshot:real.runtime.getGraphSnapshot,getNodePositions:()=>real.runtime.getGraphSnapshot().nodes,
+   getAllRegionTopologies:real.runtime.getAllRegionTopologies,getRegionTopology:real.runtime.getRegionTopology,
+   getAllSurfaceMeshes:()=>[],getSurfaceMeshesReport:()=>({meshes:[],failed:[]}),
+   beginTransaction:id=>real.session.begin_transaction(id),commitTransaction:id=>real.session.commit_transaction(id),rollbackTransaction:id=>real.session.rollback_transaction(id),
+   undoRegionOverlay:id=>real.session.undo_region_overlay(id),redoRegionOverlay:id=>real.session.redo_region_overlay(id),
+   moveVertices:moves=>JSON.parse(real.session.move_vertices_json(JSON.stringify(moves.map(m=>({nodeId:m.nodeId,position:[m.position.x,m.position.y,m.position.z]}))))),
+  });
+  const runtime=createTabletopRuntime({tableId:"undo-debug",renderPort:createFakeRenderPort(),constructionPort:construction});await runtime.start();
+  const edgePositions=()=>edgeOverlayOf(real.runtime,real.runtime.getAllRegionTopologies(),real.runtime.getGraphSnapshot(),real.runtime).map(g=>[g.role,[...g.positions]]);
+  const before=real.session.snapshot_json(),beforeEdges=edgePositions();
+  runtime.transact("move-debug","local",()=>runtime.applyRegionEdit([{kind:"move-vertex",nodeId:"undo:0",position:{x:2,y:1,z:3}}],"local","move-debug"));
+  const moved=real.session.snapshot_json(),movedEdges=edgePositions();assert.notDeepEqual(movedEdges,beforeEdges);let revision=runtime.getSnapshot().map.revision;
+  const check=expected=>{
+   assert.equal(real.session.snapshot_json(),expected,"authoritative graph equals its checkpoint");
+   assert.deepEqual(edgePositions(),expected===before?beforeEdges:movedEdges,"debug edges follow the restored checkpoint coordinates");
+   assert.ok(runtime.getSnapshot().map.revision>revision,"overlay must observe each restore even when node/face counts stay identical");revision=runtime.getSnapshot().map.revision;
+   const graph=runtime.getGraphSnapshot();assert.deepEqual([...vertexOverlayOf(graph)],graph.nodes.flatMap(n=>[n.position.x,n.position.y,n.position.z]));
+   for(const node of graph.nodes)assert.deepEqual(runtime.getSnapshot().map.nodePositions.get(node.id).position,node.position);
+  };
+  runtime.undoTransaction("move-debug","local");check(before);
+  runtime.redoTransaction("move-debug","local");check(moved);
+  runtime.undoTransaction("move-debug","local");check(before);
+  assert.throws(()=>runtime.transact("rollback-debug","local",()=>{runtime.applyRegionEdit([{kind:"move-vertex",nodeId:"undo:0",position:{x:8,y:2,z:9}}],"local","rollback-debug");throw Error("cancel");}),/cancel/);check(before);
+  await runtime.dispose();
+ } finally {real.session.free();}
 });

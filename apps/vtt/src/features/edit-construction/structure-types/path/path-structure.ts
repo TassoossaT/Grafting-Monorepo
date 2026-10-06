@@ -8,6 +8,7 @@ import type { CascadeContext, EditRole, RolePolicy, SpineGeneration, StructureTr
 import { regeneratePathSpine } from "./bezier-road-edit.ts";
 import { explicitSpineSnapshot } from "./bezier-road-plan.ts";
 import { PATH_MAX_GRADE } from "./path-recipe.ts";
+import { removalPatchForRegions } from "./path-cloud-scope.ts";
 import { allowed, denied } from "../structure-type.ts";
 import type { CreationInteraction } from "../creation-interaction.ts";
 
@@ -240,6 +241,7 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
 
 /** A road on the shared spine: legacy spans get automatic handles, and an edit regenerates the unioned contour. */
 const PATH_SPINE: SpineGeneration = Object.freeze<SpineGeneration>({
+  branchCreation: true,
   defaultOffsets: [-2, 2],
   maxGrade: PATH_MAX_GRADE,
   prepare: (snapshot, port) => explicitSpineSnapshot(snapshot, port, [-2, 2]),
@@ -265,5 +267,6 @@ export function pathStructureType(
     // height alone -- the ground contact law frees the ground under it.
     conformsTo: (support: ReadonlySet<StructureTrait>) => support.has("ground"),
     spine: PATH_SPINE,
+    removalPatch: removalPatchForRegions,
   });
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createStructureEditBehavior } from "../src/composition/tabletop/tools/core/structure-edit-behavior.ts";
-import { curvePickId } from "../src/features/edit-construction/index.ts";
+import { curvePickId, panelHeightWidgetPickId } from "../src/features/edit-construction/index.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
 /** A wall and a platform with entirely disjoint nodes -- the case that actually exercises `ownsType` filtering, unlike `building()`'s fixture where every wall corner doubles as a platform corner. */
@@ -22,15 +22,15 @@ function wallAndPlatform(runtime) {
   return { wall, platform };
 }
 
-test("a wall-scoped behavior grabs the wall's own vertex and edits it", () => {
+test("a wall-scoped behavior refuses raw vertices; editing requires handles", () => {
   const { runtime, session } = sessionFixture();
   try {
     wallAndPlatform(runtime);
     const behavior = createStructureEditBehavior({ ownsType: (t) => t === "wall-white" });
     const grabbed = behavior.tryGrab({ runtime, reportSelection() {}, reportFeedback() {} }, { point: { x: 0, y: 0, z: 0 }, nodeId: "w:a-bottom" }, { mode: "shape" });
-    assert.equal(grabbed, true);
-    assert.equal(behavior.wasGrabbed(), true);
-    assert.equal(behavior.isActive(), true);
+    assert.equal(grabbed, false);
+    assert.equal(behavior.wasGrabbed(), false);
+    assert.equal(behavior.isActive(), false);
   } finally { session.free(); }
 });
 
@@ -46,12 +46,12 @@ test("a wall-scoped behavior refuses a platform's own vertex -- it does not own 
   } finally { session.free(); }
 });
 
-test("a platform-scoped behavior grabs the platform's own vertex, and refuses the wall's", () => {
+test("a platform-scoped behavior refuses raw vertices of both types", () => {
   const { runtime, session } = sessionFixture();
   try {
     wallAndPlatform(runtime);
     const behavior = createStructureEditBehavior({ ownsType: (t) => t === "platform" });
-    assert.equal(behavior.tryGrab({ runtime, reportSelection() {}, reportFeedback() {} }, { point: { x: 10, y: 0, z: 0 }, nodeId: "p:0" }, { mode: "shape" }), true);
+    assert.equal(behavior.tryGrab({ runtime, reportSelection() {}, reportFeedback() {} }, { point: { x: 10, y: 0, z: 0 }, nodeId: "p:0" }, { mode: "shape" }), false);
     assert.equal(behavior.tryGrab({ runtime, reportSelection() {}, reportFeedback() {} }, { point: { x: 0, y: 0, z: 0 }, nodeId: "w:a-bottom" }, { mode: "shape" }), false);
   } finally { session.free(); }
 });
@@ -91,9 +91,9 @@ test("lifting a wall's top says exactly how high the wall stands now, in the rul
   const shown = [];
   ctx.showRuler = (feedback) => shown.push(feedback);
   try {
-    wallAndPlatform(runtime);
+    const { wall } = wallAndPlatform(runtime);
     const behavior = createStructureEditBehavior({ ownsType: (t) => t === "wall-white" });
-    const start = { point: { x: 0, y: 3, z: 0 }, nodeId: "w:a-top", screenX: 100, screenY: 300 };
+    const start = { point: { x: 0, y: 3, z: 0 }, nodeId: panelHeightWidgetPickId(wall.outerLoops[0][2].edgeId, "group"), screenX: 100, screenY: 300 };
     assert.equal(behavior.tryGrab(ctx, start, { mode: "elevation" }), true);
     // One metre up the screen is one metre up: the pixels a metre takes are the gesture's own.
     const current = { point: start.point, screenX: 100, screenY: 300 - 40 };

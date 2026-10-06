@@ -1,3 +1,4 @@
+import { curveAnchorId } from "../src/features/edit-construction/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { controlSectionId, createPathBrushEffect, curvePickId, pathFormationFor, planBezierEdit, planEdit, planPathCloudMutation, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
@@ -143,7 +144,7 @@ test("a spiral is edited by its spine points exactly as a road is: drag a point,
     drawSpiral(slopeSpiralTool, ctx, { center: { x: 20, y: 1, z: 0 }, radius: 3, turns: 2, params: { ...params, rise: 4 } });
     const spans = slopeSpans(runtime);
     const control = spans[3].endNodeId;
-    const start = { nodeId: control, point: node(runtime, control).position };
+    const start = { nodeId: curveAnchorId(control), point: node(runtime, control).position };
     const target = { point: { x: start.point.x + 1, y: 0, z: start.point.z + 0.5 } };
 
     const blank = session.snapshot_json();

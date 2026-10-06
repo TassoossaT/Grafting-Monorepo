@@ -11,11 +11,15 @@ import type { RenderHandleGlyph } from "../../ports/index.ts";
  */
 export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>> = {
   /** A control point of a spine. */
-  anchor: "point",
+  anchor: "midpoint",
   /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
+  createBranch: "add",
   /** On the edge of a span's band: push it out or in. */
   width: "side",
+  disconnect: "unlink",
+  deleteSegment: "delete",
+  closeCurve: "link",
   /** A wall run's own height widget. */
   panelHeight: "height",
   /** Whole-structure handles. */

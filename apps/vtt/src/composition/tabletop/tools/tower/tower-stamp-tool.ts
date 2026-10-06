@@ -36,5 +36,5 @@ const rawTowerStampTool: ConstructionTool<"tower-stamp"> = {
   },
 };
 
-/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- a tower is an ordinary wall, see `structure-edit-behavior.ts`. */
+/** Edits existing walls only through their handles; a tower is an ordinary wall. */
 export const towerStampTool = withStructureEditing(rawTowerStampTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });

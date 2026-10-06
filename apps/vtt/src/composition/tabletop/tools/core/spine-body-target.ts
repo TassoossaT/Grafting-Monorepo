@@ -1,3 +1,4 @@
+import { pointerAtHeight } from "./pointer-ray.ts";
 import { curveEdgesOf, curvePickId, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { CurveGestureOptions } from "./curve-edit-gesture.ts";
@@ -15,7 +16,7 @@ import type { PointerSample, ToolContext } from "./tool-context.ts";
 const END_PIXELS = 40;
 const END_FALLBACK = 0.6;
 
-export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
+export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true, projectElevation = false): { sample: PointerSample; options: CurveGestureOptions } | undefined {
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
     structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
       ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
@@ -29,13 +30,15 @@ export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, exclude
   const ownedIds = new Set(ownedEdges.map((e) => e.edgeId));
   const edges = curveEdgesOf(snapshot, [], ctx.runtime).filter((e) => ownedIds.has(e.edgeId));
   if (!edges.length) return;
-  const nearest = ctx.runtime.curveBatch({ tolerance: 0.025, commands: edges.map((e) => ({ kind: "nearest" as const, curve: e.curve, point: [sample.point.x, sample.point.y, sample.point.z] as const })) });
+  const middle = projectElevation ? ctx.runtime.curveBatch({ tolerance: 0.025, commands: edges.map((edge) => ({ kind: "split" as const, curve: edge.curve, t: 0.5 })) }) : [];
+  const nearest = ctx.runtime.curveBatch({ tolerance: 0.025, commands: edges.map((e, i) => { const point = projectElevation ? pointerAtHeight(sample, middle[i]!.curves[0]!.points[3][1]) : sample.point; return { kind: "nearest" as const, curve: e.curve, point: [point.x, point.y, point.z] as const }; }) });
   const evaluated = ctx.runtime.curveBatch({ tolerance: 0.025, commands: edges.map((e, i) => ({ kind: "split" as const, curve: e.curve, t: Math.max(0.000001, Math.min(0.999999, nearest[i]!.parameter!)) })) });
   let best: { index: number; distance: number } | undefined;
   evaluated.forEach((result, i) => {
     const p = result.curves[0]!.points[3];
-    const distance = Math.hypot(p[0] - sample.point.x, p[1] - sample.point.y, p[2] - sample.point.z);
-    if (Math.abs(p[1] - sample.point.y) > 1.5) return;
+    const pointer = projectElevation ? pointerAtHeight(sample, p[1]) : sample.point;
+    const distance = Math.hypot(p[0] - pointer.x, p[1] - pointer.y, p[2] - pointer.z);
+    if (!projectElevation && Math.abs(p[1] - sample.point.y) > 1.5) return;
     const profile = snapshot.edges.find((e) => e.edgeId === edges[i]!.edgeId)!.curve!;
     const reach = Math.max(...profile.bandOffsets.map(Math.abs), ...(profile.endBandOffsets ?? []).map(Math.abs), 0.2) + 0.2;
     if (distance <= reach && (!best || distance < best.distance)) best = { index: i, distance };

@@ -24,6 +24,23 @@ import { curvePoint, curvePosition, resolveCurves } from "./bezier-curve.ts";
 const HANDLE = "bezier-handle:";
 const MIDPOINT = "bezier-midpoint:";
 const WIDTH = "bezier-width:";
+const ANCHOR = "curve-anchor:";
+const ACTION = "curve-action:";
+const END_WIDTH = "curve-end-width:";
+
+export function curveAnchorId(nodeId: string): string { return ANCHOR + encodeURIComponent(nodeId); }
+export function curveAnchorPick(id: string): string | undefined { return id.startsWith(ANCHOR) ? decodeURIComponent(id.slice(ANCHOR.length)) : undefined; }
+export type CurveHandleAction = "disconnect" | "delete-segment" | "close" | "create";
+export function curveActionId(targetId: string, action: CurveHandleAction): string { return ACTION + action + ":" + encodeURIComponent(targetId); }
+export function curveActionPick(id: string): { readonly targetId: string; readonly action: CurveHandleAction } | undefined {
+  if (!id.startsWith(ACTION)) return;
+  const tail = id.slice(ACTION.length), split = tail.indexOf(":");
+  const action = tail.slice(0, split);
+  if (action !== "disconnect" && action !== "delete-segment" && action !== "close" && action !== "create") return;
+  return { targetId: decodeURIComponent(tail.slice(split + 1)), action };
+}
+export function curveEndWidthId(edgeId: string): string { return END_WIDTH + encodeURIComponent(edgeId); }
+export function curveEndWidthPick(id: string): string | undefined { return id.startsWith(END_WIDTH) ? decodeURIComponent(id.slice(END_WIDTH.length)) : undefined; }
 
 export type CurveHandleIndex = 1 | 2 | "midpoint";
 

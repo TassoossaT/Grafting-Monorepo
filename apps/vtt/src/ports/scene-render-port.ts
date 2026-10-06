@@ -142,13 +142,16 @@ export type ConfirmedMapChunkRenderChange =
  * Interaction vocabulary, not product vocabulary -- any structure's
  * handle can take any glyph.
  */
-export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink" | "delete" | "add";
 
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
   /** How the handle is drawn; absent is a plain point. */
   readonly glyph?: RenderHandleGlyph;
+  /** Optional world-space mesh for a continuous handle instead of a point sprite. */
+  readonly mesh?: RenderMeshData;
+  readonly emphasized?: boolean;
 }
 
 export type ConfirmedNodeHandleRenderChange =

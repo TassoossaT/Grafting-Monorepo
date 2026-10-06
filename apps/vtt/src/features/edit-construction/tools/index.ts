@@ -17,6 +17,7 @@ export type {
   BrushShapeKind,
   BrushShapeParams,
   ConstructionToolId,
+  DemolishParams,
   NoToolParams,
   OpeningParams,
   OpeningShape,
@@ -31,5 +32,6 @@ export type {
   ToolParamsFor,
   TowerStampParams,
   WallBrushParams,
+  WallLineParams,
   WallParams,
 } from "./tool-types.ts";

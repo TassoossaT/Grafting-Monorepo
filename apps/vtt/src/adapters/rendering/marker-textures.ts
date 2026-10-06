@@ -181,6 +181,16 @@ export function createUnlinkHandleTexture(): HTMLCanvasElement {
   });
 }
 
+/** Removes a selected span; distinct from disconnecting its shared anchor. */
+export function createDeleteHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#b4533a", (context) => {
+    context.beginPath();
+    context.moveTo(22, 22); context.lineTo(42, 42);
+    context.moveTo(42, 22); context.lineTo(22, 42);
+    context.stroke();
+  });
+}
+
 /** A span's midpoint: a small diamond, lighter than a point, so it reads as "in between". */
 export function createMidpointHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
@@ -222,4 +232,11 @@ export function createRulerLabelTexture(text: string): HTMLCanvasElement {
   }
   context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
   return canvas;
+}
+
+/** Starts a new construction from an existing control. */
+export function createAddHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#2f6fde", (context) => {
+    context.beginPath(); context.moveTo(18, 32); context.lineTo(46, 32); context.moveTo(32, 18); context.lineTo(32, 46); context.stroke();
+  });
 }

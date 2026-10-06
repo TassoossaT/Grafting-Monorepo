@@ -18,7 +18,7 @@ import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/r
 import { mapLabelsOf } from "./tools/core/ruler-labels.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, HANDLE_REFERENCE, MEASURE_UNITS, lengthStepOf, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
+import { curveAnchorPick, DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, HANDLE_REFERENCE, MEASURE_UNITS, lengthStepOf, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
 import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
@@ -32,6 +32,7 @@ import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./too
 function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
   const graph = runtime.getGraphSnapshot();
   const scene = { graph, topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
+  id = curveAnchorPick(id) ?? id;
   const motion = handleMotionOf(runtime, id);
   if (!motion || !carriesArrows(motion)) return undefined;
   if (globalHandleOf(id)) {
@@ -45,7 +46,7 @@ function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getA
 /** How the handle `id` may move, as the scene stands. */
 function handleMotionOf(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): ReturnType<typeof handleMotionAt> {
   const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
-  return handleMotionAt(scene, id);
+  return handleMotionAt(scene, curveAnchorPick(id) ?? id);
 }
 
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
@@ -261,6 +262,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
         optionsRef.current.onSelectionChange(info);
+        runtime.setConstructionHandleSelection?.(info?.id);
         if (viewId === undefined) return;
         const node = info && toolFor(activeTool).handlePresentation === "spine-points" ? spineHandleAt(runtime, info.id) : undefined;
         selectedPoint.current = node?.id;

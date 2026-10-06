@@ -48,4 +48,4 @@ const rawWallBrushTool = createBrushTool<"wall-brush">({
 });
 
 /** Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it. */
-export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition"), handlesOnly: true });
+export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });

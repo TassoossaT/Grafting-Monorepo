@@ -6,6 +6,7 @@ import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/po
 import type { EditTarget } from "../orchestration/atomic-edit.ts";
 import {
   organicStructureType,
+  demolishTerrainRegion,
   pathInteractionOver,
   terrainInteractionOver,
 } from "./organic/organic-structure.ts";
@@ -60,6 +61,7 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
     "regenerate",
     terrainInteractionOver,
     ["ground"],
+    demolishTerrainRegion,
   ),
   organicStructureType(
     "terrain-grass",
@@ -68,6 +70,7 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
     "regenerate",
     terrainInteractionOver,
     ["ground"],
+    demolishTerrainRegion,
   ),
   pathStructureType(
     PATH_SURFACE_TYPE,

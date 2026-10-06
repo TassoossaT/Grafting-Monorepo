@@ -20,7 +20,8 @@ export type ConstructionToolId =
   | "wall-line"
   | "tower-stamp"
   | "opening"
-  | "terrain-sculpt";
+  | "terrain-sculpt"
+  | "demolish";
 
 export type BrushShapeKind = "circle" | "square" | "hexagon";
 
@@ -32,6 +33,8 @@ export interface BrushShapeParams {
   /** Rotation around world Y; ignored by circles. */
   readonly rotationDegrees: number;
 }
+
+export interface DemolishParams extends NoToolParams {}
 
 export interface PathBrushParams extends BrushShapeParams {
   /** Product recipe; every variant still creates the single `path` surface type. */
@@ -71,6 +74,10 @@ export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
   /** Length of a panel's own vertical edge, in world units. */
   readonly height: number;
+}
+
+export interface WallLineParams extends WallParams {
+  readonly mode?: "straight" | "curve";
 }
 
 /**
@@ -246,10 +253,11 @@ export interface ToolParamsByTool {
   readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral" };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
-  readonly "wall-line": WallParams;
+  readonly "wall-line": WallLineParams;
   readonly "tower-stamp": TowerStampParams;
   readonly opening: OpeningParams;
   readonly "terrain-sculpt": TerrainSculptParams;
+  readonly demolish: DemolishParams;
 }
 
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
@@ -285,6 +293,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     targetSurface: "terrain",
     seed: 1,
   }),
+  demolish: Object.freeze({}),
 });
 
 /**

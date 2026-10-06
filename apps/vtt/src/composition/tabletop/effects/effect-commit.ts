@@ -14,7 +14,7 @@ import type {
 import type { AtomicEditOp, Effect, Reaction, ReactionId, ReactionRecord, ShapeChange } from "@/features/edit-construction";
 import type { TransactionResult } from "../tabletop-runtime.ts";
 
-import { hasTrait, runEffects, settlePatch, simplifyCollinearVertices } from "../../../features/edit-construction/index.ts";
+import { EMPTY_OUTCOME, surfaceKeyText, structureTypeFor, hasTrait, mergeOutcomes, runEffects, settlePatch, simplifyCollinearVertices } from "../../../features/edit-construction/index.ts";
 import { timePhase } from "../commit-timing.ts";
 import { TABLETOP_REACTIONS, type TabletopReactionRuntime } from "./reactions.ts";
 import { shapeChangeOfRemoval, shapeChangeOfReplacement, topologiesOf } from "./shape-change.ts";
@@ -48,7 +48,7 @@ export function dispatchEffects(
 ): readonly ReactionRecord[] {
   // Every shape change is also a reshape, for what stands on the changed cloud to follow.
   const reshaped = effects.flatMap((effect): Effect[] => (effect.kind === "cut" ? [effect, { ...effect, kind: "reshape" }] : [effect]));
-  return timePhase("reações", () => runEffects(runtime, {
+  return timePhase("reaÃ§Ãµes", () => runEffects(runtime, {
     regionsNear: (bounds) => typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(bounds)
       : runtime.getAllRegionTopologies(),
@@ -56,6 +56,7 @@ export function dispatchEffects(
 }
 
 export interface CommitOptions {
+  readonly executeRemovalAction?: (action: string, region: ConstructionRegionTopology) => RegionEditOutcome | undefined;
   /** Names the transaction and its undo entry; reactions mint their ids from it. */
   readonly transactionId: string;
   readonly origin?: ChangeOrigin;
@@ -187,22 +188,57 @@ export function commitStagedRegionEdit(
   });
 }
 
-/** Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically. */
+/** Deletes surfaces and lets their own clouds and every cloud they had cut answer, atomically. */
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,
-  surfaceKey: ConstructionSurfaceKey,
+  surfaceKey: ConstructionSurfaceKey | readonly ConstructionSurfaceKey[],
   options: CommitOptions,
 ): TransactionResult<RegionEditOutcome> {
   const origin = options.origin ?? "local";
+  const keys: readonly ConstructionSurfaceKey[] =
+    typeof surfaceKey[0] === "string"
+      ? [surfaceKey as ConstructionSurfaceKey]
+      : (surfaceKey as readonly ConstructionSurfaceKey[]);
+
   return runtime.transact(options.transactionId, origin, () => {
-    const removed = topologiesOf(runtime, [surfaceKey]);
-    const outcome = runtime.removeSurface({ surfaceKey }, origin, options.transactionId);
-    const change = shapeChangeOfRemoval(removed, outcome.removedNodeIds);
-    if (change !== undefined) {
-      dispatchEffects(runtime, [
-        { kind: "remove", causeId: options.transactionId, change },
-        { kind: "cut", causeId: options.transactionId, change },
-      ], options.reactions);
+    const targets = new Map(keys.map((key) => [surfaceKeyText(key), key]));
+    const standing = runtime.getAllRegionTopologies();
+    const remaining = standing.filter((region) => !targets.has(surfaceKeyText(region.surfaceKey)));
+    const removed = topologiesOf(runtime, [...targets.values()]);
+    const authoring = runtime.getGraphSnapshot();
+    let outcome = EMPTY_OUTCOME;
+    const standardRemovals: ConstructionRegionTopology[] = [];
+    for (const key of targets.values()) {
+      const region = runtime.getRegionTopology(key);
+      if (!region) continue;
+      const removeFace = () => runtime.removeSurface({ surfaceKey: key }, origin, options.transactionId);
+      const action = structureTypeFor(region.surfaceType)?.demolish;
+      const res = action ? action({ region, graph: authoring, remaining, removeFace, execute: (name) => { if (!options.executeRemovalAction) throw new Error("Removal action dispatcher is unavailable"); return options.executeRemovalAction(name, region); }, replace: (request) => runtime.applyPatchReplacement(request, origin, options.transactionId) }) : removeFace();
+      if (res) { outcome = mergeOutcomes(outcome, res); standardRemovals.push(region); }
+    }
+    const byType = new Map<string, ConstructionRegionTopology[]>();
+    for (const topology of standardRemovals) {
+      const list = byType.get(topology.surfaceType) ?? [];
+      list.push(topology);
+      byType.set(topology.surfaceType, list);
+    }
+    for (const [, group] of byType) {
+      const graphPatch = structureTypeFor(group[0]!.surfaceType)?.removalPatch?.(group, authoring, remaining);
+      if (graphPatch && (graphPatch.removedEdgeIds?.length ?? 0) > 0) {
+        const cleanup = runtime.applyPatchReplacement({ operationId: options.transactionId + ":authoring:" + encodeURIComponent(group[0]!.surfaceType), sourceSurfaceKeys: [], patch: { nodes: [], edges: [], regions: [] }, graphPatch }, origin, options.transactionId);
+        outcome = mergeOutcomes(outcome, cleanup);
+      }
+      const change = shapeChangeOfRemoval(group, outcome.removedNodeIds);
+      if (change !== undefined) {
+        dispatchEffects(
+          runtime,
+          [
+            { kind: "remove", causeId: options.transactionId, change },
+            { kind: "cut", causeId: options.transactionId, change },
+          ],
+          options.reactions,
+        );
+      }
     }
     return outcome;
   });

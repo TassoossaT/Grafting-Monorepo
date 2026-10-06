@@ -7,6 +7,7 @@ import {
   controlSectionId,
   deriveSlopeMotion,
   regenerateSlopeSpine,
+  removalPatchForSlopeRegions,
   SLOPE_DEFAULT_OFFSETS,
   SLOPE_SURFACE_TYPE,
   slopeMotionInfluences,
@@ -146,5 +147,6 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
     defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true,
     endRung: (controlNodeId: string) => ({ edgeId: controlRungId(controlNodeId), startNodeId: controlSectionId(controlNodeId, "min"), endNodeId: controlSectionId(controlNodeId, "max") }),
   }),
+  removalPatch: removalPatchForSlopeRegions,
   globalHandles: Object.freeze(["pivot", "rotate", "height", "turns", "radius", "originHeight", "destinationHeight"] as const),
 });

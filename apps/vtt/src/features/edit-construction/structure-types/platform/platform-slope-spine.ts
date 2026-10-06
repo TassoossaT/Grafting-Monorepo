@@ -59,6 +59,12 @@ const boundaryEdgeId = (from: string, to: string): string => `slope-edge:${from}
 export const controlRungId = (controlNodeId: string): string => boundaryEdgeId(controlSectionId(controlNodeId, "min"), controlSectionId(controlNodeId, "max"));
 export const slopeFaceId = (edgeId: string): string => `${edgeId}:face`;
 
+/** The authoring spans belonging to exactly the sloped faces being deleted. */
+export function removalPatchForSlopeRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot): ConstructionGraphPatch {
+  const faces = new Set(regions.map((region) => region.surfaceKey[1]));
+  return { nodes: [], edges: [], removedEdgeIds: graph.edges.filter((edge) => isSlopeSpan(edge) && faces.has(slopeFaceId(edge.edgeId))).map((edge) => edge.edgeId) };
+}
+
 function parseSection(id: string): { readonly owner: string; readonly t?: number; readonly side: Side } | undefined {
   const span = /^(.*):section:(\d+\.\d+):(min|max)$/.exec(id);
   if (span) return { owner: span[1]!, t: Number(span[2]), side: span[3] as Side };

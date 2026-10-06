@@ -1,4 +1,4 @@
-import { curvePick, globalHandleOf, isSpineEdge, spineComponent, spineMemberOf, structureTypeFor, type HandleFocus } from "../../../../features/edit-construction/index.ts";
+import { curveAnchorPick, curveActionPick, curveEndWidthPick, curveWidthPick, curvePick, globalHandleOf, isSpineEdge, spineComponent, spineMemberOf, structureTypeFor, type HandleFocus } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
@@ -151,7 +151,7 @@ export function handleFocusAt(ctx: ToolContext, sample: PointerSample | undefine
 
 function focusFrom(ctx: ToolContext, sample: PointerSample, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus {
   // On a handle: whatever it belongs to stays in focus.
-  if (sample.nodeId && (globalHandleOf(sample.nodeId) || curvePick(sample.nodeId))) return previous;
+  if (sample.nodeId && (globalHandleOf(sample.nodeId) || curvePick(sample.nodeId) || curveAnchorPick(sample.nodeId) || curveActionPick(sample.nodeId) || curveWidthPick(sample.nodeId) || curveEndWidthPick(sample.nodeId))) return previous;
   const under = focusOn(ctx, sample, owns, faceUnder);
   if (under) return under;
   if (sample.nodeId && previous.spineNodes.has(sample.nodeId)) return previous;

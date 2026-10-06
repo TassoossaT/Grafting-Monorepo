@@ -1,3 +1,4 @@
+import { holdSpineGrade } from "./spine-grade.ts";
 import type { BezierPort, ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition, CurveHandleMode, CurveHandles } from "@/ports";
 
 import { automaticCurve, curvePoint, curvePosition, resolveCurves } from "../topology/bezier-curve.ts";
@@ -54,6 +55,7 @@ export interface SpineEditInput {
    * moves in plan only: a spiral's turns pass right over each other.
    */
   readonly weld?: boolean;
+  readonly maxGrade?: number;
 }
 
 /**
@@ -135,10 +137,11 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
   } else {
     if (!isBezierEditTarget(source, input.targetId)) return undefined;
     const weld = input.weld ?? true;
+    const canLand = (position: ConstructionPosition) => input.maxGrade === undefined || Math.abs(holdSpineGrade(source, input.targetId, position, input.maxGrade).y - position.y) <= 1e-4;
     const snapNode = weld && source.nodes.find((n) => n.id !== input.targetId &&
       isSpineControlNodeId(n.id) &&
       Math.hypot(n.position.x - input.position.x, n.position.z - input.position.z) <= 0.55 &&
-      Math.abs(n.position.y - input.position.y) <= 1.5);
+      Math.abs(n.position.y - input.position.y) <= 1.5 && canLand(n.position));
 
     if (snapNode) {
       selectedId = snapNode.id;
@@ -223,7 +226,7 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
         const dist = Math.hypot(proj[0] - input.position.x, proj[2] - input.position.z);
         const heightDiff = Math.abs(proj[1] - input.position.y);
         const reach = Math.max(...candidate.curve!.bandOffsets.map(Math.abs), 2.0);
-        if (dist <= reach && heightDiff <= 1.5 && (!tSnap || dist < Math.hypot(tSnap.junctionPosition.x - input.position.x, tSnap.junctionPosition.z - input.position.z))) {
+        if (dist <= reach && heightDiff <= 1.5 && canLand(curvePosition(proj)) && (!tSnap || dist < Math.hypot(tSnap.junctionPosition.x - input.position.x, tSnap.junctionPosition.z - input.position.z))) {
           tSnap = {
             edge: candidate,
             t,

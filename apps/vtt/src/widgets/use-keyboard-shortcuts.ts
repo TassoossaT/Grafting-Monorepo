@@ -39,6 +39,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
         if (ready) onToolChange("wall-brush");
       } else if (event.key.toLowerCase() === "i") {
         if (ready) onToolChange("terrain-sculpt");
+      } else if (event.key.toLowerCase() === "x" || event.key.toLowerCase() === "d") {
+        if (ready) onToolChange("demolish");
       }
     };
     window.addEventListener("keydown", handleKeyDown);

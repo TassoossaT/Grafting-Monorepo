@@ -5,6 +5,7 @@ import type { ConstructionToolId } from "@/features/edit-construction";
 
 import type { ConstructionTool } from "./tool-context.ts";
 import { navigateTool } from "./navigate-tool.ts";
+import { demolishTool } from "../demolish/demolish-tool.ts";
 import { openingTool } from "../openings/opening-tool.ts";
 import { pathBrushTool } from "../paths/path-brush-tool.ts";
 import { terrainSculptTool } from "../terrain/terrain-sculpt-tool.ts";
@@ -30,6 +31,7 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "tower-stamp": towerStampTool,
   opening: openingTool,
   "terrain-sculpt": terrainSculptTool,
+  demolish: demolishTool,
 };
 
 export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {

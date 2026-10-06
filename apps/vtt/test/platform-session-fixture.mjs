@@ -32,6 +32,8 @@ export function sessionFixture() {
   let sequence = 0;
   const calls = { plans: 0, batches: 0, feedback: [] };
   const runtime = {
+    showPreview() {},
+    clearPreview() {},
     getGraphSnapshot() { const s = JSON.parse(session.snapshot_json()); return { nodes: s.nodes.map((n) => ({ ...n, position: position(n.position) })), edges: s.edges.map((e) => ({ edgeId: e.id, startNodeId: e.source, endNodeId: e.target, curve: e.curve ?? undefined })) }; },
     getAllRegionTopologies: () => JSON.parse(session.all_region_topologies_json()).map(topology),
     getRegionTopology: (surfaceKey) => topology(JSON.parse(session.region_topology_json(JSON.stringify({ surfaceKey })))),

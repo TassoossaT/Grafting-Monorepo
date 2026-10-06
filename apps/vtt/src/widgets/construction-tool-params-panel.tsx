@@ -17,6 +17,7 @@ import type {
   TowerStampParams,
   WallBrushParams,
   WallParams,
+  WallLineParams,
 } from "@/features/edit-construction";
 import { OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingPath, withOpeningKind } from "@/features/edit-construction";
 
@@ -25,32 +26,9 @@ export interface ConstructionToolParamsPanelProps {
   readonly params: ToolParamsByTool;
   readonly onParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
   /** How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns. */
-  readonly structureEditParams: StructureEditParams;
-  readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
 }
 
 /** The curve-handle/mode controls every construction tool's own grab-and-edit now shares -- `edit-region`'s old params, no longer tied to one retired tool. */
-function StructureEditFields(props: { readonly params: StructureEditParams; readonly onChange: (next: StructureEditParams) => void }) {
-  const { params, onChange } = props;
-  return (
-    <div style={{ display: "grid", gap: "0.6rem" }}>
-      <label>Ação na rua <select value={params.curveAction ?? "edit"} onChange={(event) => onChange({ ...params, curveAction: event.currentTarget.value as "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" })}>
-        <option value="edit">Editar curva</option><option value="remove-anchor">Remover âncora</option><option value="disconnect">Desconectar junção</option><option value="delete-segment">Excluir trecho</option><option value="close">Fechar caminho</option><option value="width">Alterar largura</option>
-      </select></label>
-      {params.curveAction === "width" && <label>Largura <input type="number" min="0.1" step="0.1" value={params.curveWidth ?? 4} onChange={(event) => onChange({ ...params, curveWidth: Number(event.currentTarget.value) })} /></label>}
-      {params.curveAction === "width" && <label>Largura no fim <input type="number" min="0.1" step="0.1" value={params.curveEndWidth ?? params.curveWidth ?? 4} onChange={(event) => onChange({ ...params, curveEndWidth: Number(event.currentTarget.value) })} /></label>}
-      <p>Para remover, desconectar ou fechar, clique na âncora. Para excluir um trecho ou mudar sua largura, clique no ponto central.</p>
-      <label>Alças da rua <select value={params.curveMode ?? "free"} onChange={(event) => onChange({ ...params, curveMode: event.currentTarget.value as "automatic" | "aligned" | "mirrored" | "free" })}>
-        <option value="free">Livres</option><option value="aligned">Alinhadas</option><option value="mirrored">Espelhadas</option><option value="automatic">Automáticas</option>
-      </select></label>
-      <p>Arraste uma alça para ajustar a curva. Arraste o ponto central para puxar o trecho; clique nele para inserir uma âncora.</p>
-      <SelectableChip label="Formato / posicao" swatchColor="#79b8e8" selected={params.mode === "shape"} onSelect={() => onChange({ ...params, mode: "shape" })} />
-      <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params.mode === "elevation"} onSelect={() => onChange({ ...params, mode: "elevation" })} />
-      <p>No modo de elevação, arraste para cima ou para baixo. Clicar e arrastar um vértice/aresta/corpo já existente edita em vez de criar.</p>
-    </div>
-  );
-}
-
 function sliderRow(label: string, value: number, min: number, max: number, step: number, onChange: (value: number) => void) {
   return (
     <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem" }}>
@@ -133,10 +111,15 @@ function WallFields<Params extends WallParams>(props: {
   );
 }
 
-function WallLineFields(props: { readonly params: WallParams; readonly onChange: (next: WallParams) => void }) {
+function WallLineFields(props: { readonly params: WallLineParams; readonly onChange: (next: WallLineParams) => void }) {
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
       <WallFields params={props.params} onChange={props.onChange} />
+      <div className="gm-material-grid">
+        <SelectableChip label="Reta" swatchColor="#94a3b8" selected={props.params.mode !== "curve"} onSelect={() => props.onChange({ ...props.params, mode: "straight" })} />
+        <SelectableChip label="Curva" swatchColor="#94a3b8" selected={props.params.mode === "curve"} onSelect={() => props.onChange({ ...props.params, mode: "curve" })} />
+      </div>
+      <p>Arraste para desenhar; use as alças para editar depois.</p>
     </div>
   );
 }
@@ -360,11 +343,12 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "slope-spiral": "Espiral",
   "slope-curve": "Rampa curva",
   "path-brush": "Parâmetros: Caminho",
-  "wall-brush": "Parâmetros: Parede (Pincel Livre)",
-  "wall-line": "Parâmetros: Parede (Linha Reta)",
+  "wall-brush": "Parâmetros: Muros",
+  "wall-line": "Parâmetros: Parede",
   "tower-stamp": "Parâmetros: Torre",
   opening: "Parâmetros: Abertura",
   "terrain-sculpt": "Parâmetros: Escultura de Terreno",
+  demolish: "Parâmetros: Demolir",
 };
 
 /**
@@ -375,7 +359,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
  * `composition/tabletop/tools/*.ts`.
  */
 export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelProps) {
-  const { activeTool, params, onParamsChange, structureEditParams, onStructureEditParamsChange } = props;
+  const { activeTool, params, onParamsChange } = props;
   const label = TOOL_LABELS[activeTool];
 
   if (label === undefined) {
@@ -467,6 +451,10 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         </div>
       ) : activeTool === "tower-stamp" ? (
         <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />
+      ) : activeTool === "demolish" ? (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <p>Passe o cursor para destacar a estrutura. Clique para apagar ou arraste sobre várias; solte para confirmar. Um desfazer restaura o gesto inteiro.</p>
+        </div>
       ) : (
         <TerrainSculptFields
           params={params["terrain-sculpt"]}
@@ -475,15 +463,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       ),
   };
 
-  // Every construction tool but `opening` (its own click-select/click-commit
-  // pattern, not a drag) now also grabs and edits whatever it owns
-  // (`structure-edit-behavior.ts`), so this stays a second, always-present
-  // panel rather than a per-tool branch.
-  const panels = activeTool === "opening" || activeTool === "path-brush" ? [panel] : [panel, {
-    key: "structure-edit",
-    header: "Editar estrutura existente",
-    content: <StructureEditFields params={structureEditParams} onChange={onStructureEditParamsChange} />,
-  }];
+  const panels = [panel];
 
   // `Collapse` owns its expanded keys internally. Remount it when the tool
   // changes so its new single panel starts expanded rather than inheriting

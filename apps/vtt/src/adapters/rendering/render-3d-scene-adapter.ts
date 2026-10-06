@@ -57,7 +57,7 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture, createRulerLabelTexture } from "./marker-textures.ts";
+import { createAddHandleTexture, createDeleteHandleTexture, createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture, createRulerLabelTexture } from "./marker-textures.ts";
 import { RULER_LABEL_VISUAL_KIND, rulerLabelSceneItem, rulerLabelSceneItemId, type RulerLabelVisualParams } from "./ruler-label-scene-item.ts";
 import {
   HANDLE_SCALE,
@@ -65,6 +65,8 @@ import {
   NODE_HANDLE_VISUAL_KIND,
   nodeHandleSceneItem,
   nodeHandleSceneItemId,
+  nodeHandleMeshSceneItem,
+  nodeHandleMeshSceneItemId,
   nodeHandleTransform,
   type NodeHandlePickData,
   type NodeHandleVisualParams,
@@ -135,6 +137,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #nodeHandles = new Map<string, { readonly x: number; readonly y: number; readonly z: number }>();
   /** The glyph each handle is drawn with: a changed one is re-put, not moved. */
   readonly #nodeHandleGlyphs = new Map<string, import("@/ports").RenderHandleGlyph>();
+  readonly #meshHandles = new Set<string>();
   /** Which preview channels currently have something on them, so an unnamed clear can empty them all. */
   readonly #previewChannels = new Set<string>();
   /** How many labels each preview channel has put up, so a shorter set takes the surplus down. */
@@ -171,6 +174,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     });
     const glyphTextures = {
       point: handleTexture,
+      add: createAddHandleTexture(),
       midpoint: createMidpointHandleTexture(),
       move: createMoveHandleTexture(),
       rotate: createRotateHandleTexture(),
@@ -182,14 +186,19 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       side: createSideHandleTexture(),
       corner: createCornerHandleTexture(),
       unlink: createUnlinkHandleTexture(),
+      delete: createDeleteHandleTexture(),
     } as const;
     registry.register<NodeHandleVisualParams>({
       kind: NODE_HANDLE_VISUAL_KIND,
-      describe: (params) => ({
+      describe: (params) => params.mesh ? {
+        geometry: { shape: "mesh", data: params.mesh },
+        material: { surface: "unlit", color: params.emphasized ? 0xfff3ce : 0xffc878, opacity: params.emphasized ? 1 : 0.9, doubleSided: true, depthWrite: false, clippable: true },
+        pickable: true,
+      } : {
         geometry: { shape: "sprite" },
         material: { surface: "unlit", color: 0xffffff, texture: glyphTextures[params.glyph], clippable: true },
-      }),
-      equals: (left, right) => left.glyph === right.glyph,
+      },
+      equals: (left, right) => left.glyph === right.glyph && left.mesh === right.mesh && left.emphasized === right.emphasized,
     });
     registry.register<MapChunkVisualParams>({
       kind: MAP_SURFACE_VISUAL_KIND,
@@ -451,8 +460,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       this.#confirmedTokenChanges += 1;
     } else if (change.type === "node-handle-removed") {
       engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
+      engine.scene.remove(nodeHandleMeshSceneItemId(change.nodeId), origin);
       this.#nodeHandles.delete(change.nodeId);
       this.#nodeHandleGlyphs.delete(change.nodeId);
+      this.#meshHandles.delete(change.nodeId);
     } else if (change.type === "node-handle-upserted") {
       const previous = this.#nodeHandles.get(change.handle.nodeId);
       const glyph = change.handle.glyph ?? "point";
@@ -469,6 +480,12 @@ export class Render3dSceneAdapter implements SceneRenderPort {
           nodeHandleTransform(change.handle.position, glyph),
           origin,
         );
+      }
+      if (change.handle.mesh) {
+        engine.scene.put(nodeHandleMeshSceneItem(change.handle.nodeId, change.handle.position, glyph, change.handle.mesh, change.handle.emphasized), origin);
+        this.#meshHandles.add(change.handle.nodeId);
+      } else if (this.#meshHandles.delete(change.handle.nodeId)) {
+        engine.scene.remove(nodeHandleMeshSceneItemId(change.handle.nodeId), origin);
       }
       this.#nodeHandles.set(change.handle.nodeId, change.handle.position);
     } else if (change.type === "surface-pick-target-removed") {
@@ -596,6 +613,8 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     this.#runtimeGeneration = 0;
     this.#tokens.clear();
     this.#nodeHandles.clear();
+    this.#nodeHandleGlyphs.clear();
+    this.#meshHandles.clear();
     this.#consumedRevisions.clear();
     this.#rendererDisposes += 1;
   }

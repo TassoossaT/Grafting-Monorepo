@@ -71,11 +71,12 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "slope-curve": "Rampa curva",
   "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
-  "wall-brush": "Pincel de Parede (Livre)",
-  "wall-line": "Pincel de Parede (Linha Reta)",
+  "wall-brush": "Muros",
+  "wall-line": "Parede",
   "tower-stamp": "Torre",
   opening: "Abertura (Porta ou Janela)",
   "terrain-sculpt": "Escultura de Terreno",
+  demolish: "Demolir",
 };
 
 export function TabletopEntry({ tableId }: TabletopEntryProps) {
@@ -95,7 +96,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const [tool, setTool] = useState<EditTool>("navigate");
   const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
-  const [structureEditParams, setStructureEditParams] = useState<StructureEditParams>(DEFAULT_STRUCTURE_EDIT_PARAMS);
+  const structureEditParams = DEFAULT_STRUCTURE_EDIT_PARAMS;
   // The unit is the table's own choice. Kept in this browser per table until the map's persistence (epic #239) carries it with the table.
   const [measureUnit, setMeasureUnit] = useState<MeasureUnitId>(DEFAULT_MEASURE_UNIT);
   const measureUnitKey = `grafting:table:${tableId}:measure-unit`;
@@ -399,8 +400,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           activeTool={tool}
           toolParams={toolParams}
           onToolParamsChange={handleToolParamsChange}
-          structureEditParams={structureEditParams}
-          onStructureEditParamsChange={setStructureEditParams}
           tokenCount={current.tokens.byId.size}
           measureUnit={measureUnit}
           onMeasureUnitChange={handleMeasureUnitChange}

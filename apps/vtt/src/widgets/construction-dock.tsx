@@ -40,7 +40,7 @@ export interface ConstructionDockProps {
  * 5. ⛰️ Terreno & Água (Escultura de Terreno)
  * 6. 🌲 Vegetação (Adornos & Flora)
  * 7. 🎨 Estilo & Paleta (Materiais & Temas)
- * 8. 🔨 Demolir (disabled until the generic delete tool exists)
+ * 8. 🔨 Demolir (click or brush)
  */
 export function ConstructionDock(props: ConstructionDockProps) {
   const {
@@ -68,7 +68,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isTowerStampActive = activeTool === "tower-stamp";
   const isRoofActive = activeTool === "roof";
   const isPlatformActive = activeTool === "platform-contour";
-  const isWallChildActive = isWallBrushActive || isWallLineActive || isTowerStampActive || isPlatformActive || isRoofActive;
+  const isWallChildActive = isWallLineActive || isTowerStampActive || isPlatformActive || isRoofActive;
   const isRampActive = activeTool === "slope-ramp";
   const isSpiralActive = activeTool === "slope-spiral";
   const isCurveRampActive = activeTool === "slope-curve";
@@ -80,29 +80,18 @@ export function ConstructionDock(props: ConstructionDockProps) {
       label: "Edifícios",
       icon: "🏠",
       tooltip: "Edifícios (paredes e plataformas)",
-      shortcut: "P",
-      active: isWallBrushActive,
+      active: isWallLineActive,
       childActive: isWallChildActive,
       disabled: !ready,
-      onClick: () => onToolChange("wall-brush"),
+      onClick: () => onToolChange("wall-line"),
       subItems: [
         { key: "roof", label: "Telhado", icon: "?", tooltip: "Criar cobertura retangular ou circular", active: isRoofActive, disabled: !ready, onClick: () => onToolChange("roof") },
         { key: "platform", label: "Plataforma", icon: "▱", tooltip: "Pisos, tetos e bases: criar, ampliar ou recortar", active: isPlatformActive, disabled: !ready, onClick: () => onToolChange("platform-contour") },
         {
-          key: "wall-brush",
-          label: "Pincel Livre",
-          icon: "🖌️",
-          tooltip: "Pincel Livre (arraste continuamente, tecla P)",
-          shortcut: "P",
-          active: isWallBrushActive,
-          disabled: !ready,
-          onClick: () => onToolChange("wall-brush"),
-        },
-        {
           key: "wall-line",
-          label: "Linha Reta",
+          label: "Parede",
           icon: "📏",
-          tooltip: "Linha Reta (clique de um ponto a outro)",
+          tooltip: "Parede reta ou curva: arraste para desenhar",
           active: isWallLineActive,
           disabled: !ready,
           onClick: () => onToolChange("wall-line"),
@@ -117,6 +106,16 @@ export function ConstructionDock(props: ConstructionDockProps) {
           onClick: () => onToolChange("tower-stamp"),
         },
       ],
+    },
+    {
+      key: "wall-brush",
+      label: "Muros",
+      icon: "🖌️",
+      tooltip: "Muros: desenhe livremente com o pincel (P)",
+      shortcut: "P",
+      active: isWallBrushActive,
+      disabled: !ready,
+      onClick: () => onToolChange("wall-brush"),
     },
     {
       key: "openings",
@@ -191,8 +190,10 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "demolish",
       label: "Demolir",
       icon: "🔨",
-      tooltip: "Apagar elementos",
-      disabled: true,
+      tooltip: "Demolir: destaque com o cursor, clique ou arraste sobre estruturas e solte para apagar",
+      active: activeTool === "demolish",
+      disabled: !ready,
+      onClick: () => onToolChange("demolish"),
     },
   ];
 

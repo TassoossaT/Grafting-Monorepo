@@ -3,7 +3,7 @@ import test from "node:test";
 import { capturePreviews, sessionFixture } from "./platform-session-fixture.mjs";
 import { pathBrushTool as tool } from "../src/composition/tabletop/tools/paths/path-brush-tool.ts";
 import { commitPathCloudIntent } from "../src/composition/tabletop/path/path-cloud-transaction.ts";
-import { createPathBrushEffect, curveEdgesOf, curveMidframes, curvePickId, curveWidthPickId, pathFormationFor, spineDefaultOffsets, spineWidthHandles } from "../src/features/edit-construction/index.ts";
+import { sceneHandles, curveActionId, curveEndWidthId, curveAnchorId, createPathBrushEffect, curveEdgesOf, curveMidframes, curvePickId, curveWidthPickId, pathFormationFor, spineDefaultOffsets, spineWidthHandles } from "../src/features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 const sample=(x,z)=>({point:{x,y:0,z}});
 const gesture=(a,b)=>({start:a,current:b,samples:[a,b]});
@@ -250,7 +250,7 @@ test("an automatic road reinterpolates moved anchors, with reversible automatic 
     build(f);
     const before=state(f), id=edges(f)[0].endNodeId;
     assert.ok(edges(f).every(e=>e.curve.mode==="automatic"));
-    const a={...sample(0,4),nodeId:id}, b=sample(1,6);
+    const a={...sample(0,4),nodeId:curveAnchorId(id)}, b=sample(1,6);
     tool.onPointerDown(f.ctx,a,params);tool.onPointerUp(f.ctx,gesture(a,b),params);
     const expected=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"automatic",points:[[-10,0,0],[1,0,6],[10,0,0]]}]})[0].curves;
     closeCurves(edges(f).map(e=>resolve(f,e)),expected);
@@ -305,7 +305,7 @@ test("editing one road preserves every node, edge and control of a disconnected 
       return {nodes,edges:graph.edges.filter(e=>ids.has(e.startNodeId)||ids.has(e.endNodeId))};
     };
     const before=state(f),other=untouched(f.runtime.getGraphSnapshot());
-    const a={...sample(0,4),nodeId:editedId},b=sample(1,6);
+    const a={...sample(0,4),nodeId:curveAnchorId(editedId)},b=sample(1,6);
     tool.onPointerDown(f.ctx,a,params);
     tool.onPointerUp(f.ctx,gesture(a,b),params);
     assert.notDeepEqual(state(f),before);
@@ -319,7 +319,7 @@ test("same road tool: anchor drag uses last sample, preserves grab offset and re
     build(f);
     const e=edges(f)[0],id=e.endNodeId,before=state(f);
     const surfaces=JSON.stringify(f.runtime.getAllRegionTopologies());
-    const a={...sample(0.1,4.1),nodeId:id};
+    const a={...sample(0.1,4.1),nodeId:curveAnchorId(id)};
     tool.onPointerDown(f.ctx,a,params);
     const end=sample(1.1,6.1);
     const boolean=f.runtime.planarBoolean;
@@ -340,7 +340,7 @@ test("same road tool: anchor drag uses last sample, preserves grab offset and re
 test("road point drag: cancellation, click and out-and-back preserve graph",()=>{
   const f=fixture();
   try {
-    build(f);const id=edges(f)[0].startNodeId,a={...sample(-10,0),nodeId:id},end=sample(-10,3),before=state(f);
+    build(f);const id=edges(f)[0].startNodeId,a={...sample(-10,0),nodeId:curveAnchorId(id)},end=sample(-10,3),before=state(f);
     tool.onPointerDown(f.ctx,a,params);tool.onPointerMove(f.ctx,gesture(a,end),params);tool.onCancel(f.ctx);
     tool.onPointerUp(f.ctx,gesture(a,end),params);assert.deepEqual(state(f),before);
     f.click(a);assert.deepEqual(state(f),before);
@@ -362,7 +362,7 @@ test("a midpoint click only selects; a double-click inserts a point without chan
     const split=edges(f).filter(e=>e.edgeId===original.edgeId||e.edgeId.startsWith(original.edgeId+":split:"));
     closeCurves(split.map(e=>resolve(f,e)),half);
     const id=split[0].endNodeId,p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
-    f.click({point:p,nodeId:id});
+    f.click({point:p,nodeId:curveAnchorId(id)});
     assert.equal(tool.onKeyDown(f.ctx,"Delete",params),true);
     assert.equal(edges(f).length,2,JSON.stringify(f.calls.feedback));
     assert.ok(edges(f).every(e=>e.startNodeId!==id&&e.endNodeId!==id));
@@ -381,10 +381,10 @@ test("road deletion: removes a deliberate bend; endpoint deletion fails without 
   const f=fixture();
   try {
     build(f);const id=edges(f)[0].endNodeId,p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
-    f.click({point:p,nodeId:id});const before=state(f);
+    f.click({point:p,nodeId:curveAnchorId(id)});const before=state(f);
     tool.onKeyDown(f.ctx,"Delete",params);assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));assert.notDeepEqual(state(f),before);
     const end=edges(f)[0].startNodeId,pos=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===end).position;
-    f.click({point:pos,nodeId:end});const kept=state(f);
+    f.click({point:pos,nodeId:curveAnchorId(end)});const kept=state(f);
     tool.onKeyDown(f.ctx,"Delete",params);assert.deepEqual(state(f),kept);assert.ok(errors(f).length>0);
   }finally{f.close();}
 });
@@ -431,7 +431,7 @@ test("road endpoint deletion shortens a path; midpoint dragging never inserts by
     build(f);const e=edges(f)[0],mid={...midpointOf(f,e),point:sample(-5,2).point},before=state(f);
     f.click(mid,sample(-5,8));assert.notDeepEqual(state(f),before);assert.equal(edges(f).length,2);
     const id=e.startNodeId,p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
-    f.click({point:p,nodeId:id});tool.onKeyDown(f.ctx,"Delete",params);
+    f.click({point:p,nodeId:curveAnchorId(id)});tool.onKeyDown(f.ctx,"Delete",params);
     assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));
     assert.ok(edges(f).every(e=>e.startNodeId!==id&&e.endNodeId!==id));
     assert.ok(f.runtime.getAllRegionTopologies().length);
@@ -466,13 +466,13 @@ test("scene gizmo raises a road anchor and direct editing fits to surface height
     const edge=edges(f)[0];
     const id=edge.endNodeId;
     const node=()=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id);
-    const start={nodeId:id,point:node().position};
+    const start={nodeId:curveAnchorId(id),point:node().position};
     // 2 m over the ~10.8 m to either neighbour: within the road's grade.
-    const raised={nodeId:id,point:{...start.point,y:2}};
+    const raised={nodeId:curveAnchorId(id),point:{...start.point,y:2}};
     const edit=beginCurveGesture(f.ctx,start,{mode:"shape",insertOnClick:false,spatialTarget:true});
     edit.move(gesture(start,raised));edit.commit();
     assert.equal(node().position.y,2,JSON.stringify(f.calls.feedback));
-    const above={nodeId:id,point:node().position};
+    const above={nodeId:curveAnchorId(id),point:node().position};
     const direct=beginCurveGesture(f.ctx,above,{mode:"shape",insertOnClick:false});
     direct.move(gesture(above,{point:{x:above.point.x+1,y:1.5,z:above.point.z}}));direct.commit();
     assert.equal(node().position.y,1.5,"direct dragging must fit to surface elevation");
@@ -502,7 +502,7 @@ test("raising a road's anchor past its grade stops where its spans can climb to,
   try {
     lay(f,[[-10,0,0],[0,0,0],[10,0,0]]);
     const id=edges(f)[0].endNodeId,node=()=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id);
-    const start={nodeId:id,point:node().position},raised={nodeId:id,point:{...start.point,y:6}};
+    const start={nodeId:curveAnchorId(id),point:node().position},raised={nodeId:curveAnchorId(id),point:{...start.point,y:6}};
     const edit=beginCurveGesture(f.ctx,start,{mode:"shape",insertOnClick:false,spatialTarget:true});
     edit.move(gesture(start,raised));
     const preview=f.previews.get("curve-edit").positions;
@@ -714,7 +714,7 @@ test("dragging a spine vertex onto its direct neighbor collapses the edge and pr
     lay(f, [[-10, 0, 0], [0, 0, 0], [10, 0, 0]]);
     assert.equal(edges(f).length, 2);
     const middleNodeId = edges(f)[0].endNodeId;
-    tool.onPointerDown(f.ctx, { ...sample(0, 0), nodeId: middleNodeId }, params);
+    tool.onPointerDown(f.ctx, { ...sample(0, 0), nodeId: curveAnchorId(middleNodeId) }, params);
     tool.onPointerMove(f.ctx, gesture(sample(0, 0), sample(10, 0)), params);
     tool.onPointerUp(f.ctx, gesture(sample(0, 0), sample(10, 0)), params);
     assert.equal(errors(f).length, 0, JSON.stringify(f.calls.feedback));
@@ -735,7 +735,7 @@ test("dragging an endpoint onto another road's vertex welds the two roads into a
     assert.equal(edges(f).length, 2);
     const road2End = f.runtime.getGraphSnapshot().nodes.find(n => n.id.startsWith("spine:") && Math.abs(n.position.z - 4) < 0.01);
 
-    tool.onPointerDown(f.ctx, { ...sample(0, 4), nodeId: road2End.id }, params);
+    tool.onPointerDown(f.ctx, { ...sample(0, 4), nodeId: curveAnchorId(road2End.id) }, params);
     tool.onPointerMove(f.ctx, gesture(sample(0, 4), sample(10, 0)), params);
     tool.onPointerUp(f.ctx, gesture(sample(0, 4), sample(10, 0)), params);
     assert.equal(errors(f).length, 0, JSON.stringify(f.calls.feedback));
@@ -743,4 +743,81 @@ test("dragging an endpoint onto another road's vertex welds the two roads into a
     assert.equal(degree(f, targetNode.id), 2, "both roads must now meet at the shared junction node");
     assert.equal(graph.nodes.some(n => n.id === road2End.id), false, "welded endpoint is absorbed by the target node");
   } finally { f.close(); }
+});
+
+function editHandles(f, selected) {
+ return sceneHandles({graph:f.runtime.getGraphSnapshot(),topologies:f.runtime.getAllRegionTopologies(),contour:[],port:f.runtime,pointsOnly:true,cloudFor:q=>f.runtime.cloudFor(q),selected});
+}
+test("curve actions appear only after selection and closing an endpoint closes the shared spine",()=>{
+ const f=fixture();
+ try { build(f);const end=edges(f)[0].startNodeId;assert.ok(!editHandles(f).some(h=>h.kind==="closeCurve"));const action=editHandles(f,end).find(h=>h.kind==="closeCurve");assert.ok(action);f.click({nodeId:action.id,point:action.position});assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.ok(edges(f).length>=3);assert.ok(f.runtime.getGraphSnapshot().nodes.filter(n=>n.id.startsWith("spine:")).every(n=>degree(f,n.id)===2)); }finally{f.close();}
+});
+test("selected span delete handle removes that span in one undo step",()=>{
+ const f=fixture();
+ try { build(f);const span=edges(f)[0];const midpoint=curvePickId(span.edgeId,"midpoint");const action=editHandles(f,midpoint).find(h=>h.kind==="deleteSegment");assert.ok(action);const before=state(f);f.click({nodeId:action.id,point:action.position});assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(edges(f).some(e=>e.edgeId===span.edgeId),false);const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId);assert.deepEqual(state(f),before); }finally{f.close();}
+});
+test("disconnect handle separates a shared anchor without deleting the spans",()=>{
+ const f=fixture();
+ try {build(f);const node=edges(f)[0].endNodeId;const action=editHandles(f,node).find(h=>h.kind==="disconnect");assert.ok(action);f.click({nodeId:action.id,point:action.position});assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(edges(f).length,2);assert.equal(degree(f,node),1);}finally{f.close();}
+});
+test("end width handle tapers a span while preserving its start width",()=>{
+ const f=fixture();
+ try {lay(f,[[-10,0,0],[10,0,0]],{...params,bedWidth:2});const span=edges(f)[0];const startWidth=span.curve.bandOffsets[1]-span.curve.bandOffsets[0];const handle=editHandles(f).find(h=>h.id===curveEndWidthId(span.edgeId));assert.ok(handle);f.drag({nodeId:handle.id,point:handle.position},{point:{...handle.position,z:handle.position.z+1}});assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));const after=edges(f)[0].curve;assert.equal(after.bandOffsets[1]-after.bandOffsets[0],startWidth);assert.ok(after.endBandOffsets[1]-after.endBandOffsets[0]>startWidth);}finally{f.close();}
+});
+
+for(const destinationHeight of [0,4])test(`editing joins an endpoint to a road at height ${destinationHeight} from the pointer's ground plane`,()=>{
+ const f=fixture();try{
+  lay(f,[[0,destinationHeight,0],[20,destinationHeight,0]]);const destination=edges(f)[0].startNodeId;
+  lay(f,[[-30,0,-20],[-10,0,-10]]);const endpoint=edges(f).find(e=>e.startNodeId!==destination&&e.endNodeId!==destination).endNodeId;
+  const from={nodeId:curveAnchorId(endpoint),point:f.runtime.getGraphSnapshot().nodes.find(n=>n.id===endpoint).position},to=sample(0,0),before=state(f);
+  f.drag(from,to);assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(degree(f,destination),2,"both streets must use the destination's exact graph vertex");assert.equal(f.runtime.getGraphSnapshot().nodes.some(n=>n.id===endpoint),false,"the old endpoint cannot remain orphaned");assert.equal(f.runtime.getGraphSnapshot().nodes.find(n=>n.id===destination).position.y,destinationHeight);
+  const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId);assert.deepEqual(state(f),before);
+ }finally{f.close();}
+});
+
+for(const height of [0,4])test(`selected street at height ${height} offers a creation handle that starts a connected branch`,()=>{
+ const f=fixture();try{
+  lay(f,[[-10,height,0],[10,height,0]]);const span=edges(f)[0],id=curvePickId(span.edgeId,"midpoint"),before=state(f);
+  f.click(midpointOf(f,span));const handles=editHandles(f,id);
+  assert.ok(!handles.some(h=>h.id===curvePickId(span.edgeId,1)||h.id===curvePickId(span.edgeId,2)),"unrequested tangent dots do not appear");
+  const create=handles.find(h=>h.kind==="createBranch");assert.ok(create,"selected edge exposes its construction handle");
+  f.click({nodeId:create.id,point:create.position});assert.equal(tool.drafting(f.ctx),true);assert.deepEqual(state(f),before,"choosing an origin does not split the graph yet");assert.equal(tool.rulerAnchor(f.ctx,params).y,height);
+  const end={point:{x:0,y:height,z:10}};tool.previewFor(gesture(end,end),params,f.ctx);assert.ok(f.previews.has("road-draft-spine"),"creation previews the new branch");f.click(end);
+  assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(edges(f).length,3);const node=junctionAt(f,0,0);assert.ok(node);assert.equal(node.position.y,height);
+  const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId);assert.deepEqual(state(f),before);
+ }finally{f.close();}
+});
+for(const height of [0,4])test(`editing an endpoint onto the middle of a road at height ${height} creates a real junction`,()=>{
+ const f=fixture();try{
+  lay(f,[[0,height,0],[20,height,0]]);lay(f,[[10,0,-30],[10,0,-10]]);const branch=edges(f).find(e=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===e.startNodeId).position.z<0),id=branch.endNodeId;
+  const from={nodeId:curveAnchorId(id),point:f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position},before=state(f);f.drag(from,sample(10,0));assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));const joined=junctionAt(f,10,0);assert.ok(joined,"T-junction must have a shared vertex");assert.equal(joined.position.y,height);const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId);assert.deepEqual(state(f),before);
+ }finally{f.close();}
+});
+
+test("editing cannot weld to a higher street when the approach is too short for the grade",()=>{
+ const f=fixture();try{
+  lay(f,[[0,1.4,0],[20,1.4,0]]);const target=edges(f)[0].startNodeId;lay(f,[[-4,0,-1],[-2,0,-1]]);const branch=edges(f).find(e=>e.startNodeId!==target&&e.endNodeId!==target),id=branch.endNodeId;
+  const from={nodeId:curveAnchorId(id),point:f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position};f.drag(from,sample(0,0));assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(degree(f,target),1,"unreachable destination stays separate");assert.ok(f.runtime.getGraphSnapshot().nodes.some(n=>n.id===id));
+ }finally{f.close();}
+});
+test("an elevated endpoint is acquired under the camera ray rather than the ground hit",()=>{
+ const f=fixture();try{
+  lay(f,[[0,4,0],[20,4,0]]);const target=edges(f)[0].startNodeId;lay(f,[[-30,0,-20],[-10,0,-10]]);const branch=edges(f).find(e=>e.startNodeId!==target&&e.endNodeId!==target),id=branch.endNodeId;
+  const from={nodeId:curveAnchorId(id),point:f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position},to={point:{x:0,y:0,z:4},ray:{origin:{x:0,y:10,z:-6},direction:{x:0,y:-1,z:1}}};f.drag(from,to);assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(degree(f,target),2);
+ }finally{f.close();}
+});
+
+test("branch creation projects the mouse ray onto its origin height for both preview and commit",()=>{
+ const f=fixture();try{
+  lay(f,[[-10,4,0],[10,4,0]]);const span=edges(f)[0],mid=curvePickId(span.edgeId,"midpoint");f.click(midpointOf(f,span));const create=editHandles(f,mid).find(h=>h.kind==="createBranch");f.click({nodeId:create.id,point:create.position});
+  const cursor={point:{x:0,y:0,z:20},ray:{origin:{x:0,y:10,z:0},direction:{x:0,y:-1,z:2}}};tool.previewFor(gesture(cursor,cursor),params,f.ctx);
+  const preview=f.previews.get("road-draft-spine");assert.ok(preview);const triples=[];for(let i=0;i<preview.positions.length;i+=3)triples.push([...preview.positions.slice(i,i+3)]);assert.ok(triples.some(p=>Math.abs(p[0])<0.01&&Math.abs(p[1]-4)<0.1&&Math.abs(p[2]-12)<0.01),"preview ends at the ray crossing y=4, not at its y=0 ground hit");
+  const movedCamera={...cursor,ray:{origin:{x:5,y:10,z:0},direction:{x:-0.5,y:-1,z:2}}};
+  tool.previewFor(gesture(movedCamera,movedCamera),params,f.ctx);const updated=f.previews.get("road-draft-spine");assert.notDeepEqual([...updated.positions],[...preview.positions],"same ground hit with a changed camera ray must redraw the projected endpoint");
+  f.click(movedCamera);assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.ok(f.runtime.getGraphSnapshot().nodes.some(n=>Math.abs(n.position.x-2)<0.01&&Math.abs(n.position.y-4)<0.01&&Math.abs(n.position.z-12)<0.01),"commit uses exactly the preview endpoint");
+ }finally{f.close();}
+});
+
+test("ordinary road construction still takes the terrain height hit by the pointer",()=>{
+ const f=fixture();try{f.click(sample(0,0));f.click({point:{x:20,y:2,z:0}});assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.ok(f.runtime.getGraphSnapshot().nodes.some(n=>Math.abs(n.position.x-20)<0.01&&Math.abs(n.position.y-2)<0.01&&Math.abs(n.position.z)<0.01));}finally{f.close();}
 });

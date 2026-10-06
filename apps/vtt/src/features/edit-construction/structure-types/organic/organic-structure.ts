@@ -89,10 +89,12 @@ export function organicStructureType(
   structural: "regenerate" | "deny",
   interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction,
   traits: readonly StructureTrait[],
+  demolish?: StructureTypeDefinition["demolish"],
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
     label,
+    demolish,
     traits: Object.freeze([...traits]),
     creation,
     roleFor: organicRoleFor,
@@ -137,3 +139,8 @@ export function pathInteractionOver(
 ): CreationInteraction {
   return CUT;
 }
+
+/** Terrain uses the same excavation action as its Remover tool. */
+export const demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]> = (context) => {
+  return context.execute("terrain-dig");
+};

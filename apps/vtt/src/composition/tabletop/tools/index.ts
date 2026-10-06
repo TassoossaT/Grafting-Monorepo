@@ -20,6 +20,7 @@ export { createStructureEditBehavior, withStructureEditing, type StructureEditBe
 
 export { terrainSculptTool } from "./terrain/terrain-sculpt-tool.ts";
 export { restackTerrain } from "./terrain/terrain-restack.ts";
+export { demolishTool } from "./demolish/demolish-tool.ts";
 
 export { wallLineTool } from "./walls/wall-line-tool.ts";
 export { wallBrushTool } from "./walls/wall-brush-tool.ts";
