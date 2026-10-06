@@ -17,6 +17,7 @@ export type {
   BrushShapeKind,
   BrushShapeParams,
   ConstructionToolId,
+  DemolishParams,
   NoToolParams,
   OpeningParams,
   OpeningShape,

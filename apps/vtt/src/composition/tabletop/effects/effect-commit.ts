@@ -14,7 +14,7 @@ import type {
 import type { AtomicEditOp, Effect, Reaction, ReactionId, ReactionRecord, ShapeChange } from "@/features/edit-construction";
 import type { TransactionResult } from "../tabletop-runtime.ts";
 
-import { hasTrait, runEffects, settlePatch, simplifyCollinearVertices } from "../../../features/edit-construction/index.ts";
+import { EMPTY_OUTCOME, hasTrait, mergeOutcomes, runEffects, settlePatch, simplifyCollinearVertices } from "../../../features/edit-construction/index.ts";
 import { timePhase } from "../commit-timing.ts";
 import { TABLETOP_REACTIONS, type TabletopReactionRuntime } from "./reactions.ts";
 import { shapeChangeOfRemoval, shapeChangeOfReplacement, topologiesOf } from "./shape-change.ts";
@@ -187,22 +187,43 @@ export function commitStagedRegionEdit(
   });
 }
 
-/** Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically. */
+/** Deletes surfaces and lets their own clouds and every cloud they had cut answer, atomically. */
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,
-  surfaceKey: ConstructionSurfaceKey,
+  surfaceKey: ConstructionSurfaceKey | readonly ConstructionSurfaceKey[],
   options: CommitOptions,
 ): TransactionResult<RegionEditOutcome> {
   const origin = options.origin ?? "local";
+  const keys: readonly ConstructionSurfaceKey[] =
+    typeof surfaceKey[0] === "string"
+      ? [surfaceKey as ConstructionSurfaceKey]
+      : (surfaceKey as readonly ConstructionSurfaceKey[]);
+
   return runtime.transact(options.transactionId, origin, () => {
-    const removed = topologiesOf(runtime, [surfaceKey]);
-    const outcome = runtime.removeSurface({ surfaceKey }, origin, options.transactionId);
-    const change = shapeChangeOfRemoval(removed, outcome.removedNodeIds);
-    if (change !== undefined) {
-      dispatchEffects(runtime, [
-        { kind: "remove", causeId: options.transactionId, change },
-        { kind: "cut", causeId: options.transactionId, change },
-      ], options.reactions);
+    const removed = topologiesOf(runtime, keys);
+    let outcome = EMPTY_OUTCOME;
+    for (const key of keys) {
+      const res = runtime.removeSurface({ surfaceKey: key }, origin, options.transactionId);
+      outcome = mergeOutcomes(outcome, res);
+    }
+    const byType = new Map<string, ConstructionRegionTopology[]>();
+    for (const topology of removed) {
+      const list = byType.get(topology.surfaceType) ?? [];
+      list.push(topology);
+      byType.set(topology.surfaceType, list);
+    }
+    for (const [, group] of byType) {
+      const change = shapeChangeOfRemoval(group, outcome.removedNodeIds);
+      if (change !== undefined) {
+        dispatchEffects(
+          runtime,
+          [
+            { kind: "remove", causeId: options.transactionId, change },
+            { kind: "cut", causeId: options.transactionId, change },
+          ],
+          options.reactions,
+        );
+      }
     }
     return outcome;
   });
