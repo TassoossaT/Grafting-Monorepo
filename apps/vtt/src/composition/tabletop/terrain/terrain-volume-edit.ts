@@ -195,7 +195,13 @@ export function commitTerrainVolumeEdit(
     }
     return best;
   };
-  const core = shapes.flatMap((shape) => shape.path.map(under)).filter((topology): topology is ConstructionRegionTopology => topology !== undefined && within(topology, reachOf));
+  // And from every face a bore or an arch takes in or blends into, wherever
+  // it lies: earth filled against the tip of an arch reaching over from
+  // elsewhere joins it there, though no walk over the surface gets there.
+  const touched = layer ? [] : nearby.filter((topology) => within(topology, () => blend));
+  const core = [...new Set([...shapes.flatMap((shape) => shape.path.map(under)), ...touched])].filter(
+    (topology): topology is ConstructionRegionTopology => topology !== undefined && within(topology, reachOf),
+  );
   const walked = walkSurface(nearby, core.length > 0 ? core : nearby.filter((topology) => within(topology, reachOf)), (topology) => within(topology, reachOf));
   if (walked.length === 0 && options.table === undefined) return { faces: 0 };
   const neighbours = indexedFaces(structures);
@@ -310,14 +316,28 @@ export function carveShape(points: readonly ConstructionPosition[], radius: numb
 }
 
 /**
+ * How far out of the surface clicked a ball of earth stands, as a share of
+ * its radius: sunk to its middle, it reaches as far under the surface as
+ * over it -- down to the ground under the side of the ball it was set on,
+ * and the arch being built ball by ball closes into a wall.
+ */
+const BALL_OUT = 0.5;
+
+/**
  * Earth filled in from where the stroke starts to where it ends: its feet in
  * the ground at both, arched `rise` over the line between them -- a bridge.
- * A click without a drag is a mound.
+ * A click without a drag is a ball standing out of the surface it was set
+ * on, `outward` from it: set on the side of the last ball, it grows the
+ * ground on sideways, and balls set one on another bridge a gap.
  */
-export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionVolumeShape | undefined {
+export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number, outward?: ConstructionPosition): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
   if (path.length === 0) return undefined;
-  if (path.length === 1) return { effect: "fill", radius, path: [[path[0]!.x, path[0]!.y, path[0]!.z]] };
+  if (path.length === 1) {
+    const out = radius * BALL_OUT;
+    const [x, y, z] = [path[0]!.x, path[0]!.y, path[0]!.z];
+    return { effect: "fill", radius, path: [outward ? [x + outward.x * out, y + outward.y * out, z + outward.z * out] : [x, y, z]] };
+  }
   const lengths = [0];
   for (let i = 1; i < path.length; i++) lengths.push(lengths[i - 1]! + Math.hypot(path[i]!.x - path[i - 1]!.x, path[i]!.z - path[i - 1]!.z));
   const total = lengths.at(-1)!;

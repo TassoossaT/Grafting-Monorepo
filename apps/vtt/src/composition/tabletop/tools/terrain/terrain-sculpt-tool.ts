@@ -1,11 +1,11 @@
 import { DEFAULT_TOOL_PARAMS, deriveFaceSize, hasTrait } from "../../../../features/edit-construction/index.ts";
 import type { TerrainSculptParams } from "@/features/edit-construction";
-import type { ConstructionVolumeShape } from "@/ports";
+import type { ConstructionPosition, ConstructionVolumeShape } from "@/ports";
 
 import { capsuleWireframe } from "../shapes/preview-shapes.ts";
 import { carveShape, commitTerrainVolumeEdit, fillShape, levelShapes, moundShape } from "../../terrain/terrain-volume-edit.ts";
 import { timeCommit } from "../../commit-timing.ts";
-import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
+import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
  * The terrain brush: every mode an edit of the ground's volume (note 0012).
@@ -39,8 +39,25 @@ function strokeFaceSize(params: TerrainSculptParams): number {
   return deriveFaceSize(params.brushRadius, params.faceSize);
 }
 
+/**
+ * Out of the face a sample is on, toward the camera: the side of it the
+ * pointer sees. `undefined` where the sample knows no face.
+ */
+function outwardOf(sample: PointerSample | undefined): ConstructionPosition | undefined {
+  const normal = sample?.face?.normal;
+  if (!normal) return undefined;
+  const length = Math.hypot(normal.x, normal.y, normal.z);
+  if (length < 1e-9) return undefined;
+  const looking = sample?.ray?.direction ?? sample?.forward;
+  // With no view to say, the side the ground faces: up.
+  const facing = looking ? normal.x * looking.x + normal.y * looking.y + normal.z * looking.z : -normal.y;
+  const sign = (facing > 0 ? -1 : 1) / length;
+  return { x: normal.x * sign, y: normal.y * sign, z: normal.z * sign };
+}
+
 /** The shapes a stroke carves or fills, in order. */
-function strokeShapes(params: TerrainSculptParams, points: Parameters<typeof carveShape>[0]): readonly ConstructionVolumeShape[] {
+function strokeShapes(params: TerrainSculptParams, samples: readonly PointerSample[]): readonly ConstructionVolumeShape[] {
+  const points = samples.map((sample) => sample.point);
   const step = params.elevationStep ?? 2;
   switch (params.mode ?? "add") {
     case "carve": {
@@ -48,7 +65,7 @@ function strokeShapes(params: TerrainSculptParams, points: Parameters<typeof car
       return shape ? [shape] : [];
     }
     case "fill": {
-      const shape = fillShape(points, params.brushRadius, step);
+      const shape = fillShape(points, params.brushRadius, step, outwardOf(samples[0]));
       return shape ? [shape] : [];
     }
     case "flatten":
@@ -78,7 +95,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   previewOnHover: () => true,
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
-    const shapes = strokeShapes(params, gesture.samples.map((sample) => sample.point));
+    const shapes = strokeShapes(params, gesture.samples);
     const shape = shapes[0];
     if (!shape) return undefined;
     const path = shape.path.map(([x, y, z]) => ({ x, y, z }));
@@ -108,7 +125,7 @@ const DONE: Record<string, string> = {
  * the ring round them kept.
  */
 function volumeStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
-  const shapes = strokeShapes(params, gesture.samples.map((sample) => sample.point));
+  const shapes = strokeShapes(params, gesture.samples);
   if (shapes.length === 0) {
     ctx.reportFeedback({ tone: "info", message: "Nada a cavar ou erguer aqui." });
     return;

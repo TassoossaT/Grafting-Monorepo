@@ -401,6 +401,16 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
             k = (k + 1) % border.len();
             stretch.push(border[k]);
         }
+        // A chain round nearly all its ring, its ends a short free side
+        // apart, runs beside nearly all the border too: both ends beside one
+        // corner -- or past each other -- is the whole border, not a corner
+        // of it. Stitched to that corner, the chain fans out from it and the
+        // rest of the border hangs open in the air.
+        let arc = |points: &[usize]| points.windows(2).map(|w| vertices[w[0]].distance(vertices[w[1]])).sum::<f64>();
+        let whole = arc(&border.iter().chain(std::iter::once(&border[0])).copied().collect::<Vec<_>>());
+        if arc(&stretch) < arc(&outer) * 0.25 && whole > arc(&outer) * 0.5 {
+            stretch = (0..=border.len()).map(|step| border[(from + step) % border.len()]).collect();
+        }
         triangles.extend(zipper_open(&outer, &stretch, &vertices));
     }
     // What is left open is a hole the read left where it could not make the

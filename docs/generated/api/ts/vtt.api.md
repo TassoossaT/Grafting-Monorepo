@@ -1732,11 +1732,13 @@ where no ground stands at all lays it there. No faces where no ground is in
 reach and nothing may rest on the table; throws where nothing could be
 laid, the ground then left as it was.
 
-### `function vtt.terrain-volume-edit.fillShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionVolumeShape | undefined`
+### `function vtt.terrain-volume-edit.fillShape(points: readonly ConstructionPosition[], radius: number, rise: number, outward?: ConstructionPosition): ConstructionVolumeShape | undefined`
 
 Earth filled in from where the stroke starts to where it ends: its feet in
 the ground at both, arched `rise` over the line between them -- a bridge.
-A click without a drag is a mound.
+A click without a drag is a ball standing out of the surface it was set
+on, `outward` from it: set on the side of the last ball, it grows the
+ground on sideways, and balls set one on another bridge a gap.
 
 ### `function vtt.terrain-volume-edit.levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number): readonly ConstructionVolumeShape[]`
 

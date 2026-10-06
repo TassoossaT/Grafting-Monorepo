@@ -4154,7 +4154,7 @@ export function commitTerrainVolumeEdit(
   readonly surfaceType?: string;
 export function carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
-export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionVolumeShape | undefined {
+export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number, outward?: ConstructionPosition): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
 export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {
   const shape = mode === "carve" ? carveShape(points, radius) : fillShape(points, radius, rise);

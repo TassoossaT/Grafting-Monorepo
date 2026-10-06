@@ -63,6 +63,34 @@ pub fn border_loops(triangles: &[[usize; 3]]) -> Vec<Vec<usize>> {
 /// it walked it -- to the border `inner` of a surface inside it, walked the
 /// way that surface's triangles walk it. Both run round the same way; the
 /// strip advances along whichever side keeps its new diagonal shorter.
+/// How far along a polyline each of its points lies, as a share of its length.
+fn arc_shares(points: &[usize], vertices: &[Vec3]) -> Vec<f64> {
+    let mut along = vec![0.0];
+    for w in points.windows(2) {
+        along.push(along.last().copied().unwrap_or(0.0) + vertices[w[0]].distance(vertices[w[1]]));
+    }
+    let total = along.last().copied().unwrap_or(0.0).max(1e-12);
+    along.iter().map(|a| a / total).collect()
+}
+
+/// How far, as a share of their lengths, one side of a strip may run ahead
+/// of the other.
+const ZIPPER_LEAD: f64 = 0.15;
+
+/// Which side of a strip must advance to keep the two in step, if either:
+/// left to the nearer corner alone, a small border far from its ring is
+/// walked whole round one ring corner, then the ring whole round one of its
+/// corners -- two fans over each other, every side of them walked twice.
+fn in_step(along_outer: &[f64], along_inner: &[f64], i: usize, j: usize) -> Option<bool> {
+    if along_outer[i + 1] - along_inner[j] > ZIPPER_LEAD {
+        Some(false)
+    } else if along_inner[j + 1] - along_outer[i] > ZIPPER_LEAD {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 pub fn zipper(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[usize; 3]> {
     if outer.is_empty() || inner.is_empty() {
         return Vec::new();
@@ -72,6 +100,7 @@ pub fn zipper(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[usize
         .unwrap_or(0);
     let r = |i: usize| outer[i % outer.len()];
     let l = |j: usize| inner[(start + j) % inner.len()];
+    let (along_outer, along_inner) = (arc_shares(&(0..=outer.len()).map(r).collect::<Vec<_>>(), vertices), arc_shares(&(0..=inner.len()).map(l).collect::<Vec<_>>(), vertices));
     let (mut i, mut j) = (0, 0);
     let mut triangles = Vec::with_capacity(outer.len() + inner.len());
     while i < outer.len() || j < inner.len() {
@@ -80,7 +109,7 @@ pub fn zipper(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[usize
         } else if j >= inner.len() {
             true
         } else {
-            vertices[r(i + 1)].distance(vertices[l(j)]) <= vertices[r(i)].distance(vertices[l(j + 1)])
+            in_step(&along_outer, &along_inner, i, j).unwrap_or_else(|| vertices[r(i + 1)].distance(vertices[l(j)]) <= vertices[r(i)].distance(vertices[l(j + 1)]))
         };
         if advance_outer {
             triangles.push([r(i), r(i + 1), l(j)]);
@@ -100,6 +129,7 @@ pub fn zipper_open(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[
     if outer.len() < 2 && inner.len() < 2 {
         return Vec::new();
     }
+    let (along_outer, along_inner) = (arc_shares(outer, vertices), arc_shares(inner, vertices));
     let (mut i, mut j) = (0, 0);
     let mut triangles = Vec::with_capacity(outer.len() + inner.len());
     while i + 1 < outer.len() || j + 1 < inner.len() {
@@ -108,7 +138,7 @@ pub fn zipper_open(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[
         } else if j + 1 >= inner.len() {
             true
         } else {
-            vertices[outer[i + 1]].distance(vertices[inner[j]]) <= vertices[outer[i]].distance(vertices[inner[j + 1]])
+            in_step(&along_outer, &along_inner, i, j).unwrap_or_else(|| vertices[outer[i + 1]].distance(vertices[inner[j]]) <= vertices[outer[i]].distance(vertices[inner[j + 1]]))
         };
         if advance_outer {
             triangles.push([outer[i], outer[i + 1], inner[j]]);

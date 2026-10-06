@@ -112,7 +112,24 @@ export function meetStructures(
 ): StructureMeeting {
   const standingHere = timePhase("estruturas no lugar", () => runtime.getRegionTopologiesInBounds(bounds));
   const structures = standingHere.filter((topology) => !isGroundType(topology.surfaceType));
-  const cutting = structures.filter((topology) => resolveCreationInteraction(topology.surfaceType, groundType).kind === "cut");
+  const cuttingAnywhere = structures.filter((topology) => resolveCreationInteraction(topology.surfaceType, groundType).kind === "cut");
+  // Only those resting on this ground: the ground each rests on is the
+  // nearest of all the ground here, and this ground only where it is that.
+  // Read from this ground alone, a road under an earth bridge lies metres
+  // under its deck -- sunk in it -- and the deck laid again round it would
+  // go round a hole whose corners are down on the road.
+  const cuttingNodes = new Set(cuttingAnywhere.flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const thisGround = groundSurfaceOf(terrainStanding, cuttingNodes);
+  const allGround = groundSurfaceOf(standingHere.filter((topology) => isGroundType(topology.surfaceType)), cuttingNodes);
+  // Where all the ground says nothing -- the structure stands in the hole it
+  // cut -- this ground still meets it only if it lies no higher than the
+  // contact law lets a structure rest under it.
+  const restsHere = (topology: ConstructionRegionTopology) => topology.nodes.some((node) => {
+    const here = thisGround(node.position, node.position.y), anywhere = allGround(node.position, node.position.y);
+    if (here === undefined) return false;
+    return anywhere !== undefined ? Math.abs(here - anywhere) < GROUND_CONTACT_CLEARANCE : here <= node.position.y + GROUND_CONTACT_CLEARANCE + GROUND_SIDE_REST_ROOM;
+  });
+  const cutting = cuttingAnywhere.filter(restsHere);
   const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
   for (const topology of cutting) for (const node of topology.nodes) positions.set(node.id, { x: node.position.x, z: node.position.z });
 

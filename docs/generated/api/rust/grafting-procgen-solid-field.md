@@ -175,11 +175,6 @@ beside each other, and a flip undoes the fold. Locked edges never flip.
 
 ### `pub fn grafting_procgen_solid_field::trimesh::zipper(outer: &[usize], inner: &[usize], vertices: &[grafting_procgen_solid_field::vector::Vec3]) -> alloc::vec::Vec<[usize; 3]>`
 
-Triangles stitching the ring `outer` -- walked the way the faces inside
-it walked it -- to the border `inner` of a surface inside it, walked the
-way that surface's triangles walk it. Both run round the same way; the
-strip advances along whichever side keeps its new diagonal shorter.
-
 ### `pub fn grafting_procgen_solid_field::trimesh::zipper_open(outer: &[usize], inner: &[usize], vertices: &[grafting_procgen_solid_field::vector::Vec3]) -> alloc::vec::Vec<[usize; 3]>`
 
 Triangles stitching the open chain `outer` to the stretch `inner` of a
