@@ -296,7 +296,9 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
                 // ground round it. A shape reaching on past the patch is the
                 // ground beyond's business; read there, the new surface runs
                 // out past the ring and the stitch to it folds.
-                let inside = patch_only.distance(centre) <= context_only.distance(centre);
+                // With no faces to lay again -- earth filled in on the bare table --
+                // whatever the grid reads off the ground beside it stays that ground's.
+                let inside = if patch.faces.is_empty() { context_only.distance(centre) > cell * 1.5 } else { patch_only.distance(centre) <= context_only.distance(centre) };
                 near && inside && [a, b, c].iter().all(|&v| to_ring(extracted[v]) > clearance) && ![a, b, c].iter().all(|&v| on_table(extracted[v]))
             })
             .collect();

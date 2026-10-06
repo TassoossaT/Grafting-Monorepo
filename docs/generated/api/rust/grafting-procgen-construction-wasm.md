@@ -124,6 +124,13 @@ deciding. See `grid_generation::irregular_quad_grid`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::is_none(abi: &Self::Abi) -> bool`
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::layer_terrain_surface_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Lays a layer of earth on the ground, takes one off it, or levels it:
+the patch's own surface moved and laid again with the plane's grid.
+Pure -- reads nothing from this session and mutates nothing in it; the
+caller registers the result. See `terrain_layer`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_edge_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `MoveEdge`. See `region_editing::apply_move_edge`.

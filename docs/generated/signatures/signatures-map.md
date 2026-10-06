@@ -164,6 +164,10 @@ pub fn bounds_of(&self, region_id: &RegionId) -> Option<&RegionBounds>
 pub fn insert(&mut self, region_id: RegionId, bounds: RegionBounds)
 pub fn remove(&mut self, region_id: &RegionId) -> Option<RegionBounds>
 
+// src/terrain_layer.rs
+pub struct TerrainLayerRequest
+pub fn layer_terrain_surface(request: TerrainLayerRequest) -> Result<TerrainRegenerateResponse, String>
+
 // src/terrain_regenerate.rs
 pub struct GivenPointDto
 pub struct TerrainRegenerateRequest

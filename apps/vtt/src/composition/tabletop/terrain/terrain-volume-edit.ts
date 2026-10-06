@@ -2,12 +2,14 @@ import type {
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionRegionTopology,
+  ConstructionSurfaceOrigin,
   ConstructionVolumeShape,
 } from "@/ports";
 
 import { hasTrait } from "../../../features/edit-construction/index.ts";
-import { commitGround, indexedFaces } from "./ground-commit.ts";
+import { commitGround, indexedFaces, type LaidGround } from "./ground-commit.ts";
 import { grownInward, walkSurface } from "./ground-surface.ts";
+import { timePhase } from "../commit-timing.ts";
 import type { ToolContext } from "../tools/core/tool-context.ts";
 
 /**
@@ -22,7 +24,16 @@ import type { ToolContext } from "../tools/core/tool-context.ts";
  * surface. What comes back goes into the graph as ground of the same type,
  * sharing the ring's very nodes and edges, so it is one mesh with the rest:
  * the next stroke, carving or not, edits it the same way.
+ *
+ * A layer laid or taken off and a level (`raise`, `lower`, columns) never
+ * change what is solid, only where the surface lies: they go to the engine's
+ * layer (`layerTerrainSurface`), which moves the faces' own surface and lays
+ * it again with the plane's grid -- no grid read, no stitch. Only a bore or
+ * an arch goes through the volume.
  */
+
+/** Whether a shape only moves the surface: a layer or a level, never a bore or an arch. */
+const movesSurface = (shape: ConstructionVolumeShape) => shape.effect === "raise" || shape.effect === "lower" || shape.column !== undefined;
 
 /** How far past a layer's radius, in faces, the faces laid again reach: it changes nothing past it. */
 const LAYER_MARGIN_FACES = 0.25;
@@ -147,6 +158,7 @@ export function commitTerrainVolumeEdit(
   const walked = walkSurface(nearby, core.length > 0 ? core : nearby.filter((topology) => within(topology, reachOf)), (topology) => within(topology, reachOf));
   if (walked.length === 0 && options.table === undefined) return { faces: 0 };
   const neighbours = indexedFaces(structures);
+  const layer = shapes.every(movesSurface);
   const attempt = (patchFaces: readonly ConstructionRegionTopology[]) => {
     const patchKeys = new Set(patchFaces.map((face) => face.surfaceKey.join("\u0000")));
     const contextFaces = nearby.filter((topology) => !patchKeys.has(topology.surfaceKey.join("\u0000")));
@@ -154,7 +166,7 @@ export function commitTerrainVolumeEdit(
     const faceSide = options.faceSide ?? (patchFaces.length > 0 ? faceSideOf(patchFaces) : options.emptyFaceSide ?? 2);
     const patch = indexedFaces(patchFaces);
     const context = indexedFaces(contextFaces);
-    const edited = ctx.runtime.editTerrainVolume({
+    const request = {
       patch: { vertices: patch.vertices, faces: patch.faces },
       context: { vertices: context.vertices, faces: context.faces },
       shapes,
@@ -163,16 +175,18 @@ export function commitTerrainVolumeEdit(
       seed: options.seed,
       ...(options.table !== undefined ? { table: options.table } : {}),
       neighbours: { vertices: neighbours.vertices, faces: neighbours.faces },
-    });
-    return edited ? { edited, patch, patchFaces, contextFaces, faceSide } : undefined;
+    };
+    const label = `motor: ${layer ? "camada" : "volume"} (${patchFaces.length} faces refeitas, ${contextFaces.length} em volta)`;
+    const laid: LaidGround | undefined = timePhase(label, () => (layer ? layerLaid(ctx.runtime.layerTerrainSurface(request), patch.ids, [...context.ids, ...neighbours.ids]) : volumeLaid(ctx.runtime.editTerrainVolume(request), patch.ids)));
+    return laid ? { laid, patchFaces, contextFaces, faceSide } : undefined;
   };
   // A hole in the patch the edit closes over is laid again with it: tried as
   // walked first, then grown inward from its holes a ring at a time -- a
   // patch no larger than the last one tried is the same refusal, never asked twice.
   const tries = [walked, grownInward(walked, nearby, 1), grownInward(walked, nearby, 2)];
-  const laid = tries.reduce<ReturnType<typeof attempt>>((done, patchFaces, index) => done ?? (index > 0 && patchFaces.length === tries[index - 1]!.length ? undefined : attempt(patchFaces)), undefined);
-  if (!laid) throw new Error("o núcleo recusou a edição");
-  const { edited, patch, patchFaces, contextFaces, faceSide } = laid;
+  const done = tries.reduce<ReturnType<typeof attempt>>((found, patchFaces, index) => found ?? (index > 0 && patchFaces.length === tries[index - 1]!.length ? undefined : attempt(patchFaces)), undefined);
+  if (!done) throw new Error("o núcleo recusou a edição");
+  const { laid, patchFaces, contextFaces, faceSide } = done;
   const surfaceType = patchFaces[0]?.surfaceType ?? options.surfaceType ?? "terrain";
 
   const operationId = `${ctx.tableId}:terrain-volume:${ctx.nextSequence()}`;
@@ -185,18 +199,35 @@ export function commitTerrainVolumeEdit(
       around: contextFaces,
       surfaceType,
       faceSide,
-      laid: {
-        vertices: edited.vertices,
-        faces: edited.faces,
-        nodeOf: (vertex) => {
-          const source = edited.source[vertex];
-          return source === null || source === undefined ? undefined : patch.ids[source];
-        },
-      },
+      laid,
     }).built;
   });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
   return { faces: built };
+}
+
+/** The ground a layer laid, in the nodes it stands on: the patch's own, and the ground's and structures' round it (`given`, in that order). */
+function layerLaid(edited: ReturnType<ToolContext["runtime"]["layerTerrainSurface"]>, ids: readonly ConstructionNodeId[], given: readonly ConstructionNodeId[]): LaidGround | undefined {
+  if (!edited) return undefined;
+  const nodeOf = (origin: ConstructionSurfaceOrigin | null | undefined) => (origin === null || origin === undefined ? undefined : origin.kind === "patch" ? ids[origin.index] : given[origin.index]);
+  const landed = edited.landed.flatMap((landing) => {
+    const from = nodeOf(landing.from), to = nodeOf(landing.to);
+    return from !== undefined && to !== undefined ? [{ vertex: landing.vertex, from, to }] : [];
+  });
+  return { vertices: edited.vertices, faces: edited.faces, nodeOf: (vertex) => nodeOf(edited.origin[vertex]), landed };
+}
+
+/** The ground a volume edit laid, in the patch's own nodes. */
+function volumeLaid(edited: ReturnType<ToolContext["runtime"]["editTerrainVolume"]>, ids: readonly ConstructionNodeId[]): LaidGround | undefined {
+  if (!edited) return undefined;
+  return {
+    vertices: edited.vertices,
+    faces: edited.faces,
+    nodeOf: (vertex) => {
+      const source = edited.source[vertex];
+      return source === null || source === undefined ? undefined : ids[source];
+    },
+  };
 }
 
 /** At least this far between the points a stroke's path keeps, as a fraction of its radius. */

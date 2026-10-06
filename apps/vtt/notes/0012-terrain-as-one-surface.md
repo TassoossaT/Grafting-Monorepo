@@ -8,7 +8,8 @@
 
 The ground is **one oriented surface in 3D**, made of `ground` regions. **No code may assume one ground height per point of the plane.** There are only two engine operations:
 
-- **E1 `edit_surface`** — volume edit. Every tool that changes the ground's shape uses it.
+- **E1 `edit_surface`** — volume edit. Cavar 3D and Erguer 3D use it: the edits that change what is solid.
+- **E3 `layer_surface`** — the surface moved. Adicionar, Remover and Aplainar use it (2026-10-06, superseding E1 for them; see **As built**).
 - **E2 `regenerate_surface`** — relays the cells of a patch of surface, with the shape unchanged. Every repair around a structure uses it.
 
 Patches are always chosen **by walking the surface**, never by plan coverage. The planar terrain path is deleted, not kept as a fallback.
@@ -175,7 +176,22 @@ Read this before the plan sections above; where they disagree, this wins.
 - **Roads.** Spine heights come from pointer hits, which are already layer-correct; nothing changed.
 - **Deleted** with their tests: the planar executor, `terrain-regenerate`, `terrain-fill`, `terrain-restack`, `terrain-overhang`, `terrain-diagnostics`, `terrain-neighborhood`, `structural-cut`, `buildConstraintRings` and the plan halves of `terrain-constraints`.
 
+- **E3 `layer_surface`** (`solid-field/src/layer.rs`, wasm `layer_terrain_surface_json`, port `layerTerrainSurface`). Through E1, a layer was refused on the bare table beside other ground, wiped the hill it was laid over, and folded or refused crossing strokes. It now never reads a grid:
+  - Patch flat in plan (turned share ≤ 1%, or empty): the plane's own `ground_grid` over the patch's rings, lifted to the old surface (vertical lookup on the patch) or the table, then moved: a layer by its cosine profile at the plan distance to the path, a level by pulling heights to it within its column, easing over `blend`.
+  - With a table, a raise runs on past the patch onto the bare table: one boolean, (patch ∪ reach) less the ground and structures round it. Two booleans in a row left slivers along the rim. Corners are named by the patch ring, ground and structure vertices they stand on (`Origin::Given` indexes the context's vertices, then the neighbours'), so new ground meets ground beside it on its own nodes. Spikes and boolean corners closer than 0.15 face to another are dropped.
+  - Patch folding over in plan (a cave's wall): refined without splitting the rim, moved along the ground's normal at the path, laid again by E2 with the patch's holes passed as holes.
+  - **The ring comes back whole** (`rim_unsplit`). A corner the grid put on a ring side whose two ends both came back is dropped, and the cells round it merge. Splits used to make the graph adopt dozens of nodes when the grid lost its seams, and that adoption refused the commit.
+  - Cells the relaxation turned over in plan are smoothed back: free corners move to their neighbours' middle.
+  - Cost: 10–60 ms per stroke in wasm over 20 strokes, against 0.1–4.7 s and refusals through E1.
+- **Face size is the brush's.** Strokes pass the tool's face size. Read off the patch's median side instead, each stroke laid finer than the last.
+- **Timing.** A brush stroke is one `timeCommit("terreno: <mode>")`, with the engine call a phase of it. The debug panel showed only the nested patch replacement before. Engine refusals now log their reason (`[terreno] o núcleo recusou ...`).
+- **Wasm cache.** `construction-wasm:build` now takes every `libs/domains/procgen/*` crate as input. Before, a change to `solid-field` restored a stale cached `pkg/`, so the app ran old engine code.
+- **E1 on the bare table beside ground.** With an empty patch, the read is kept wherever it lies off the ground round it. Before, nothing passed the inside-the-ring test, so every fill there was refused.
+
 ## Open
+
+- **Erguer 3D** fills a capsule of the brush radius along an arch `elevationStep` high. At default settings (radius 6, rise 2) that is a ball or a sausage, never a bridge. What it should make is the owner's call.
+- A few strokes in 20 leave one sliver cell at a cloud's rim on the table, turned over in plan, where the reach meets the old rim nearly tangentially.
 
 - The heightmap noise the planar Adicionar added was dropped; the layer is smooth.
 - A raise beside a structure keeps its contact edges but does not re-run the contact law: ground raised under a floor standing clear is not cut.

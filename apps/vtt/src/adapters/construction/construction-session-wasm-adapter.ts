@@ -540,8 +540,18 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined {
     try {
       return JSON.parse(this.#read().edit_terrain_volume_json(JSON.stringify(request))) as ConstructionTerrainVolumeEdit;
-    } catch {
+    } catch (error) {
       // A refusal, like the grid's: the edit describes nothing the engine can lay.
+      console.warn(`[terreno] o núcleo recusou a edição de volume: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+  }
+
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined {
+    try {
+      return JSON.parse(this.#read().layer_terrain_surface_json(JSON.stringify(request))) as ConstructionTerrainRegeneration;
+    } catch (error) {
+      console.warn(`[terreno] o núcleo recusou a camada: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;
     }
   }

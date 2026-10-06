@@ -689,6 +689,16 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Lays a layer of earth on the ground, takes one off it, or levels it:
+    /// the patch's own surface moved and laid again with the plane's grid.
+    /// Pure -- reads nothing from this session and mutates nothing in it; the
+    /// caller registers the result. See `terrain_layer`.
+    pub fn layer_terrain_surface_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = crate::terrain_layer::layer_terrain_surface(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     /// Lays a patch of ground again on its own surface, its shape unchanged:
     /// the repair round a structure, wherever the ground is. Pure -- reads
     /// nothing from this session and mutates nothing in it; the caller

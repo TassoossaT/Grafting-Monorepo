@@ -4,6 +4,7 @@ import type { ConstructionVolumeShape } from "@/ports";
 
 import { capsuleWireframe } from "../shapes/preview-shapes.ts";
 import { carveShape, commitTerrainVolumeEdit, fillShape, levelShapes, moundShape } from "../../terrain/terrain-volume-edit.ts";
+import { timeCommit } from "../../commit-timing.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
@@ -18,8 +19,9 @@ import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-co
  * - **Cavar 3D** and **Erguer 3D** push a bore into the ground or raise an
  *   arch of earth over it.
  *
- * The engine lays the result on the ground's own surface (`edit_surface`):
- * one mesh, irregular cells, the ring of ground round it kept. Nothing here
+ * The engine lays the result on the ground's own surface -- a layer or a
+ * level by moving it (`layer_surface`), a bore or an arch through the volume
+ * (`edit_surface`): one mesh, irregular cells, the ring of ground round it kept. Nothing here
  * reads a height per point of the plane, so a cave's floor and the hill over
  * it never mix. A fill where no ground stands rests on the table.
  */
@@ -113,12 +115,15 @@ function volumeStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainScu
   }
   const surfaceType = params.targetSurface && hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
   try {
-    const { faces } = commitTerrainVolumeEdit(ctx, shapes, {
+    // Timed whole -- engine, graph and render -- so the debug panel shows what the stroke cost.
+    const { faces } = timeCommit(`terreno: ${params.mode ?? "add"}`, () => commitTerrainVolumeEdit(ctx, shapes, {
       seed: Math.floor(params.seed ?? 1) || 1,
       surfaceType,
-      emptyFaceSide: strokeFaceSize(params),
+      // The brush's own face size, every stroke: read off the ground it lays,
+      // each stroke would lay finer than the last.
+      faceSide: strokeFaceSize(params),
       ...(takesAway(params) ? {} : { table: TABLE_HEIGHT }),
-    });
+    }));
     if (faces === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
       return;

@@ -63,7 +63,7 @@ pub struct TerrainVolumeEditRequest {
     pub neighbours: FacesDto,
 }
 
-fn no_faces() -> FacesDto {
+pub(crate) fn no_faces() -> FacesDto {
     FacesDto { vertices: Vec::new(), faces: Vec::new() }
 }
 
@@ -81,16 +81,13 @@ fn point([x, y, z]: [f64; 3]) -> Vec3 {
     Vec3::new(x, y, z)
 }
 
-fn faces(dto: FacesDto) -> Faces {
+pub(crate) fn faces(dto: FacesDto) -> Faces {
     Faces { vertices: dto.vertices.into_iter().map(point).collect(), faces: dto.faces }
 }
 
-pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainVolumeEditResponse, String> {
-    if !(request.face_side > 0.0) {
-        return Err("faceSide must be positive".to_string());
-    }
-    let shapes = request
-        .shapes
+/// The shapes as the solid field takes them.
+pub(crate) fn shapes_of(shapes: Vec<ShapeDto>) -> Result<Vec<Shape>, String> {
+    shapes
         .into_iter()
         .map(|shape| {
             let effect = match shape.effect.as_str() {
@@ -108,7 +105,14 @@ pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainV
             };
             Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form, up: Vec::new() })
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect()
+}
+
+pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainVolumeEditResponse, String> {
+    if !(request.face_side > 0.0) {
+        return Err("faceSide must be positive".to_string());
+    }
+    let shapes = shapes_of(request.shapes)?;
     let edited = edit_surface(
         &faces(request.patch),
         &faces(request.context),

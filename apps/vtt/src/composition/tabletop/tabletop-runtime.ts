@@ -192,6 +192,8 @@ export interface TabletopRuntime extends BezierPort {
   regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined;
   /** One edit of the ground's own mesh. See `ConstructionSessionPort.editTerrainVolume`. */
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined;
+  /** One layer laid on the ground, taken off it, or the ground levelled. See `ConstructionSessionPort.layerTerrainSurface`. */
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Region boundaries near a local edit, resolved in one engine call. */
@@ -1026,6 +1028,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined {
     this.#requireReady("editing the ground's volume");
     return this.#construction.editTerrainVolume(request);
+  }
+
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined {
+    this.#requireReady("laying a layer on the ground");
+    return this.#construction.layerTerrainSurface(request);
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {

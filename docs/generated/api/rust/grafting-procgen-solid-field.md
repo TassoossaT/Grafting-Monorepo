@@ -75,6 +75,18 @@ rounded over a width of `k`. `k = 0` is the plain minimum.
 with every shape applied in order, so a fill made after a carve fills it
 back in.
 
+### `pub fn grafting_procgen_solid_field::layer::layer_surface(patch: &grafting_procgen_solid_field::edit::Faces, context: &grafting_procgen_solid_field::edit::Faces, neighbours: &grafting_procgen_solid_field::edit::Faces, edit: &grafting_procgen_solid_field::layer::LayerEdit) -> core::result::Result<grafting_procgen_solid_field::regenerate::RegeneratedSurface, alloc::string::String>`
+
+Lays `patch` again with `edit` applied to it. `context` is the ground
+round it and `neighbours` the structures standing in it: a layer laid
+out over the bare table never covers either.
+
+### `pub fn grafting_procgen_solid_field::layer_surface(patch: &grafting_procgen_solid_field::edit::Faces, context: &grafting_procgen_solid_field::edit::Faces, neighbours: &grafting_procgen_solid_field::edit::Faces, edit: &grafting_procgen_solid_field::layer::LayerEdit) -> core::result::Result<grafting_procgen_solid_field::regenerate::RegeneratedSurface, alloc::string::String>`
+
+Lays `patch` again with `edit` applied to it. `context` is the ground
+round it and `neighbours` the structures standing in it: a layer laid
+out over the bare table never covers either.
+
 ### `pub fn grafting_procgen_solid_field::mesh_distance::MeshDistance::closest(&self, point: grafting_procgen_solid_field::vector::Vec3) -> core::option::Option<(grafting_procgen_solid_field::vector::Vec3, [usize; 3])>`
 
 The nearest point of the surface to `point`, and the corners of the
@@ -295,6 +307,23 @@ stroke, or the trench dug along one.
 
 ### `pub grafting_procgen_solid_field::Landing::vertex: usize`
 
+### `pub grafting_procgen_solid_field::LayerEdit::blend: f64`
+
+How far a level eases into the ground round it.
+
+### `pub grafting_procgen_solid_field::LayerEdit::face_side: f64`
+
+How wide one finished face should be.
+
+### `pub grafting_procgen_solid_field::LayerEdit::seed: u32`
+
+### `pub grafting_procgen_solid_field::LayerEdit::shapes: alloc::vec::Vec<grafting_procgen_solid_field::field::Shape>`
+
+### `pub grafting_procgen_solid_field::LayerEdit::table: core::option::Option<f64>`
+
+The table's height, where a layer laid past the ground rests new
+ground on the bare table. `None` never reaches past the ground.
+
 ### `pub grafting_procgen_solid_field::Origin::Given(usize)`
 
 A point of one of [`Regeneration::holes`], by its id.
@@ -476,6 +505,23 @@ path. A layer's depth is read across the ground there, not along its
 normal, so a point over the path has the whole depth under it. Empty,
 the depth is read by plain distance to the path.
 
+### `pub grafting_procgen_solid_field::layer::LayerEdit::blend: f64`
+
+How far a level eases into the ground round it.
+
+### `pub grafting_procgen_solid_field::layer::LayerEdit::face_side: f64`
+
+How wide one finished face should be.
+
+### `pub grafting_procgen_solid_field::layer::LayerEdit::seed: u32`
+
+### `pub grafting_procgen_solid_field::layer::LayerEdit::shapes: alloc::vec::Vec<grafting_procgen_solid_field::field::Shape>`
+
+### `pub grafting_procgen_solid_field::layer::LayerEdit::table: core::option::Option<f64>`
+
+The table's height, where a layer laid past the ground rests new
+ground on the bare table. `None` never reaches past the ground.
+
 ### `pub grafting_procgen_solid_field::regenerate::GivenPoint::id: usize`
 
 ### `pub grafting_procgen_solid_field::regenerate::GivenPoint::position: grafting_procgen_solid_field::vector::Vec3`
@@ -580,6 +626,8 @@ new nodes inside it, irregular cells.
 - [`trimesh`]: borders, the stitch to the ring, the isotropic remesh.
 - [`edit`]: the edit end to end.
 - [`regenerate`]: a patch laid again on its own surface, round structures.
+- [`layer`]: a layer laid on the ground or taken off it, the ground
+  levelled -- the surface moved, never read again off a grid.
 
 ### `pub mod grafting_procgen_solid_field::edit`
 
@@ -610,6 +658,28 @@ form swept along a path -- a capsule, round or squashed, or a column
 between two heights; carving takes it out of the solid, filling adds it,
 both blended over a width so the lip of a tunnel or the foot of a bridge
 rounds off instead of creasing.
+
+### `pub mod grafting_procgen_solid_field::layer`
+
+A layer of earth laid on the ground, taken off it, or the ground levelled
+-- the brush's everyday strokes -- as the ground's own surface moved, never
+read again off a grid.
+
+```text
+faces under the stroke (+ the bare table it reaches, for a layer laid)
+  -> lying flat in plan?  yes: the irregular grid laid in plan over them,
+                               every corner lifted to the old surface
+                               and moved by the stroke
+                          no:  the surface itself moved by the stroke
+                               (a cave's wall), then laid again on its
+                               own chart (`regenerate_surface`)
+```
+
+The ring round the faces comes back as the very same vertices, and the
+ground beyond it is never touched: a stroke laid over a hill adds to the
+hill, a stroke laid beside one never reaches it. No signed distance, no
+stitch, no remesh -- the grid the plane's ground is laid with, so the
+cells come out the same.
 
 ### `pub mod grafting_procgen_solid_field::mesh_distance`
 
@@ -701,6 +771,11 @@ own name for it.
 
 A new corner lying on a side somebody already holds, between `from` and `to`.
 
+### `pub struct grafting_procgen_solid_field::LayerEdit`
+
+One stroke: layers raised or lowered (`Form::Profile`), or columns a level
+is filled up to or cut down to (`Form::Column`).
+
 ### `pub struct grafting_procgen_solid_field::RegeneratedSurface`
 
 The faces laid in place of the patch.
@@ -735,6 +810,11 @@ One edit: what to carve or fill, and the cells to lay the result in.
 ### `pub struct grafting_procgen_solid_field::field::Shape`
 
 A form swept along a path, carving or filling.
+
+### `pub struct grafting_procgen_solid_field::layer::LayerEdit`
+
+One stroke: layers raised or lowered (`Form::Profile`), or columns a level
+is filled up to or cut down to (`Form::Column`).
 
 ### `pub struct grafting_procgen_solid_field::mesh_distance::MeshDistance`
 

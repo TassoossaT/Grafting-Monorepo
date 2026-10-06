@@ -855,6 +855,15 @@ export interface ConstructionSessionPort extends BezierPort {
    */
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined;
   /**
+   * Lays a layer of earth on the ground, takes one off it, or levels it --
+   * `raise`, `lower` and column shapes only: the patch's own surface moved
+   * and laid again with the plane's irregular grid, the ring of nodes round
+   * it kept; with `table`, a layer past the ground rests on the bare table.
+   * Pure. Answers like {@link regenerateTerrainSurface}; `undefined` where
+   * the engine refuses.
+   */
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined;
+  /**
    * Lays a patch of ground again on its own surface, its shape unchanged,
    * going round the structures' rings. Pure. `undefined` where the engine
    * refuses.

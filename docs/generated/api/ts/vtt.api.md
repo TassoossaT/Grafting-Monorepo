@@ -1006,6 +1006,10 @@ Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hol
 
 A pinned region's outer loop traced on its host. See `ConstructionSessionPort.hostOutline`.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined`
+
+One layer laid on the ground, taken off it, or the ground levelled. See `ConstructionSessionPort.layerTerrainSurface`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 The single-op shortcut for a caller that already knows the absolute
@@ -1216,6 +1220,10 @@ Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hol
 ### `method vtt.tabletop-runtime.TabletopRuntime.hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline`
 
 A pinned region's outer loop traced on its host. See `ConstructionSessionPort.hostOutline`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined`
+
+One layer laid on the ground, taken off it, or the ground levelled. See `ConstructionSessionPort.layerTerrainSurface`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -11467,6 +11475,15 @@ Subdivides one boundary edge, minting a new node on it. Both fragments
 keep the original's geometry description. Called twice on the same
 original edge, this is also the whole of the "carve a movable notch"
 case -- there is deliberately no separate cut primitive here.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined`
+
+Lays a layer of earth on the ground, takes one off it, or levels it --
+`raise`, `lower` and column shapes only: the patch's own surface moved
+and laid again with the plane's irregular grid, the ring of nodes round
+it kept; with `table`, a layer past the ground rests on the bare table.
+Pure. Answers like regenerateTerrainSurface; `undefined` where
+the engine refuses.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.moveEdge(edgeId: string, delta: ConstructionPosition): RegionEditOutcome`
 

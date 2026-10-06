@@ -16,9 +16,12 @@
 //! - [`trimesh`]: borders, the stitch to the ring, the isotropic remesh.
 //! - [`edit`]: the edit end to end.
 //! - [`regenerate`]: a patch laid again on its own surface, round structures.
+//! - [`layer`]: a layer laid on the ground or taken off it, the ground
+//!   levelled -- the surface moved, never read again off a grid.
 
 pub mod edit;
 pub mod field;
+pub mod layer;
 pub mod mesh_distance;
 pub mod regenerate;
 pub mod table;
@@ -28,5 +31,6 @@ pub mod volume;
 
 pub use edit::{EditedSurface, Faces, SurfaceEdit, edit_surface};
 pub use field::{Effect, Form, Shape, smooth_min};
+pub use layer::{LayerEdit, layer_surface};
 pub use regenerate::{GivenPoint, Landing, Origin, RegeneratedSurface, Regeneration, regenerate_surface};
 pub use vector::Vec3;

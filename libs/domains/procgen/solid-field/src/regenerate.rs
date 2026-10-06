@@ -103,7 +103,7 @@ const EMBEDDING_OVERRELAX: f64 = 1.0;
 /// concave polygon, and fanned from its first corner it gives triangles
 /// turned over though the face is not. A face that does not lie simply on
 /// that plane is clipped in its own.
-fn triangles_of(vertices: &[Vec3], faces: &[Vec<usize>]) -> Vec<[usize; 3]> {
+pub(crate) fn triangles_of(vertices: &[Vec3], faces: &[Vec<usize>]) -> Vec<[usize; 3]> {
     let mut normal = Vec3::default();
     for face in faces {
         normal = normal + polygon_normal(vertices, face);

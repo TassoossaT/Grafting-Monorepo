@@ -85,6 +85,17 @@ export function sessionFixture() {
         return undefined;
       }
     },
+    layerTerrainSurface(request) {
+      try {
+        return JSON.parse(session.layer_terrain_surface_json(JSON.stringify(request)));
+      } catch (error) {
+        if (process.env.REGROW_DEBUG) {
+          console.error("[layer]", String(error?.message ?? error));
+          if (process.env.REGROW_DUMP) require_fs().writeFileSync(`${process.env.REGROW_DUMP}-layer-${Date.now()}.json`, JSON.stringify(request));
+        }
+        return undefined;
+      }
+    },
     editTerrainVolume(request) {
       try {
         return JSON.parse(session.edit_terrain_volume_json(JSON.stringify(request)));
