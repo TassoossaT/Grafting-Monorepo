@@ -7992,7 +7992,7 @@ export function floorsWithout(floors: readonly ConstructionRegionTopology[], run
 
 // src/features/edit-construction/topology/ground-contact.ts
 export const GROUND_CONTACT_CLEARANCE = 1.5;
-export const GROUND_THROUGH_TOLERANCE = 0.05;
+export const GROUND_THROUGH_TOLERANCE = 0.3;
 export const GROUND_SIDE_REST_ROOM = 0.25;
 export type GroundHeightAt = (point: Plan, reference?: number) => number | undefined;
 export function groundLayerAt(layers: readonly { readonly height: number; readonly facesUp: boolean }[], reference: number): number | undefined {

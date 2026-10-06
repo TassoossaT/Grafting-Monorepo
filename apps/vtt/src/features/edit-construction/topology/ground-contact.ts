@@ -32,9 +32,12 @@ export const GROUND_CONTACT_CLEARANCE = 1.5;
 /**
  * How near the ground a surface standing partly clear of it may run and still
  * count as the ground rising through it -- a floor laid flush on the ground,
- * whose every sample would otherwise flicker in and out of it.
+ * whose every sample would otherwise flicker in and out of it, or a road
+ * along a crest with the ground falling a hand away under each side: at 5 cm
+ * it was cut in a strip down its middle, the ground running on under its
+ * sides and meeting nothing.
  */
-export const GROUND_THROUGH_TOLERANCE = 0.05;
+export const GROUND_THROUGH_TOLERANCE = 0.3;
 /** How far past the resting line a ground corner on a structure's side may stand and still meet the side. */
 export const GROUND_SIDE_REST_ROOM = 0.25;
 
@@ -95,6 +98,8 @@ export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: 
   const { normal: n, centre: c } = plane;
   return (point) => c.y - (n.x * (point.x - c.x) + n.z * (point.z - c.z)) / n.y;
 }
+
+
 
 /**
  * How `topology` meets the ground `groundAt` describes, sampled on a grid of

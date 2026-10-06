@@ -83,9 +83,10 @@ function sculpt(fixture, from, to, params) {
   assert.equal(fixture.calls.feedback.at(-1)?.tone, "success", JSON.stringify(fixture.calls.feedback.at(-1)));
 }
 
-/** A road through plan points, each on the ground's top there -- or its lowest sheet. */
+/** A road through plan points, each on the ground's top there -- or its lowest sheet, or a height given. */
 function road(fixture, plan) {
   const coordinates = plan.map(([x, z, sheet]) => {
+    if (typeof sheet === "number") return [x, sheet, z];
     const ys = sheetsAt(fixture.runtime, x, z);
     return [x, (sheet === "low" ? ys[0] : ys.at(-1)) ?? 0, z];
   });
@@ -172,4 +173,41 @@ test("floors on an earth bridge's deck and under it, and a road under it, each c
     assert.ok(mesh.longest < 8, `no face metres long: ${mesh.longest.toFixed(2)}`);
     assert.ok(sheetsAt(runtime, 0, 0).some((y) => y > 4 && y < 8), "the arch's underside stands");
   } finally { fixture.session.free(); }
+});
+
+/** The ground's open sides off the table: holes, and ground ending under a structure. */
+function groundOpenOffTable(runtime) {
+  const uses = new Map(), pos = new Map();
+  for (const t of runtime.getAllRegionTopologies()) {
+    const ground = hasTrait(t.surfaceType, "ground");
+    for (const n of t.nodes) pos.set(n.id, n.position);
+    for (const use of [...t.outerLoops, ...t.holes].flat()) {
+      const entry = uses.get(use.edgeId) ?? { n: 0, a: use.startNodeId, b: use.endNodeId, ground };
+      entry.n += 1;
+      uses.set(use.edgeId, entry);
+    }
+  }
+  return [...uses.values()].filter((e) => e.n === 1 && e.ground && (pos.get(e.a).y + pos.get(e.b).y) / 2 > 0.05).length;
+}
+
+test("a road across a valley from rim to rim meets the rims across its width, and one down into it and up again lays", () => {
+  for (const crossing of ["rim to rim", "down and up"]) {
+    const fixture = setup();
+    try {
+      const { runtime } = fixture;
+      sculpt(fixture, [-24, 0], [24, 0], { brushRadius: 14, elevationStep: 6 });
+      sculpt(fixture, [0, -16], [0, 16], { mode: "dig", brushRadius: 6, elevationStep: 4 });
+      if (crossing === "rim to rim") {
+        const y = sheetsAt(runtime, -12, 0).at(-1);
+        road(fixture, [[-12, 0, y], [0, 0, y], [12, 0, y]]);
+        // Cut across the road's width on the rims -- once a strip down its
+        // middle, the ground running on under its sides a hand below them.
+        assert.ok(groundOpenOffTable(runtime) <= 12, `${crossing}: ${groundOpenOffTable(runtime)} open sides of ground`);
+        assert.ok(Math.abs(y - sheetsAt(runtime, -12, 0).at(-1)) < 0.5, "the rim stands");
+      } else {
+        road(fixture, [-12, -6, 0, 6, 12].map((x) => [x, 2]));
+      }
+      assert.equal(meshOf(runtime).thrice, 0, `${crossing}: one mesh`);
+    } finally { fixture.session.free(); }
+  }
 });

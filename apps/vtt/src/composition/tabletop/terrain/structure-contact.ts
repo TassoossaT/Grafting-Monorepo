@@ -231,7 +231,7 @@ export function meetStructures(
   const resting = new Set<ConstructionNodeId>();
   for (const topology of cutting) {
     for (const node of topology.nodes) {
-      const ground = groundAt(node.position);
+      const ground = groundAt(node.position, node.position.y);
       if (ground !== undefined && node.position.y <= ground + GROUND_CONTACT_CLEARANCE + GROUND_SIDE_REST_ROOM) resting.add(node.id);
     }
     for (const id of heldFor(topology.surfaceType)) if (topology.nodes.some((node) => node.id === id)) resting.add(id);
@@ -269,7 +269,7 @@ export function meetStructures(
         const nearest = nearestOnSegment(point, a, b);
         if (nearest.distance >= ON) continue;
         const y = a.y + (b.y - a.y) * nearest.t;
-        const ground = groundAt(point);
+        const ground = groundAt(point, y);
         if (ground === undefined || y <= ground + GROUND_CONTACT_CLEARANCE + GROUND_SIDE_REST_ROOM) return y;
       }
       // On the line the cut ends at under a face: on the face's underside.

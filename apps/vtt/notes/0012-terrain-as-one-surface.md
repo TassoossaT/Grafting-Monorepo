@@ -216,6 +216,15 @@ Read this before the plan sections above; where they disagree, this wins.
     - A new side between two standing nodes that the ground beyond already joins is split at its middle. That is a chord across a notch, which would be one edge held three times.
     - A face running the whole of a side that other corners split runs through those corners.
   - **Each regrow piece reads the ground round it again.** The faces an earlier piece of the same stroke laid share sides with it.
+- **Roads over a valley** (a U dug in a hill; `test/terrain-regrow-roads.test.mjs`). A road from rim to rim left 49 open sides of ground, and a road down into the valley and up again was refused. Causes, all fixed:
+  - **The partly-clear cut was a hair wide.** A road along a crest has the ground falling about 10 cm under each side. `GROUND_THROUGH_TOLERANCE` was 5 cm, so the ground counted as rising through only down the middle: it was cut in a strip there, and ran on under the road's sides, meeting nothing. The tolerance is now 30 cm. Where the road stands clear, the ground still runs on under it, and where it is cut it meets the road's underside with no wall E2 cannot lay.
+    - Cutting at the resting line (1.5 m) was tried. It made the ground climb up to 1.5 m to the underside at the cut line. That wall folds in plan, so E2 laid faces the wrong way round, and the tests holding the partly-clear floor broke.
+  - **A rim touching itself at a corner** (ground gone round a road's end, meeting itself at its corner) was no disk to E2. E2 now takes that corner once per fan of faces round it (`unpinched`), and every copy comes back as that corner.
+  - **One triangle laid both ways** by two faces sharing two sides in a row cancelled out and left the patch no disk. `without_cancelling` drops such pairs.
+  - **Each piece's holes are clipped to a window round it.** The three roads' contact as one area reached far past a small piece, where its corners are charted by guesswork, and the ground laid fanned out from them. Two area corners a hair apart, both the same structure corner, are taken once.
+  - **Layered ground is read near the structure's height.** A hole corner on no structure node read the ground with no reference height, and on an earth bridge it could take the arch's underside 4 m over the floor. The resting test and a sealed side's height had the same fault.
+- **Open: a structure face is still read as its best plane** (`surfaceHeightOf`). A road is one face, so down a curved valley floor it reads up to a metre off, and a few open sides of ground are left along it (7-14 in the sweep). Reading it through its own outline in plan (`bentSurfaceHeightOf`, tried) finds the right heights. But it puts cut lines inside the road whose corners sit off the ground being laid, and E2 then turns faces at them and the commit refuses them. It waits on E2 meeting given corners off its surface.
+
 
 
 ## Open

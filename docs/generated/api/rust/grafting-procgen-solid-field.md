@@ -121,9 +121,19 @@ the size is a stand-in and only the sign is to be read.
 
 Lays `patch` again on its own surface, going round `regeneration.holes`.
 
+A rim touching itself at a corner -- ground gone round a road's end and
+meeting itself again at its corner -- is cut open there: the corner taken
+once for each fan of faces round it, so the patch is a disk the chart can
+lay out, and every copy comes back as the corner it is.
+
 ### `pub fn grafting_procgen_solid_field::regenerate_surface(patch: &grafting_procgen_solid_field::edit::Faces, regeneration: &grafting_procgen_solid_field::regenerate::Regeneration) -> core::result::Result<grafting_procgen_solid_field::regenerate::RegeneratedSurface, alloc::string::String>`
 
 Lays `patch` again on its own surface, going round `regeneration.holes`.
+
+A rim touching itself at a corner -- ground gone round a road's end and
+meeting itself again at its corner -- is cut open there: the corner taken
+once for each fan of faces round it, so the patch is a disk the chart can
+lay out, and every copy comes back as the corner it is.
 
 ### `pub fn grafting_procgen_solid_field::smooth_min(a: f64, b: f64, k: f64) -> f64`
 

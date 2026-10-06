@@ -111,12 +111,23 @@ pub(crate) fn triangles_of(vertices: &[Vec3], faces: &[Vec<usize>]) -> Vec<[usiz
     for face in faces {
         normal = normal + polygon_normal(vertices, face);
     }
-    faces
+    let triangles = faces
         .iter()
         .filter(|face| face.len() >= 3)
         .flat_map(|face| ears(vertices, face, normal).unwrap_or_else(|| ears(vertices, face, polygon_normal(vertices, face)).unwrap_or_else(|| fan(face))))
         .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
-        .collect()
+        .collect::<Vec<_>>();
+    without_cancelling(triangles)
+}
+
+/// `triangles` without any laid both ways round: two faces sharing two sides
+/// in a row, a corner between them only they hold, each clip the ear at that
+/// corner -- one triangle twice, facing apart, which counts as no surface and
+/// leaves the patch no disk.
+fn without_cancelling(triangles: Vec<[usize; 3]>) -> Vec<[usize; 3]> {
+    let key = |[a, b, c]: [usize; 3]| if a < b && a < c { [a, b, c] } else if b < c { [b, c, a] } else { [c, a, b] };
+    let laid: HashSet<[usize; 3]> = triangles.iter().map(|&t| key(t)).collect();
+    triangles.into_iter().filter(|&[a, b, c]| !laid.contains(&key([a, c, b]))).collect()
 }
 
 fn fan(face: &[usize]) -> Vec<[usize; 3]> {
@@ -729,7 +740,95 @@ fn barycentric(point: Vec3, a: Vec3, b: Vec3, c: Vec3) -> [f64; 3] {
 }
 
 /// Lays `patch` again on its own surface, going round `regeneration.holes`.
+///
+/// A rim touching itself at a corner -- ground gone round a road's end and
+/// meeting itself again at its corner -- is cut open there: the corner taken
+/// once for each fan of faces round it, so the patch is a disk the chart can
+/// lay out, and every copy comes back as the corner it is.
 pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<RegeneratedSurface, String> {
+    let (open, alias) = unpinched(patch);
+    let mut laid = regenerate_disk(&open, regeneration)?;
+    let named = |origin: Origin| match origin {
+        Origin::Patch(v) => Origin::Patch(alias[v]),
+        given => given,
+    };
+    for origin in laid.origin.iter_mut().flatten() {
+        *origin = named(*origin);
+    }
+    for landing in laid.landed.iter_mut() {
+        landing.from = named(landing.from);
+        landing.to = named(landing.to);
+    }
+    Ok(laid)
+}
+
+/// `patch` with every corner its rim runs through twice taken once per fan
+/// of faces round it, and for every vertex the one of `patch` it is.
+fn unpinched(patch: &Faces) -> (Faces, Vec<usize>) {
+    let mut directed: HashSet<(usize, usize)> = HashSet::new();
+    for face in &patch.faces {
+        for k in 0..face.len() {
+            directed.insert((face[k], face[(k + 1) % face.len()]));
+        }
+    }
+    let mut leaving: HashMap<usize, usize> = HashMap::new();
+    for &(a, b) in &directed {
+        if !directed.contains(&(b, a)) {
+            *leaving.entry(a).or_default() += 1;
+        }
+    }
+    let mut pinched: Vec<usize> = leaving.into_iter().filter(|&(_, n)| n > 1).map(|(v, _)| v).collect();
+    pinched.sort_unstable();
+    let mut vertices = patch.vertices.clone();
+    let mut alias: Vec<usize> = (0..vertices.len()).collect();
+    let mut faces = patch.faces.clone();
+    for v in pinched {
+        // The faces round `v`, joined where two share a side running out of it.
+        let around: Vec<usize> = (0..faces.len()).filter(|&f| faces[f].contains(&v)).collect();
+        let neighbours_of = |f: usize| -> Vec<usize> {
+            let face = &faces[f];
+            let k = face.iter().position(|&x| x == v).unwrap();
+            vec![face[(k + 1) % face.len()], face[(k + face.len() - 1) % face.len()]]
+        };
+        let mut fan = vec![usize::MAX; around.len()];
+        let mut fans = 0;
+        for start in 0..around.len() {
+            if fan[start] != usize::MAX {
+                continue;
+            }
+            fan[start] = fans;
+            let mut stack = vec![start];
+            while let Some(i) = stack.pop() {
+                let sides = neighbours_of(around[i]);
+                for j in 0..around.len() {
+                    if fan[j] == usize::MAX && neighbours_of(around[j]).iter().any(|u| sides.contains(u)) {
+                        fan[j] = fans;
+                        stack.push(j);
+                    }
+                }
+            }
+            fans += 1;
+        }
+        for copy in 1..fans {
+            vertices.push(vertices[v]);
+            alias.push(alias[v]);
+            let id = vertices.len() - 1;
+            for (i, &f) in around.iter().enumerate() {
+                if fan[i] == copy {
+                    for corner in faces[f].iter_mut() {
+                        if *corner == v {
+                            *corner = id;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (Faces { vertices, faces }, alias)
+}
+
+/// [`regenerate_surface`] for a patch whose rim touches itself nowhere.
+fn regenerate_disk(patch: &Faces, regeneration: &Regeneration) -> Result<RegeneratedSurface, String> {
     let face_side = regeneration.face_side.max(0.05);
     let patch_triangles = triangles_of(&patch.vertices, &patch.faces);
     if patch_triangles.is_empty() {

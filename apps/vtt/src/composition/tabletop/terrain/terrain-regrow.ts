@@ -8,7 +8,7 @@ import type {
   ConstructionTerrainRegenerateRequest,
   ConstructionTerrainRegeneration,
 } from "@/ports";
-import type { CutFallout, PlanarArea } from "@/features/edit-construction";
+import type { CutFallout, PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
 // Relative, not `@/...`: the test runner resolves no aliases.
 import {
@@ -18,6 +18,7 @@ import {
   hasTrait,
   isGroundType,
   nearestOnSegment,
+  planarDifference,
 } from "../../../features/edit-construction/index.ts";
 import { commitGround, indexedFaces, type GroundCommitRuntime } from "./ground-commit.ts";
 import { DEFAULT_FACE_SIDE, closedPatch, heightRangeOf, regrowFaceSide, surfaceComponents, walkSurface } from "./ground-surface.ts";
@@ -312,7 +313,18 @@ function regrowPiece(runtime: TerrainRegrowRuntime, request: PieceRequest): numb
   // on, which the ground then splits there.
   const given: { readonly node?: ConstructionNodeId; readonly position: ConstructionPosition; readonly side?: ConstructionRegionEdge }[] = [];
   const segmentSide = new Map<string, ConstructionRegionEdge>();
-  const holes = meeting.area.flatMap((piece) => {
+  // The structures' area round this piece only: a hole reaching on far past
+  // it -- three roads' contact at once -- is charted by guesswork out there,
+  // and the ground laid fanned out from its far corners.
+  const reach = { minX: box.minX - faceSide, minZ: box.minZ - faceSide, maxX: box.maxX + faceSide, maxZ: box.maxZ + faceSide };
+  const window: PlanarPolygon = [[[reach.minX, reach.minZ], [reach.maxX, reach.minZ], [reach.maxX, reach.maxZ], [reach.minX, reach.maxZ], [reach.minX, reach.minZ]]];
+  let area: PlanarArea = meeting.area;
+  try {
+    if (area.length > 0) area = planarDifference(runtime, area, planarDifference(runtime, area, window));
+  } catch {
+    area = meeting.area;
+  }
+  const holes = area.flatMap((piece) => {
     const closed = piece[0] ?? [];
     const ring = withCornersOnSides(closed.length > 1 && closed[0]![0] === closed.at(-1)![0] && closed[0]![1] === closed.at(-1)![1] ? closed.slice(0, -1) : closed, corners);
     if (ring.length < 3) return [];
@@ -320,10 +332,19 @@ function regrowPiece(runtime: TerrainRegrowRuntime, request: PieceRequest): numb
       const point = { x, z };
       const node = corners.find((corner) => Math.hypot(corner.at.x - x, corner.at.z - z) < 1e-6);
       const side = node === undefined ? sideThrough(point) : undefined;
-      const position = node?.at ?? { x, y: meeting.heightAt(point) ?? groundAt(point) ?? 0, z };
+      // The ground's own height there, read near the structure's: on an
+      // earth bridge the floor under it and the arch's underside over it are
+      // both ground, metres apart, and only the one it rests on is its ground.
+      const nearest = corners.reduce<{ readonly at: ConstructionPosition } | undefined>((best, corner) => best === undefined || Math.hypot(corner.at.x - x, corner.at.z - z) < Math.hypot(best.at.x - x, best.at.z - z) ? corner : best, undefined);
+      const position = node?.at ?? { x, y: meeting.heightAt(point) ?? groundAt(point, nearest?.at.y) ?? 0, z };
       given.push({ node: node?.id, position, side });
       return given.length - 1;
+    }).filter((id, index, all) => {
+      // Two corners of the area a hair apart are one structure corner: once.
+      const a = given[id]!.position, b = given[all[(index + 1) % all.length]!]!.position;
+      return all.length < 2 || Math.hypot(a.x - b.x, a.z - b.z) > 1e-6;
     });
+    if (ids.length < 3) return [];
     ids.forEach((id, index) => {
       const next = ids[(index + 1) % ids.length]!;
       const a = given[id]!.position, b = given[next]!.position;
