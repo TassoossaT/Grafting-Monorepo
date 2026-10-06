@@ -45,6 +45,8 @@ export interface SpineDraft<S> {
   readonly mode: string;
   readonly ends: DraftEnd[];
   readonly tool: S;
+  /** Construction begun from a handle stays on that origin's elevation. */
+  readonly creationHeight?: number;
   modeState?: unknown;
 }
 
@@ -189,7 +191,7 @@ export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: 
       endAt: (sample: PointerSample, height: number, start?: ConstructionPosition) => options.endAt(ctx, draft.tool, sample, height, start),
       startHeight: () => draft.ends[0]?.point.y ?? 0,
     };
-    return { ...base, endHeight: (sample) => options.endHeight?.(base, sample) ?? base.startHeight() };
+    return { ...base, endHeight: (sample) => draft.creationHeight ?? options.endHeight?.(base, sample) ?? base.startHeight() };
   }
 
   function hint(kit: DraftKit<Id, S>): void {
@@ -213,7 +215,7 @@ export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: 
     // Joining a standing structure ends the run; open ground -- or a span
     // stopped short of what it was aimed at -- carries it on from its end.
     if (laid.joined) { clear(ctx); return; }
-    const next: SpineDraft<S> = { mode: kit.draft.mode, ends: [{ point: laid.end, sample: { ...sample, point: laid.end } }], tool: kit.draft.tool };
+    const next: SpineDraft<S> = { mode: kit.draft.mode, ends: [{ point: laid.end, sample: { ...sample, point: laid.end } }], tool: kit.draft.tool, ...(kit.draft.creationHeight === undefined ? {} : { creationHeight: laid.end.y }) };
     drafts.set(ctx.runtime, next);
     options.shown?.(kitOf(ctx, next, params));
   }
@@ -264,7 +266,11 @@ export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: 
     id: options.id,
     previewOnHover: true,
     defaultParams: options.defaultParams,
-    startFrom(ctx, sample, params) { presses.delete(ctx.runtime); options.stroke?.cancel(ctx); clear(ctx); click(ctx, sample, params); },
+    startFrom(ctx, sample, params) {
+      presses.delete(ctx.runtime); options.stroke?.cancel(ctx); clear(ctx); click(ctx, sample, params);
+      const draft = drafts.get(ctx.runtime), origin = draft?.ends[0];
+      if (draft && origin) drafts.set(ctx.runtime, { ...draft, creationHeight: origin.point.y });
+    },
     drafting: (ctx) => (drafts.get(ctx.runtime)?.ends.length ?? 0) > 0,
     // The next stretch runs from the last end clicked.
     rulerAnchor: (ctx) => drafts.get(ctx.runtime)?.ends.at(-1)?.point,
@@ -323,7 +329,8 @@ export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: 
     ...tool,
     onPointerDown(ctx, sample, params) {
       const draft = drafts.get(ctx.runtime);
-      const end = options.endAt(ctx, draft?.tool ?? options.begin(ctx), sample, sample.point.y);
+      const kit = draft ? kitOf(ctx, draft, params) : undefined;
+      const end = kit ? kit.endAt(sample, kit.endHeight(sample), draft!.ends.at(-1)?.point) : options.endAt(ctx, options.begin(ctx), sample, sample.point.y);
       presses.set(ctx.runtime, end);
       stroke.begin(ctx, { ...end.sample, point: end.point }, params);
     },

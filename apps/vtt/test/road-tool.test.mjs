@@ -806,3 +806,18 @@ test("an elevated endpoint is acquired under the camera ray rather than the grou
   const from={nodeId:curveAnchorId(id),point:f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position},to={point:{x:0,y:0,z:4},ray:{origin:{x:0,y:10,z:-6},direction:{x:0,y:-1,z:1}}};f.drag(from,to);assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(degree(f,target),2);
  }finally{f.close();}
 });
+
+test("branch creation projects the mouse ray onto its origin height for both preview and commit",()=>{
+ const f=fixture();try{
+  lay(f,[[-10,4,0],[10,4,0]]);const span=edges(f)[0],mid=curvePickId(span.edgeId,"midpoint");f.click(midpointOf(f,span));const create=editHandles(f,mid).find(h=>h.kind==="createBranch");f.click({nodeId:create.id,point:create.position});
+  const cursor={point:{x:0,y:0,z:20},ray:{origin:{x:0,y:10,z:0},direction:{x:0,y:-1,z:2}}};tool.previewFor(gesture(cursor,cursor),params,f.ctx);
+  const preview=f.previews.get("road-draft-spine");assert.ok(preview);const triples=[];for(let i=0;i<preview.positions.length;i+=3)triples.push([...preview.positions.slice(i,i+3)]);assert.ok(triples.some(p=>Math.abs(p[0])<0.01&&Math.abs(p[1]-4)<0.1&&Math.abs(p[2]-12)<0.01),"preview ends at the ray crossing y=4, not at its y=0 ground hit");
+  const movedCamera={...cursor,ray:{origin:{x:5,y:10,z:0},direction:{x:-0.5,y:-1,z:2}}};
+  tool.previewFor(gesture(movedCamera,movedCamera),params,f.ctx);const updated=f.previews.get("road-draft-spine");assert.notDeepEqual([...updated.positions],[...preview.positions],"same ground hit with a changed camera ray must redraw the projected endpoint");
+  f.click(movedCamera);assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.ok(f.runtime.getGraphSnapshot().nodes.some(n=>Math.abs(n.position.x-2)<0.01&&Math.abs(n.position.y-4)<0.01&&Math.abs(n.position.z-12)<0.01),"commit uses exactly the preview endpoint");
+ }finally{f.close();}
+});
+
+test("ordinary road construction still takes the terrain height hit by the pointer",()=>{
+ const f=fixture();try{f.click(sample(0,0));f.click({point:{x:20,y:2,z:0}});assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.ok(f.runtime.getGraphSnapshot().nodes.some(n=>Math.abs(n.position.x-20)<0.01&&Math.abs(n.position.y-2)<0.01&&Math.abs(n.position.z)<0.01));}finally{f.close();}
+});

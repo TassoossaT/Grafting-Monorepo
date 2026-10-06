@@ -3171,6 +3171,10 @@ The height the draft started at.
 
 One draft under way: its mode, its ends, the tool's own state for it, and the mode's.
 
+### `property vtt.spine-draft.SpineDraft.creationHeight?: number`
+
+Construction begun from a handle stays on that origin's elevation.
+
 ### `property vtt.spine-draft.SpineDraft.ends: DraftEnd[]`
 
 ### `property vtt.spine-draft.SpineDraft.mode: string`

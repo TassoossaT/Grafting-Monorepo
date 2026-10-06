@@ -1,3 +1,4 @@
+import { pointerAtHeight } from "../core/pointer-ray.ts";
 import { DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
@@ -16,9 +17,9 @@ interface RoadDraftState {
 }
 
 /** Where a click lands: on the road it snaps onto, when it does, else where it was made. */
-function landing(ctx: ToolContext, sample: PointerSample): DraftEnd {
+function landing(ctx: ToolContext, sample: PointerSample, height = sample.point.y): DraftEnd {
   const target = roadSnapTarget(ctx, sample);
-  return target ? { point: target.point, sample: target, target } : { point: sample.point, sample };
+  return target ? { point: target.point, sample: target, target } : { point: pointerAtHeight(sample, height), sample };
 }
 
 /** The waiting origin, and the straight span from it toward `to`; answers where that span ends -- short of `to` when the grade stops it. */
@@ -42,7 +43,7 @@ const span: SpineDraftMode<"path-brush", RoadDraftState> = {
   plan(kit, cursor) {
     const origin = kit.draft.ends[0];
     if (!origin) return undefined;
-    const end = landing(kit.ctx, cursor);
+    const end = kit.endAt(cursor, kit.endHeight(cursor), origin.point);
     if (samePlace(origin.point, end.point)) return undefined;
     return { kind: "points", points: [origin.point, end.point], ...(end.target ? { joins: end.target } : {}) };
   },
@@ -54,14 +55,15 @@ const draft = createSpineDraftTool<"path-brush", RoadDraftState>({
   modes: { span },
   modeOf: () => "span",
   begin: () => ({}),
-  endAt: (ctx, _state, sample) => landing(ctx, sample),
+  endAt: (ctx, _state, sample, height) => landing(ctx, sample, height),
+  endHeight: (_kit, sample) => sample.point.y,
   holds: (ctx, end) => !end.target || roadSnapIsCurrent(ctx, end.target as RoadSnapTarget),
   preview(kit, current) {
     const state = kit.draft.tool;
     const origin = kit.draft.ends[0]!;
-    if (state.hovered?.origin === origin && samePlace(state.hovered.at, current.point)) return undefined;
-    state.hovered = { origin, at: current.point };
-    const end = landing(kit.ctx, current);
+    const end = kit.endAt(current, kit.endHeight(current), origin.point);
+    if (state.hovered?.origin === origin && samePlace(state.hovered.at, end.point)) return undefined;
+    state.hovered = { origin, at: end.point };
     const reached = showSpan(kit.ctx, origin.point, end.point, kit.params);
     // A target the span cannot reach is not shown as joined.
     showRoadSnap(kit.ctx, end.target && reached && samePlace(reached, end.point) ? end.target : undefined);

@@ -4690,6 +4690,8 @@ export interface SpineDraft<S> {
   readonly mode: string;
   readonly ends: DraftEnd[];
   readonly tool: S;
+  /** Construction begun from a handle stays on that origin's elevation. */
+  readonly creationHeight?: number;
   modeState?: unknown;
   }
 export interface DraftKit<Id extends ConstructionToolId, S> {
