@@ -5515,13 +5515,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 // src/composition/tabletop/use-debug-stats.ts
 export const RECENT_CHANGES = 8;
 export interface ChangeRecord {
+  /** Counts up with every record: a stroke the engine refused is timed but leaves the revision where it was, so the revision names no record alone. */
+  readonly id: number;
   /** The map's revision once the change was read. */
   readonly revision: number;
   /** What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads. */
   readonly label: string;
   /** The commits' time together, in milliseconds; absent when no timed commit made it. */
-  readonly ms?: number;
-  /** The slowest phase of any of those commits. */
 export interface DebugStats {
   /** The last full window of frames; absent until one has passed. */
   readonly frame?: FrameStats;

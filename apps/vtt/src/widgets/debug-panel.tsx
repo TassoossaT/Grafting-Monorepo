@@ -18,6 +18,8 @@ interface PanelElementChange {
 
 /** One change of the map, as the panel draws it. */
 export interface DebugPanelChange {
+  /** Unique per record: a refused stroke leaves the revision where it was. */
+  readonly id: number;
   readonly revision: number;
   readonly label: string;
   readonly ms?: number;

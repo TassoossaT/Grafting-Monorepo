@@ -4645,6 +4645,10 @@ What the map was made of afterwards, to read the totals the change led to.
 
 How long telling the change apart took, in milliseconds.
 
+### `property vtt.use-debug-stats.ChangeRecord.id: number`
+
+Counts up with every record: a stroke the engine refused is timed but leaves the revision where it was, so the revision names no record alone.
+
 ### `property vtt.use-debug-stats.ChangeRecord.label: string`
 
 What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads.
