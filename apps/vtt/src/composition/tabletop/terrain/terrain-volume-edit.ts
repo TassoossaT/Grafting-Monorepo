@@ -35,6 +35,8 @@ import type { ToolContext } from "../tools/core/tool-context.ts";
 /** Whether a shape only moves the surface: a layer or a level, never a bore or an arch. */
 const movesSurface = (shape: ConstructionVolumeShape) => shape.effect === "raise" || shape.effect === "lower" || shape.column !== undefined;
 
+/** How far off the stroke's own height, past its depth and the slope, a layer still reaches the ground. */
+const LAYER_HEIGHT_SLACK = 1;
 /** How far past a layer's radius, in faces, the faces laid again reach: it changes nothing past it. */
 const LAYER_MARGIN_FACES = 0.25;
 /** How far past a shape's reach, in faces, the faces laid again reach. */
@@ -68,10 +70,29 @@ function distanceToPath(point: ConstructionPosition, path: ConstructionVolumeSha
   return best;
 }
 
+/** Distance in plan from `point` to `path`, and the path's height at the nearest point. */
+function planToPath(point: ConstructionPosition, path: ConstructionVolumeShape["path"]): { readonly across: number; readonly y: number } {
+  if (path.length === 1) return { across: Math.hypot(point.x - path[0]![0], point.z - path[0]![2]), y: path[0]![1] };
+  let best = { across: Infinity, y: 0 };
+  for (let i = 0; i + 1 < path.length; i++) {
+    const [ax, ay, az] = path[i]!, [bx, by, bz] = path[i + 1]!;
+    const dx = bx - ax, dz = bz - az, l = dx * dx + dz * dz;
+    const t = l > 0 ? Math.max(0, Math.min(1, ((point.x - ax) * dx + (point.z - az) * dz) / l)) : 0;
+    const across = Math.hypot(point.x - ax - dx * t, point.z - az - dz * t);
+    if (across < best.across) best = { across, y: ay + (by - ay) * t };
+  }
+  return best;
+}
+
 /** Signed distance to a shape, negative inside -- the engine's own (`Shape::distance`). */
 export function shapeDistance(point: ConstructionPosition, shape: ConstructionVolumeShape): number {
-  // A layer reaches as far as the capsule round its path.
-  if (shape.effect === "raise" || shape.effect === "lower") return distanceToPath(point, shape.path) - shape.radius;
+  // A layer reaches across the ground as far as its radius, and up or down
+  // only as far as its depth and the ground's own slope there carry it: the
+  // ground under an arch a stroke was laid over is another layer, metres down.
+  if (shape.effect === "raise" || shape.effect === "lower") {
+    const { across, y } = planToPath(point, shape.path);
+    return Math.max(across - shape.radius, Math.abs(point.y - y) - Math.abs(shape.height ?? shape.radius) - across - LAYER_HEIGHT_SLACK);
+  }
   if (shape.column) {
     const across = distanceToPath(point, shape.path, 0) - shape.radius;
     const up = Math.max(shape.column.low - point.y, point.y - shape.column.high);
@@ -196,7 +217,10 @@ export function commitTerrainVolumeEdit(
       neighbours: { vertices: neighbours.vertices, faces: neighbours.faces },
     };
     const label = `motor: ${layer ? "camada" : "volume"} (${patchFaces.length} faces refeitas, ${contextFaces.length} em volta)`;
-    const laid: LaidGround | undefined = timePhase(label, () => (layer ? layerLaid(ctx.runtime.layerTerrainSurface(request), patch.ids, [...context.ids, ...neighbours.ids]) : volumeLaid(ctx.runtime.editTerrainVolume(request), patch.ids)));
+    // A layer the surface's own way first; where that refuses -- ground
+    // folding every which way, an arch's flank -- through the volume.
+    const laid: LaidGround | undefined = timePhase(label, () =>
+      (layer ? layerLaid(ctx.runtime.layerTerrainSurface(request), patch.ids, [...context.ids, ...neighbours.ids]) : undefined) ?? volumeLaid(ctx.runtime.editTerrainVolume(request), patch.ids));
     return laid ? { laid, patchFaces, contextFaces, faceSide } : undefined;
   };
   // A hole in the patch the edit closes over is laid again with it: tried as

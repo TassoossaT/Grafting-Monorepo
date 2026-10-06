@@ -64,6 +64,9 @@ function stroke({ runtime, ctx, calls }, points, params = {}) {
   return feedback;
 }
 
+/** Twice the plan area, in square metres, past which a face turned over shows. */
+const TURNED_AREA = 0.05;
+
 /** One mesh, every face up: no edge held by three faces, no face turned over in plan, and how many open borders. */
 function meshOf(runtime) {
   const ground = groundOf(runtime);
@@ -74,7 +77,9 @@ function meshOf(runtime) {
     const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
     let area = 0;
     for (let i = 0; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; area += a.x * b.z - b.x * a.z; }
-    if (area <= 0) turned++;
+    // Turned with area to show: the grid leaves the odd sliver lying along a
+    // contour, its corners in a line, which turns either way and draws nothing.
+    if (area < -TURNED_AREA) turned++;
   }
   const adjacent = new Map();
   for (const t of ground) for (const use of t.outerLoops.flat()) if (uses.get(use.edgeId) === 1) {
@@ -208,3 +213,33 @@ function distanceToSegment(x, z, [ax, az], [bx, bz]) {
   const t = l > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l)) : 0;
   return Math.hypot(x - ax - dx * t, z - az - dz * t);
 }
+
+test("an earth bridge stands hollow over the ground, and layers laid over it and beside it leave every face drawable", () => {
+  const fixture = setup();
+  try {
+    const { runtime, session } = fixture;
+    stroke(fixture, [[-20, 0], [20, 0]], { brushRadius: 10 });
+    stroke(fixture, [[-8, 0], [8, 0]], { mode: "fill", brushRadius: 2, elevationStep: 6 });
+    // Ground, the bridge's underside and its deck, one over another at its middle.
+    const crossed = new Set();
+    for (const t of groundOf(runtime)) {
+      const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
+      for (let k = 1; k + 1 < ring.length; k++) {
+        const [a, b, c] = [ring[0], ring[k], ring[k + 1]];
+        const d = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
+        if (Math.abs(d) < 1e-12) continue;
+        const u = ((b.x - 0) * (c.z - 0) - (c.x - 0) * (b.z - 0)) / d, v = ((c.x - 0) * (a.z - 0) - (a.x - 0) * (c.z - 0)) / d;
+        if (u >= -1e-9 && v >= -1e-9 && 1 - u - v >= -1e-9) crossed.add(Math.round(u * a.y + v * b.y + (1 - u - v) * c.y));
+      }
+    }
+    probe("surfaces over the middle", [...crossed]);
+    assert.ok(crossed.size >= 3, `ground, underside and deck: ${[...crossed]}`);
+    for (const [points, params] of [[[[-10, -4], [10, -4]], { mode: "fill" }], [[[-3, -6], [3, 6]], {}]]) {
+      stroke(fixture, points, params);
+      const ground = groundOf(runtime);
+      const report = JSON.parse(session.surface_meshes_report_json(JSON.stringify({ surfaceKeys: ground.map((t) => t.surfaceKey) })));
+      assert.equal(report.failed.length, 0, `every face drawable: ${JSON.stringify(report.failed[0])}`);
+      assert.equal(meshOf(runtime).thrice, 0, "one mesh");
+    }
+  } finally { fixture.session.free(); }
+});

@@ -4139,11 +4139,11 @@ export function regrowGround(runtime: TerrainRegrowRuntime, fallout: CutFallout,
 
 // src/composition/tabletop/terrain/terrain-volume-edit.ts
 export function shapeDistance(point: ConstructionPosition, shape: ConstructionVolumeShape): number {
-  // A layer reaches as far as the capsule round its path.
-  if (shape.effect === "raise" || shape.effect === "lower") return distanceToPath(point, shape.path) - shape.radius;
-  if (shape.column) {
-  const across = distanceToPath(point, shape.path, 0) - shape.radius;
-  const up = Math.max(shape.column.low - point.y, point.y - shape.column.high);
+  // A layer reaches across the ground as far as its radius, and up or down
+  // only as far as its depth and the ground's own slope there carry it: the
+  // ground under an arch a stroke was laid over is another layer, metres down.
+  if (shape.effect === "raise" || shape.effect === "lower") {
+  const { across, y } = planToPath(point, shape.path);
 export function commitTerrainVolumeEdit(
   ctx: ToolContext,
   shapes: readonly ConstructionVolumeShape[],

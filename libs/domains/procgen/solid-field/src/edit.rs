@@ -502,8 +502,64 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
     let pinned: Vec<bool> = welded_source.iter().enumerate().map(|(v, s)| s.is_some() || (open.contains(&v) && on_table(welded.vertices[v]))).collect();
     let vertices = relax_on_surface(&welded.vertices, &welded.faces, &pinned, &settle);
 
-    let faces = welded.faces.iter().map(|face| if flip { face.iter().rev().copied().collect() } else { face.clone() }).collect();
-    Ok(EditedSurface { vertices, faces, source: welded_source })
+    let faces: Vec<Vec<usize>> = welded.faces.iter().map(|face| if flip { face.iter().rev().copied().collect() } else { face.clone() }).collect();
+    Ok(without_collapsed(EditedSurface { vertices, faces, source: welded_source }))
+}
+
+/// How close two corners may come before they are one, as a share of a metre.
+const SAME_CORNER: f64 = 1e-6;
+
+/// `surface` with corners the relaxation drew onto one another made one --
+/// a ring corner over a new one -- and every face left with fewer than three
+/// corners of its own dropped: a cell with no area is no ground anyone can
+/// draw.
+fn without_collapsed(surface: EditedSurface) -> EditedSurface {
+    let EditedSurface { vertices, faces, source } = surface;
+    let key = |p: Vec3| ((p.x / SAME_CORNER).round() as i64, (p.y / SAME_CORNER).round() as i64, (p.z / SAME_CORNER).round() as i64);
+    // The first corner at a point stands for every one there; a ring corner before a new one.
+    let mut order: Vec<usize> = (0..vertices.len()).collect();
+    order.sort_by_key(|&v| (source[v].is_none(), v));
+    let mut at: HashMap<(i64, i64, i64), usize> = HashMap::new();
+    let mut same = vec![0; vertices.len()];
+    for v in order {
+        same[v] = *at.entry(key(vertices[v])).or_insert(v);
+    }
+    if (0..vertices.len()).all(|v| same[v] == v) {
+        return EditedSurface { vertices, faces, source };
+    }
+    let mut kept_faces: Vec<Vec<usize>> = Vec::with_capacity(faces.len());
+    for face in faces {
+        let mut corners: Vec<usize> = face.iter().map(|&v| same[v]).collect();
+        corners.dedup();
+        while corners.len() > 1 && corners[0] == corners[corners.len() - 1] {
+            corners.pop();
+        }
+        let distinct: HashSet<usize> = corners.iter().copied().collect();
+        if distinct.len() >= 3 && distinct.len() == corners.len() {
+            kept_faces.push(corners);
+        }
+    }
+    let mut renumber = vec![usize::MAX; vertices.len()];
+    let (mut out_vertices, mut out_source) = (Vec::new(), Vec::new());
+    for face in &mut kept_faces {
+        for v in face.iter_mut() {
+            if renumber[*v] == usize::MAX {
+                renumber[*v] = out_vertices.len();
+                out_vertices.push(vertices[*v]);
+                out_source.push(source[*v]);
+            }
+            *v = renumber[*v];
+        }
+    }
+    // Ring corners no face uses any more still come back, so the ring is whole.
+    for v in 0..vertices.len() {
+        if source[v].is_some() && same[v] == v && renumber[v] == usize::MAX {
+            renumber[v] = out_vertices.len();
+            out_vertices.push(vertices[v]);
+            out_source.push(source[v]);
+        }
+    }
+    EditedSurface { vertices: out_vertices, faces: kept_faces, source: out_source }
 }
 
 
