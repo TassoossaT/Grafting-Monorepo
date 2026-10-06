@@ -3758,13 +3758,13 @@ export function dispatchEffects(
   // Every shape change is also a reshape, for what stands on the changed cloud to follow.
   const reshaped = effects.flatMap((effect): Effect[] => (effect.kind === "cut" ? [effect, { ...effect, kind: "reshape" }] : [effect]));
 export interface CommitOptions {
+  readonly executeRemovalAction?: (action: string, region: ConstructionRegionTopology) => RegionEditOutcome | undefined;
   /** Names the transaction and its undo entry; reactions mint their ids from it. */
   readonly transactionId: string;
   readonly origin?: ChangeOrigin;
   /** The preset the change was made with, when its type has presets. */
   readonly subtype?: string;
   readonly reactions?: TabletopReactions;
-  }
 export function commitChange<T>(
   runtime: EffectCommitRuntime,
   options: CommitOptions,
@@ -4775,6 +4775,11 @@ export function withStructureEditing<Id extends ConstructionToolId>(
   ): ConstructionTool<Id> {
   const behavior = createStructureEditBehavior(options);
 
+// src/composition/tabletop/tools/core/surface-removal-actions.ts
+export function executeSurfaceRemovalAction(action: string, region: ConstructionRegionTopology, ctx: ToolContext, gesture: ToolGesture, causeId: string): RegionEditOutcome | undefined {
+  const execute = ACTIONS[action];
+  if (!execute) throw new Error(`Unknown surface removal action: ${action}`);
+
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
   readonly point: ConstructionPosition;
@@ -5426,6 +5431,9 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
   const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
   const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
+export function digTerrain(ctx: ToolContext, area: StructuralCutArea, coveredTerrainRegions: readonly Pick<ConstructionCoveredRegion, "surfaceKey" | "surfaceType">[], targetSurface: string, params: TerrainSculptParams, causeId: string): void {
+  if (coveredTerrainRegions.length === 0) {
+  ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
@@ -6854,8 +6862,8 @@ export function pathInteractionOver(
   ): CreationInteraction {
   return CUT;
   }
-export const demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]> = (_context) => {
-  throw new Error("A função de apagar terreno ainda não foi implementada.");
+export const demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]> = (context) => {
+  return context.execute("terrain-dig");
 
 // src/features/edit-construction/structure-types/organic/terrain-cloud.ts
 export function terrainCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {

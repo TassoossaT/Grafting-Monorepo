@@ -465,11 +465,13 @@ export interface SurfaceRemovalContext {
   readonly remaining: readonly ConstructionRegionTopology[];
   readonly removeFace: () => RegionEditOutcome;
   readonly replace: (request: ApplyPatchReplacementRequest) => ConstructionPatchOutcome;
+  /** A composition-owned action; undefined means it applied its own replacement and effects. */
+  readonly execute: (action: string) => RegionEditOutcome | undefined;
 }
 
 export interface StructureTypeDefinition {
   /** Absent means remove only the pointed face and prune its orphaned graph elements. */
-  readonly demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome;
+  readonly demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome | undefined;
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;

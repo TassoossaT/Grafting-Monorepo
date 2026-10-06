@@ -56,6 +56,7 @@ export function dispatchEffects(
 }
 
 export interface CommitOptions {
+  readonly executeRemovalAction?: (action: string, region: ConstructionRegionTopology) => RegionEditOutcome | undefined;
   /** Names the transaction and its undo entry; reactions mint their ids from it. */
   readonly transactionId: string;
   readonly origin?: ChangeOrigin;
@@ -206,16 +207,17 @@ export function commitSurfaceRemoval(
     const removed = topologiesOf(runtime, [...targets.values()]);
     const authoring = runtime.getGraphSnapshot();
     let outcome = EMPTY_OUTCOME;
+    const standardRemovals: ConstructionRegionTopology[] = [];
     for (const key of targets.values()) {
-      const region = removed.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(key));
+      const region = runtime.getRegionTopology(key);
       if (!region) continue;
       const removeFace = () => runtime.removeSurface({ surfaceKey: key }, origin, options.transactionId);
       const action = structureTypeFor(region.surfaceType)?.demolish;
-      const res = action ? action({ region, graph: authoring, remaining, removeFace, replace: (request) => runtime.applyPatchReplacement(request, origin, options.transactionId) }) : removeFace();
-      outcome = mergeOutcomes(outcome, res);
+      const res = action ? action({ region, graph: authoring, remaining, removeFace, execute: (name) => { if (!options.executeRemovalAction) throw new Error("Removal action dispatcher is unavailable"); return options.executeRemovalAction(name, region); }, replace: (request) => runtime.applyPatchReplacement(request, origin, options.transactionId) }) : removeFace();
+      if (res) { outcome = mergeOutcomes(outcome, res); standardRemovals.push(region); }
     }
     const byType = new Map<string, ConstructionRegionTopology[]>();
-    for (const topology of removed) {
+    for (const topology of standardRemovals) {
       const list = byType.get(topology.surfaceType) ?? [];
       list.push(topology);
       byType.set(topology.surfaceType, list);

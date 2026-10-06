@@ -6,6 +6,8 @@ import { scopedToolId } from "../core/tool-context.ts";
 import { commitSurfaceRemoval } from "../../effects/effect-commit.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 
+import { executeSurfaceRemovalAction } from "../core/surface-removal-actions.ts";
+
 const DEMOLISH_COLOR = 0xef4444;
 
 /** The same picked targets feed the highlight and commit; empty space selects nothing. */
@@ -39,9 +41,11 @@ export const demolishTool: ConstructionTool<"demolish"> = {
     if (keys.length === 0) return;
     const causeId = scopedToolId(ctx, "demolish", ctx.nextSequence());
     try {
-      const { recorded } = commitSurfaceRemoval(ctx.runtime, keys, { transactionId: causeId });
-      if (recorded) ctx.history.record({ kind: "transaction", transactionId: causeId });
-      ctx.reportFeedback({ tone: "success", message: "Estruturas selecionadas removidas." });
+      const { recorded } = commitSurfaceRemoval(ctx.runtime, keys, { transactionId: causeId, executeRemovalAction: (action, region) => executeSurfaceRemovalAction(action, region, ctx, gesture, causeId) });
+      if (recorded) {
+        ctx.history.record({ kind: "transaction", transactionId: causeId });
+        ctx.reportFeedback({ tone: "success", message: "Ação de remover aplicada às faces selecionadas." });
+      }
     } catch (error) {
       ctx.reportFeedback({ tone: "error", message: String(error) });
     }

@@ -726,6 +726,8 @@ itself; this only names the one a single-ring consumer answers for.
 
 ### `interface vtt.effect-commit.CommitOptions`
 
+### `property vtt.effect-commit.CommitOptions.executeRemovalAction?: (action: string, region: ConstructionRegionTopology) => RegionEditOutcome | undefined`
+
 ### `property vtt.effect-commit.CommitOptions.origin?: ChangeOrigin`
 
 ### `property vtt.effect-commit.CommitOptions.reactions?: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>`
@@ -3558,6 +3560,10 @@ creation gesture, unchanged. One tool, not a second "edit mode" -- the
 same reasoning `opening-tool.ts` already applies to openings, generalized
 to every other construction tool via the type-filtered grab above.
 
+### `function vtt.surface-removal-actions.executeSurfaceRemovalAction(action: string, region: ConstructionRegionTopology, ctx: ToolContext, gesture: ToolGesture, causeId: string): RegionEditOutcome | undefined`
+
+Types declare the action; one composition dispatcher resolves its implementation.
+
 ### `interface vtt.tool-context.ClickRun`
 
 A run of quick clicks in one place: where and when the last landed, and how many it has been.
@@ -4706,6 +4712,10 @@ edited -- see `spine-edit-behavior.ts` -- and as a whole by its handles.
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
 Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release.
+
+### `function vtt.terrain-sculpt-tool.digTerrain(ctx: ToolContext, area: StructuralCutArea, coveredTerrainRegions: readonly Pick<ConstructionCoveredRegion, "surfaceKey" | "surfaceType">[], targetSurface: string, params: TerrainSculptParams, causeId: string): void`
+
+The one excavation action shared by Remover and a type-declared face removal.
 
 ### `function vtt.tower-geometry.circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[]`
 
@@ -7581,7 +7591,7 @@ inferred from a symmetric "compatible" flag.
 
 ### `variable vtt.organic-structure.demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]>`
 
-Owner-provided terrain deletion entry point; no generic face deletion fallback.
+Terrain uses the same excavation action as its Remover tool.
 
 ### `variable vtt.organic-structure.ORGANIC_ROLES: { body: "organic-body"; boundaryEdge: "organic-boundary-edge"; boundaryVertex: "organic-boundary-vertex" }`
 
@@ -7604,7 +7614,7 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
 
-### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction, traits: readonly StructureTrait[], demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome): StructureTypeDefinition`
+### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction, traits: readonly StructureTrait[], demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome | undefined): StructureTypeDefinition`
 
 ### `function vtt.organic-structure.pathInteractionOver(_covered: StructureView, _paintedSubtype?: string): CreationInteraction`
 
@@ -9463,7 +9473,7 @@ Whether regions of this type vertically conform to a support with these traits b
 How this type is generated, recorded next to the roles it implies --
 the doc's whole point is that these two halves must not drift apart.
 
-### `property vtt.structure-type.StructureTypeDefinition.demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome`
+### `property vtt.structure-type.StructureTypeDefinition.demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome | undefined`
 
 Absent means remove only the pointed face and prune its orphaned graph elements.
 
@@ -9597,6 +9607,10 @@ is what keeps a type from branching on another type's identity.
 ### `interface vtt.structure-type.SurfaceRemovalContext`
 
 A type's optional deletion action, executed inside the gesture's transaction.
+
+### `property vtt.structure-type.SurfaceRemovalContext.execute: (action: string) => RegionEditOutcome | undefined`
+
+A composition-owned action; undefined means it applied its own replacement and effects.
 
 ### `property vtt.structure-type.SurfaceRemovalContext.graph: ConstructionGraphSnapshot`
 

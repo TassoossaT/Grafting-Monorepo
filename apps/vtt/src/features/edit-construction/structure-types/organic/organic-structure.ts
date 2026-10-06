@@ -140,7 +140,7 @@ export function pathInteractionOver(
   return CUT;
 }
 
-/** Owner-provided terrain deletion entry point; no generic face deletion fallback. */
-export const demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]> = (_context) => {
-  throw new Error("A função de apagar terreno ainda não foi implementada.");
+/** Terrain uses the same excavation action as its Remover tool. */
+export const demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]> = (context) => {
+  return context.execute("terrain-dig");
 };

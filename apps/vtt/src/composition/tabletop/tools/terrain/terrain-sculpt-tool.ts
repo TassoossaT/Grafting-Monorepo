@@ -10,7 +10,7 @@ import { OUTLINE_CHORD_PER_FACE } from "../../terrain/terrain-constraints.ts";
 import type { TerrainStrokeBounds } from "../../terrain/terrain-neighborhood.ts";
 import { executeTerrainCut } from "../../terrain/terrain-cut-executor.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
-import type { PlanarArea } from "@/features/edit-construction";
+import type { StructuralCutArea, PlanarArea } from "@/features/edit-construction";
 
 /**
  * How this tool works.
@@ -189,7 +189,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // One stroke is one transaction: its edge splits, fills and replacements
     // undo together, and a failure part way leaves the ground as it was.
     try {
-      const { recorded } = ctx.runtime.transact(causeId, "local", () => sculptStroke(ctx, gesture, params, causeId));
+      const { recorded } = ctx.runtime.transact(causeId, "local", () => sculptTerrainArea(ctx, gesture, params, causeId));
       if (recorded) ctx.history.record({ kind: "transaction", transactionId: causeId });
     } catch (error) {
       ctx.reportFeedback({ tone: "error", message: `Terreno preservado: ${error instanceof Error ? error.message : String(error)}` });
@@ -197,7 +197,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   },
 };
 
-function sculptStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams, causeId: string): void {
+function sculptTerrainArea(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams, causeId: string): void {
   const faceSize = strokeFaceSize(params);
   const brushRadius = params.brushRadius;
   const swept = brushSweptOutlinePolygons(
@@ -242,35 +242,8 @@ function sculptStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainScu
   const strokePoints = gesture.samples.map((sample) => sample.point);
 
   if (isDig) {
-    const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));
-    if (coveredTerrainRegions.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
-      return;
-    }
-    const outcome = executeTerrainCut(ctx.runtime, {
-      area: {
-        outline: swept[0]?.[0] ?? [],
-        sweptPolygon: swept,
-        path: strokePoints,
-        radius: brushRadius,
-      },
-      coveredRegions: coveredTerrainRegions,
-      targetSurfaceType: targetSurface,
-      profile: { kind: "concave", depth: elevationStep },
-      causeId,
-      tableId: ctx.tableId,
-      faceSide: faceSize,
-      seed: Math.floor(params.seed ?? 1) || 1,
-      irregularity: params.irregularity ?? 0.7,
-    });
-    if (!outcome.success) {
-      ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a cavar aqui." });
-      return;
-    }
-    ctx.reportFeedback({
-      tone: "success",
-      message: `Terreno: ${outcome.builtFaces} faces escavadas (${outcome.removedFaces} faces substituídas).`,
-    });
+    digTerrain(ctx, { outline: swept[0]?.[0] ?? [], sweptPolygon: swept, path: strokePoints, radius: brushRadius },
+      covered.filter((c) => hasTrait(c.surfaceType, "ground")), targetSurface, params, causeId);
     return;
   }
 
@@ -357,3 +330,31 @@ function report(
   });
 }
 
+
+/** The one excavation action shared by Remover and a type-declared face removal. */
+export function digTerrain(ctx: ToolContext, area: StructuralCutArea, coveredTerrainRegions: readonly Pick<ConstructionCoveredRegion, "surfaceKey" | "surfaceType">[], targetSurface: string, params: TerrainSculptParams, causeId: string): void {
+  if (coveredTerrainRegions.length === 0) {
+    ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
+    return;
+  }
+  const outcome = executeTerrainCut(ctx.runtime, {
+    area,
+    coveredRegions: coveredTerrainRegions,
+    targetSurfaceType: targetSurface,
+    profile: { kind: "concave", depth: params.elevationStep ?? 2.0 },
+    causeId,
+    tableId: ctx.tableId,
+    faceSide: strokeFaceSize(params),
+    seed: Math.floor(params.seed ?? 1) || 1,
+    irregularity: params.irregularity ?? 0.7,
+  });
+  if (!outcome.success) {
+    ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a cavar aqui." });
+    return;
+  }
+  ctx.reportFeedback({
+    tone: "success",
+    message: `Terreno: ${outcome.builtFaces} faces escavadas (${outcome.removedFaces} faces substituídas).`,
+  });
+
+}

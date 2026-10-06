@@ -24,10 +24,21 @@ test("drag deletion deduplicates picked surfaces and undoes the whole gesture",(
  const f=capturePreviews(sessionFixture());
  try { wall(f,0);wall(f,8); const faces=f.runtime.getAllRegionTopologies(); const before=f.session.snapshot_json(); f.runtime.getFootprintCoverage=()=>[...faces,...faces]; const start={...at(0,0),surfaceRef:surfaceRefFromNodeSet(faces[0].surfaceKey)},current={...at(12,0),surfaceRef:surfaceRefFromNodeSet(faces[1].surfaceKey)}; tool.onPointerUp(f.ctx,{start,current,samples:[start,current],moved:true},params); assert.equal(f.runtime.getAllRegionTopologies().length,0); const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId); assert.equal(f.session.snapshot_json(),before); } finally {f.session.free();}
 });
-test("ground dispatches to its own pending deletion action without generic fallback",()=>{
+test("ground demolition uses Remover excavation and one undo restores its graph",()=>{
  const f=capturePreviews(sessionFixture());
- try { const face=addFace(f.runtime,"ground-delete","terrain-grass",[[0,0],[3,0],[3,3],[0,3]].map(([x,z],i)=>({id:`g${i}`,position:{x,y:0,z}}))); const before=f.session.snapshot_json();click(f,face); assert.equal(f.session.snapshot_json(),before);assert.ok(f.calls.feedback.some(item=>item.tone==="error"&&item.message.includes("ainda não foi implementada"))); } finally {f.session.free();}
+ try {
+  const face=addFace(f.runtime,"ground-delete","terrain-grass",[[0,0],[12,0],[12,12],[0,12]].map(([x,z],i)=>({id:`g${i}`,position:{x,y:0,z}})));
+  const distant=addFace(f.runtime,"ground-untouched","terrain-grass",[[30,0],[42,0],[42,12],[30,12]].map(([x,z],i)=>({id:`far:${i}`,position:{x,y:0,z}})));
+  const before=f.session.snapshot_json(),sample={point:{x:6,y:0,z:6},surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
+  tool.onPointerUp(f.ctx,{start:sample,current:sample,samples:[sample],moved:false},params);
+  assert.notEqual(f.session.snapshot_json(),before,JSON.stringify(f.calls.feedback));
+  assert.ok(f.runtime.getGraphSnapshot().nodes.some(n=>n.position.y<0),JSON.stringify(f.calls.feedback));
+  assert.ok(f.runtime.getAllRegionTopologies().length>0,"excavation replaces terrain rather than deleting its whole cloud");
+  assert.deepEqual(f.runtime.getRegionTopology(distant.surfaceKey),distant,"unselected distant terrain is unchanged");
+  const entry=f.ctx.history.undo();assert.equal(entry.kind,"transaction");f.session.undo_region_overlay(entry.transactionId);assert.equal(f.session.snapshot_json(),before);assert.equal(f.ctx.history.undo(),undefined);
+ } finally {f.session.free();}
 });
+
 test("deleting a generated path also retires its authoring spine; undo restores both",()=>{
  const f=capturePreviews(sessionFixture());
  try { const coords=[[-4,0,0],[0,0,0],[4,0,0]]; const curves=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"automatic",points:coords}]})[0].curves; const effect=createPathBrushEffect({brushShape:{kind:"circle",radius:0.025},brushRegion:{samples:coords.map(([x,y,z])=>({x,y,z}))},authoredCurves:curves,curveMode:"automatic",parameters:pathFormationFor({...params,pathKind:"trail",bedWidth:1,shoulderWidth:0,shoulderHeight:0,miterLimit:4})},{operationId:"platform-test:delete-road:1",tableId:f.ctx.tableId,initiatedBy:"test"}); assert.ok(commitPathCloudIntent(f.ctx,effect,0.025),JSON.stringify(f.calls.feedback)); const before=f.session.snapshot_json(); click(f,f.runtime.getAllRegionTopologies().find(t=>t.surfaceType==="path")); assert.equal(f.runtime.getAllRegionTopologies().filter(t=>t.surfaceType==="path").length,0); assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,0); const entry=f.ctx.history.undo(); f.session.undo_region_overlay(entry.transactionId);assert.equal(f.session.snapshot_json(),before); } finally {f.session.free();}
@@ -79,4 +90,15 @@ test("a surviving contour face retains its shared authoring spine",async()=>{
  const removed={surfaceType:"path",surfaceKey:key("removed")},remaining={surfaceType:"path",surfaceKey:key("remaining")};
  assert.deepEqual(removalPatchForRegions([removed],graph,[]).removedEdgeIds,[graph.edges[0].edgeId]);
  assert.deepEqual(removalPatchForRegions([removed],graph,[remaining]).removedEdgeIds,[]);
+});
+
+test("dragging over two terrain types excavates both with one undo entry",()=>{
+ const f=capturePreviews(sessionFixture());
+ try {
+  const faces=["terrain","terrain-grass"].map((type,index)=>addFace(f.runtime,`drag-ground:${index}`,type,[[0,0],[12,0],[12,12],[0,12]].map(([x,z],i)=>({id:`drag-ground:${index}:${i}`,position:{x:x+30*index,y:0,z}}))));
+  const before=f.session.snapshot_json(),samples=faces.map((face,i)=>({point:{x:6+30*i,y:0,z:6},surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)}));
+  tool.onPointerUp(f.ctx,{start:samples[0],current:samples[1],samples,moved:true},params);
+  const nodes=f.runtime.getGraphSnapshot().nodes;assert.ok(nodes.some(n=>n.position.x<20&&n.position.y<0),JSON.stringify(f.calls.feedback));assert.ok(nodes.some(n=>n.position.x>20&&n.position.y<0),JSON.stringify(f.calls.feedback));
+  const entry=f.ctx.history.undo();assert.equal(entry.kind,"transaction");f.session.undo_region_overlay(entry.transactionId);assert.equal(f.session.snapshot_json(),before);assert.equal(f.ctx.history.undo(),undefined);
+ } finally {f.session.free();}
 });
