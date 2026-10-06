@@ -132,4 +132,35 @@ mod tests {
         assert!(text.contains(r#"{"kind":"patch","index":0}"#), "{text}");
         assert!(out.faces.len() > 10);
     }
+
+    /// Replays a request saved from the tabletop: `REGENERATE_JSON=<path>`,
+    /// the file holding the request itself or `{ error, request }`.
+    #[test]
+    fn replay_a_saved_request() {
+        let Ok(path) = std::env::var("REGENERATE_JSON") else { return };
+        let json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).expect("reads")).expect("parses");
+        let request: TerrainRegenerateRequest = serde_json::from_value(json.get("request").cloned().unwrap_or(json)).expect("a request");
+        match regenerate_terrain_surface(request) {
+            Ok(out) => {
+                let longest = out.faces.iter().flat_map(|f| (0..f.len()).map(move |i| (f[i], f[(i + 1) % f.len()]))).map(|(a, b)| {
+                    let (p, q) = (out.vertices[a], out.vertices[b]);
+                    ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt()
+                }).fold(0.0, f64::max);
+                let mut areas: Vec<f64> = out.faces.iter().map(|f| {
+                    let mut n = [0.0f64; 3];
+                    for i in 0..f.len() {
+                        let (a, b) = (out.vertices[f[i]], out.vertices[f[(i + 1) % f.len()]]);
+                        n[0] += (a[1] - b[1]) * (a[2] + b[2]);
+                        n[1] += (a[2] - b[2]) * (a[0] + b[0]);
+                        n[2] += (a[0] - b[0]) * (a[1] + b[1]);
+                    }
+                    (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt() / 2.0
+                }).collect();
+                areas.sort_by(f64::total_cmp);
+                let total: f64 = areas.iter().sum();
+                eprintln!("ok {} faces, longest side {longest:.2}, area {total:.1}, median face {:.2} m2, smallest {:.3}", out.faces.len(), areas[areas.len() / 2], areas[0]);
+            }
+            Err(error) => eprintln!("ERR {error}"),
+        }
+    }
 }

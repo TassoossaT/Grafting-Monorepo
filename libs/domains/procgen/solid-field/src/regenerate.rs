@@ -23,10 +23,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use grafting_procgen_irregular_grid::constrained::{ConstrainedOptions, ConstraintPoint, triangulate_constrained};
-use grafting_procgen_irregular_grid::ground::{FACE_SIDE_TO_LATTICE_SIDE, GroundRefinement, ground_grid};
-use grafting_procgen_irregular_grid::hex::{lattice_covering, lattice_triangle_area};
+use grafting_procgen_irregular_grid::constrained::ConstraintPoint;
+use grafting_procgen_irregular_grid::ground::{GroundRefinement, ground_grid};
 use grafting_procgen_irregular_grid::{RelaxOptions, Vec2};
+use i_overlay::core::fill_rule::FillRule;
+use i_overlay::core::overlay_rule::OverlayRule;
+use i_overlay::float::single::SingleFloatOverlay;
 
 use crate::edit::Faces;
 use crate::mesh_distance::MeshDistance;
@@ -83,20 +85,88 @@ pub struct RegeneratedSurface {
     pub refinement_complete: bool,
 }
 
+/// How much of the surface may turn over in its projection, as a share of
+/// its area, for the projection still to be its chart.
+const TURNED_SHARE_TOLERATED: f64 = 0.01;
 /// Rounds of the membrane laid over a hole before the chart is made.
 const MEMBRANE_ROUNDS: usize = 400;
 /// Sweeps the mean-value embedding may take to settle, at most.
-const EMBEDDING_SWEEPS: usize = 20_000;
-/// Over-relaxation of the embedding's sweeps.
-const EMBEDDING_OVERRELAX: f64 = 1.85;
+const EMBEDDING_SWEEPS: usize = 200_000;
+/// Relaxation of the embedding's sweeps: plain Gauss-Seidel. Mean-value
+/// weights are not symmetric, and over-relaxed sweeps of them were seen to
+/// settle nowhere -- a chart turned inside out.
+const EMBEDDING_OVERRELAX: f64 = 1.0;
 
-fn triangles_of(faces: &[Vec<usize>]) -> Vec<[usize; 3]> {
+/// Every face cut into triangles by ear clipping across the patch's own
+/// normal -- the plane the chart projects onto, so a triangle is turned there
+/// only where its face is: a cell the generator joined along a contour is a
+/// concave polygon, and fanned from its first corner it gives triangles
+/// turned over though the face is not. A face that does not lie simply on
+/// that plane is clipped in its own.
+fn triangles_of(vertices: &[Vec3], faces: &[Vec<usize>]) -> Vec<[usize; 3]> {
+    let mut normal = Vec3::default();
+    for face in faces {
+        normal = normal + polygon_normal(vertices, face);
+    }
     faces
         .iter()
         .filter(|face| face.len() >= 3)
-        .flat_map(|face| (1..face.len() - 1).map(move |k| [face[0], face[k], face[k + 1]]))
+        .flat_map(|face| ears(vertices, face, normal).unwrap_or_else(|| ears(vertices, face, polygon_normal(vertices, face)).unwrap_or_else(|| fan(face))))
         .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
         .collect()
+}
+
+fn fan(face: &[usize]) -> Vec<[usize; 3]> {
+    (1..face.len() - 1).map(|k| [face[0], face[k], face[k + 1]]).collect()
+}
+
+/// Newell's normal of a polygon, in its winding.
+fn polygon_normal(vertices: &[Vec3], face: &[usize]) -> Vec3 {
+    let mut normal = Vec3::default();
+    for i in 0..face.len() {
+        let (a, b) = (vertices[face[i]], vertices[face[(i + 1) % face.len()]]);
+        normal = normal + Vec3::new((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y));
+    }
+    normal
+}
+
+/// `face` cut into triangles by ear clipping on the plane across `normal`,
+/// wound as it is; `None` where the face does not wind round that normal simply.
+fn ears(vertices: &[Vec3], face: &[usize], normal: Vec3) -> Option<Vec<[usize; 3]>> {
+    if normal.length() < 1e-12 {
+        return None;
+    }
+    let (u, v) = frame(normal.normalized());
+    let flat = |i: usize| Vec2::new(vertices[i].dot(u), vertices[i].dot(v));
+    let points: Vec<Vec2> = face.iter().map(|&i| flat(i)).collect();
+    let winding: f64 = (0..points.len()).map(|i| { let (p, q) = (points[i], points[(i + 1) % points.len()]); p.x * q.y - q.x * p.y }).sum();
+    if winding <= 0.0 || !simple(&points) {
+        return None;
+    }
+    if face.len() == 3 {
+        return Some(vec![[face[0], face[1], face[2]]]);
+    }
+    let mut left: Vec<usize> = face.to_vec();
+    let mut out = Vec::with_capacity(face.len() - 2);
+    while left.len() > 3 {
+        let n = left.len();
+        let ear = (0..n).find(|&k| {
+            let (a, b, c) = (left[(k + n - 1) % n], left[k], left[(k + 1) % n]);
+            let (pa, pb, pc) = (flat(a), flat(b), flat(c));
+            signed_area_2d(pa, pb, pc) > 1e-12
+                && left.iter().all(|&q| {
+                    if q == a || q == b || q == c {
+                        return true;
+                    }
+                    let pq = flat(q);
+                    !(signed_area_2d(pa, pb, pq) >= 0.0 && signed_area_2d(pb, pc, pq) >= 0.0 && signed_area_2d(pc, pa, pq) >= 0.0)
+                })
+        })?;
+        out.push([left[(ear + n - 1) % n], left[ear], left[(ear + 1) % n]]);
+        left.remove(ear);
+    }
+    out.push([left[0], left[1], left[2]]);
+    Some(out)
 }
 
 fn perimeter(ring: &[usize], vertices: &[Vec3]) -> f64 {
@@ -118,71 +188,100 @@ fn signed_area_2d(a: Vec2, b: Vec2, c: Vec2) -> f64 {
     ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) * 0.5
 }
 
-/// Caps the hole `ring` walks (the way the patch's faces walk it) with a
-/// membrane: triangles across the hole, wound like the patch, their inner
-/// corners settled to the mean of their neighbours with the rim held.
-fn cap(ring: &[usize], vertices: &mut Vec<Vec3>, triangles: &mut Vec<[usize; 3]>, face_side: f64) -> Result<(), String> {
-    let points: Vec<Vec3> = ring.iter().map(|&v| vertices[v]).collect();
-    let centre = points.iter().fold(Vec3::default(), |s, &p| s + p) * (1.0 / points.len() as f64);
-    // The patch walks a hole's rim against its own winding, so the cap's
-    // normal is the reverse of the rim's.
-    let mut rim_normal = Vec3::default();
-    for i in 0..points.len() {
-        let (a, b) = (points[i], points[(i + 1) % points.len()]);
-        rim_normal = rim_normal + Vec3::new((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y));
+/// Caps the hole `ring` walks (the way the patch's faces walk it) across
+/// `normal` -- the patch's own -- by clipping ears off the rim itself: every
+/// side of the rim kept, every triangle turned the patch's way on the plane
+/// the chart projects onto, so the cap never folds where the patch does not.
+/// Where the rim does not lie simply on that plane, the rings stepping in
+/// from the rim ([`cap_by_rings`]) cap it instead.
+fn cap(ring: &[usize], vertices: &mut Vec<Vec3>, triangles: &mut Vec<[usize; 3]>, face_side: f64, normal: Vec3) -> Result<(), String> {
+    // The patch walks a hole's rim against its own winding; the cap walks it back.
+    let reversed: Vec<usize> = ring.iter().rev().copied().collect();
+    match ears(vertices, &reversed, normal) {
+        Some(cut) => {
+            triangles.extend(cut);
+            Ok(())
+        }
+        None => {
+            cap_by_rings(ring, vertices, triangles, face_side)
+        }
     }
-    if rim_normal.length() < 1e-12 {
-        return Err("a hole in the ground has no area to cap".to_string());
-    }
-    let (u, v) = frame(-rim_normal.normalized());
-    let flat: Vec<ConstraintPoint> = points
-        .iter()
-        .enumerate()
-        .map(|(k, &p)| ConstraintPoint { position: Vec2::new((p - centre).dot(u), (p - centre).dot(v)), source: Some(k as u32) })
-        .collect();
-    let (mut min, mut max) = (Vec2::new(f64::MAX, f64::MAX), Vec2::new(f64::MIN, f64::MIN));
-    for point in &flat {
-        min = Vec2::new(min.x.min(point.position.x), min.y.min(point.position.y));
-        max = Vec2::new(max.x.max(point.position.x), max.y.max(point.position.y));
-    }
-    let side = face_side * FACE_SIDE_TO_LATTICE_SIDE * 0.5;
-    let options = ConstrainedOptions {
-        boundary: vec![flat],
-        holes: Vec::new(),
-        seeds: lattice_covering(min, max, side),
-        seed_clearance: side * 0.25,
-        max_area: lattice_triangle_area(side),
-        min_area: 0.0,
-        min_angle_degrees: 20.5,
-        max_additional_vertices: 5_000,
-    };
-    let laid = triangulate_constrained(&options).ok_or("a hole in the ground could not be capped")?;
-    let first_new = vertices.len();
-    let index: Vec<usize> = laid
-        .sources
-        .iter()
-        .zip(&laid.mesh.vertices)
-        .map(|(source, position)| match source {
-            Some(k) => ring[*k as usize],
-            None => {
-                vertices.push(centre + u * position.x + v * position.y);
-                vertices.len() - 1
+}
+
+/// Whether the closed polygon `points` crosses itself nowhere.
+fn simple(points: &[Vec2]) -> bool {
+    let n = points.len();
+    let cross = |a: Vec2, b: Vec2, c: Vec2| (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    for i in 0..n {
+        let (a, b) = (points[i], points[(i + 1) % n]);
+        for j in i + 1..n {
+            if j == i || (j + 1) % n == i || (i + 1) % n == j {
+                continue;
             }
-        })
-        .collect();
+            let (c, d) = (points[j], points[(j + 1) % n]);
+            let (d1, d2, d3, d4) = (cross(a, b, c), cross(a, b, d), cross(c, d, a), cross(c, d, b));
+            if (d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0) && d1 != 0.0 && d2 != 0.0 && d3 != 0.0 && d4 != 0.0 {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Caps the hole `ring` walks (the way the patch's faces walk it) with a
+/// membrane: rings of corners stepping in from the rim to a centre, wound
+/// like the patch, the inner corners settled to the mean of their neighbours
+/// with the rim held. Never projected, so a rim winding through three
+/// dimensions -- round a floor half sunk in a hill -- caps as well as a flat one.
+fn cap_by_rings(ring: &[usize], vertices: &mut Vec<Vec3>, triangles: &mut Vec<[usize; 3]>, face_side: f64) -> Result<(), String> {
+    let count = ring.len();
+    if count < 3 {
+        return Err("a hole in the ground has too few corners to cap".to_string());
+    }
+    let points: Vec<Vec3> = ring.iter().map(|&v| vertices[v]).collect();
+    let centre = points.iter().fold(Vec3::default(), |s, &p| s + p) * (1.0 / count as f64);
+    let reach = points.iter().map(|&p| p.distance(centre)).fold(0.0, f64::max);
+    let levels = ((reach / face_side).ceil() as usize).clamp(1, 64);
+    let first_new = vertices.len();
+    let first_triangle = triangles.len();
+    // `rings[0]` is the rim itself; each next one a step nearer the centre.
+    let mut rings: Vec<Vec<usize>> = vec![ring.to_vec()];
+    for level in 1..levels {
+        let t = level as f64 / levels as f64;
+        rings.push(
+            points
+                .iter()
+                .map(|&p| {
+                    vertices.push(p.lerp(centre, t));
+                    vertices.len() - 1
+                })
+                .collect(),
+        );
+    }
+    vertices.push(centre);
+    let middle = vertices.len() - 1;
+    // The patch walks the rim a -> b; the cap walks it b -> a.
+    for pair in rings.windows(2) {
+        let (outer, inner) = (&pair[0], &pair[1]);
+        for k in 0..count {
+            let (a, b) = (outer[k], outer[(k + 1) % count]);
+            let (c, d) = (inner[k], inner[(k + 1) % count]);
+            triangles.push([b, a, c]);
+            triangles.push([b, c, d]);
+        }
+    }
+    let last = rings.last().expect("the rim is a ring");
+    for k in 0..count {
+        triangles.push([last[(k + 1) % count], last[k], middle]);
+    }
+    // The membrane: every inner corner the mean of its neighbours.
     let mut neighbours: HashMap<usize, Vec<usize>> = HashMap::new();
-    for face in &laid.mesh.faces {
-        let t = [index[face[0]], index[face[1]], index[face[2]]];
-        // Wound counter-clockwise in a frame whose normal is the patch's.
-        let flat_area = signed_area_2d(laid.mesh.vertices[face[0]], laid.mesh.vertices[face[1]], laid.mesh.vertices[face[2]]);
-        triangles.push(if flat_area >= 0.0 { t } else { [t[0], t[2], t[1]] });
-        for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
-            for (p, q) in [(a, b), (b, a)] {
-                if p >= first_new {
-                    let list = neighbours.entry(p).or_default();
-                    if !list.contains(&q) {
-                        list.push(q);
-                    }
+    for &[a, b, c] in &triangles[first_triangle..] {
+        for (p, q) in [(a, b), (b, c), (c, a), (b, a), (c, b), (a, c)] {
+            if p >= first_new {
+                let list = neighbours.entry(p).or_default();
+                if !list.contains(&q) {
+                    list.push(q);
                 }
             }
         }
@@ -204,10 +303,19 @@ fn chart(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize]) -> Vec<Ve
     let (u, v) = frame(normal);
     let projected: Vec<Vec2> = vertices.iter().map(|&p| Vec2::new(p.dot(u), p.dot(v))).collect();
     // Projection is the chart wherever it keeps every triangle the right way round.
-    let one_to_one = triangles.iter().all(|&[a, b, c]| {
-        let flat = signed_area_2d(projected[a], projected[b], projected[c]);
-        flat > 1e-9 * area_normal(vertices, [a, b, c]).length().max(1e-12)
-    });
+    // Projection is the chart wherever its rim stays a simple polygon and no
+    // more than a sliver of the surface turns over in it -- a face left
+    // nearly flat on edge by an earlier edit. Only lifting near that sliver
+    // reads it, and the triangle under a point is the one it lies most inside.
+    let surface: f64 = triangles.iter().map(|&t| area_normal(vertices, t).length()).sum();
+    let turned: f64 = triangles
+        .iter()
+        .filter(|&&[a, b, c]| signed_area_2d(projected[a], projected[b], projected[c]) <= 1e-9 * area_normal(vertices, [a, b, c]).length().max(1e-12))
+        .map(|&t| area_normal(vertices, t).length())
+        .sum();
+    let rim: Vec<Vec2> = outer.iter().map(|&v| projected[v]).collect();
+    let rim_winding: f64 = (0..rim.len()).map(|i| rim[i].x * rim[(i + 1) % rim.len()].y - rim[(i + 1) % rim.len()].x * rim[i].y).sum();
+    let one_to_one = turned <= surface * TURNED_SHARE_TOLERATED && rim_winding > 0.0 && simple(&rim);
     if one_to_one {
         return projected;
     }
@@ -322,6 +430,74 @@ impl<'a> Locator<'a> {
     }
 }
 
+/// Closed rings of the plane, each corner with its source.
+type Rings = Vec<Vec<ConstraintPoint>>;
+
+/// `rim` less every one of `holes`, on the plane: the boundary rings and hole
+/// rings of what is left, each corner carrying the source of the point of
+/// `known` it stands on, or none where the boolean made it.
+fn ground_less_holes(
+    rim: &[ConstraintPoint],
+    holes: &[Vec<ConstraintPoint>],
+    known: &[ConstraintPoint],
+    near: f64,
+) -> Result<(Rings, Rings), String> {
+    let ring = |points: &[ConstraintPoint]| points.iter().map(|p| [p.position.x, p.position.y]).collect::<Vec<[f64; 2]>>();
+    let subject: Vec<Vec<[f64; 2]>> = vec![ring(rim)];
+    let clip: Vec<Vec<Vec<[f64; 2]>>> = holes.iter().filter(|h| h.len() >= 3).map(|h| vec![ring(h)]).collect();
+    let pieces = subject.overlay(&clip, OverlayRule::Difference, FillRule::NonZero);
+    let named = |[x, y]: [f64; 2]| -> ConstraintPoint {
+        let source = known
+            .iter()
+            .filter(|p| (p.position.x - x).hypot(p.position.y - y) <= near * 100.0)
+            .min_by(|a, b| (a.position.x - x).hypot(a.position.y - y).total_cmp(&(b.position.x - x).hypot(b.position.y - y)))
+            .and_then(|p| p.source);
+        let at = source.and_then(|s| known.iter().find(|p| p.source == Some(s))).map_or(Vec2::new(x, y), |p| p.position);
+        ConstraintPoint { position: at, source }
+    };
+    // The boolean drops corners lying straight between their neighbours; the
+    // rim's own corners go back in wherever they stand on a side of the result.
+    let restored = |contour: Vec<[f64; 2]>| -> Vec<[f64; 2]> {
+        let mut out = Vec::with_capacity(contour.len());
+        for k in 0..contour.len() {
+            let (a, b) = (contour[k], contour[(k + 1) % contour.len()]);
+            out.push(a);
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let length_squared = dx * dx + dy * dy;
+            if length_squared <= 0.0 {
+                continue;
+            }
+            let mut between: Vec<(f64, [f64; 2])> = known
+                .iter()
+                .filter_map(|p| {
+                    let (x, y) = (p.position.x, p.position.y);
+                    let t = ((x - a[0]) * dx + (y - a[1]) * dy) / length_squared;
+                    let off = (x - a[0] - dx * t).hypot(y - a[1] - dy * t);
+                    (t > 1e-9 && t < 1.0 - 1e-9 && off <= near * 100.0).then_some((t, [x, y]))
+                })
+                .collect();
+            between.sort_by(|p, q| p.0.total_cmp(&q.0));
+            out.extend(between.into_iter().map(|(_, point)| point));
+        }
+        out.dedup_by(|p, q| (p[0] - q[0]).hypot(p[1] - q[1]) <= near);
+        out
+    };
+    let (mut outer, mut inner) = (Vec::new(), Vec::new());
+    for piece in pieces {
+        for (k, contour) in piece.into_iter().enumerate() {
+            let points: Vec<ConstraintPoint> = restored(contour).into_iter().map(named).collect();
+            if points.len() < 3 {
+                continue;
+            }
+            if k == 0 { outer.push(points) } else { inner.push(points) }
+        }
+    }
+    if outer.is_empty() {
+        return Err("os buracos tomam toda a terra a refazer".to_string());
+    }
+    Ok((outer, inner))
+}
+
 /// Barycentric weights of `point` (on the triangle's plane) in `a b c`.
 fn barycentric(point: Vec3, a: Vec3, b: Vec3, c: Vec3) -> [f64; 3] {
     let (v0, v1, v2) = (b - a, c - a, point - a);
@@ -338,7 +514,7 @@ fn barycentric(point: Vec3, a: Vec3, b: Vec3, c: Vec3) -> [f64; 3] {
 /// Lays `patch` again on its own surface, going round `regeneration.holes`.
 pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<RegeneratedSurface, String> {
     let face_side = regeneration.face_side.max(0.05);
-    let patch_triangles = triangles_of(&patch.faces);
+    let patch_triangles = triangles_of(&patch.vertices, &patch.faces);
     if patch_triangles.is_empty() {
         return Err("no ground to lay again".to_string());
     }
@@ -348,12 +524,20 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
         .ok_or("the ground to lay again has no border")?;
     let outer = loops[outer_index].clone();
 
+    // A hole touching the rim is the rim pinched at a corner, not a hole:
+    // capping it would cover ground outside the patch.
+    let on_outer: HashSet<usize> = outer.iter().copied().collect();
+    if loops.iter().enumerate().any(|(i, ring)| i != outer_index && ring.iter().any(|v| on_outer.contains(v))) {
+        return Err("a borda da terra a refazer encosta nela mesma".to_string());
+    }
+
     // The surface the new ground lies on: the patch, its holes capped.
     let mut support = patch.vertices.clone();
     let mut triangles = patch_triangles;
+    let patch_normal = triangles.iter().fold(Vec3::default(), |sum, &t| sum + area_normal(&support, t)).normalized();
     for (i, ring) in loops.iter().enumerate() {
         if i != outer_index {
-            cap(ring, &mut support, &mut triangles, face_side)?;
+            cap(ring, &mut support, &mut triangles, face_side, patch_normal)?;
         }
     }
     let used: HashSet<usize> = triangles.iter().flatten().copied().collect();
@@ -366,7 +550,7 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
     // Scaled so a face of the chart is a face of the surface, on the whole.
     let surface_area: f64 = triangles.iter().map(|&t| area_normal(&support, t).length() * 0.5).sum();
     let chart_area: f64 = triangles.iter().map(|&[a, b, c]| signed_area_2d(flat[a], flat[b], flat[c])).sum();
-    if !(chart_area > 0.0) {
+    if chart_area.is_nan() || chart_area <= 0.0 {
         return Err("o mapa da terra a refazer saiu do avesso".to_string());
     }
     let scale = (surface_area / chart_area).sqrt();
@@ -375,10 +559,37 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
     }
     let locator = Locator::new(&flat, &triangles, face_side);
     let on_support = MeshDistance::new(support.clone(), &triangles.iter().map(|t| t.to_vec()).collect::<Vec<_>>(), face_side);
+    // A point on the surface goes through the triangle under it; one past the
+    // rim -- a structure's ring running on beyond the ground being laid --
+    // goes past the chart's rim as far as it lies past the surface's, so a
+    // side crossing the rim crosses it in the chart where it does on the ground.
     let to_chart = |point: Vec3| -> Vec2 {
         let Some((closest, [a, b, c])) = on_support.closest(point) else { return Vec2::new(0.0, 0.0) };
         let w = barycentric(closest, support[a], support[b], support[c]);
-        Vec2::new(w[0] * flat[a].x + w[1] * flat[b].x + w[2] * flat[c].x, w[0] * flat[a].y + w[1] * flat[b].y + w[2] * flat[c].y)
+        let on = Vec2::new(w[0] * flat[a].x + w[1] * flat[b].x + w[2] * flat[c].x, w[0] * flat[a].y + w[1] * flat[b].y + w[2] * flat[c].y);
+        let off = point.distance(closest);
+        if off < 1e-6 {
+            return on;
+        }
+        let (mut best, mut best_k, mut best_t) = (f64::INFINITY, 0, 0.0);
+        for k in 0..outer.len() {
+            let (p, q) = (support[outer[k]], support[outer[(k + 1) % outer.len()]]);
+            let along = q - p;
+            let t = if along.dot(along) > 0.0 { ((point - p).dot(along) / along.dot(along)).clamp(0.0, 1.0) } else { 0.0 };
+            let d = point.distance(p.lerp(q, t));
+            if d < best {
+                (best, best_k, best_t) = (d, k, t);
+            }
+        }
+        // Over or under the surface's inside, not past its rim: the triangle under it.
+        if best > off * (1.0 + 1e-6) + 1e-9 {
+            return on;
+        }
+        let (p, q) = (flat[outer[best_k]], flat[outer[(best_k + 1) % outer.len()]]);
+        let (dx, dy) = (q.x - p.x, q.y - p.y);
+        let length = dx.hypot(dy).max(1e-12);
+        // The rim runs counter-clockwise, so outward is to its right.
+        Vec2::new(p.x + dx * best_t + dy / length * best, p.y + dy * best_t - dx / length * best)
     };
 
     // One numbering for the generator: patch vertices first, then the given points.
@@ -403,11 +614,31 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
                 .collect()
         })
         .collect();
-    let rings_3d: Vec<Vec<u32>> = std::iter::once(boundary[0].iter().map(|p| p.source.unwrap()).collect())
-        .chain(holes.iter().map(|ring| ring.iter().map(|p| p.source.unwrap()).collect()))
+    // **The ground to lay, in the chart: the rim less the holes**, by a planar
+    // boolean. Handed to the triangulation raw, a hole's side running along
+    // the rim, or past it, is a constraint over another -- which the
+    // triangulation does not survive, and its failure is the session's. Every
+    // corner of the result is matched back to the point it is; a corner the
+    // boolean made, where a hole crosses the rim, is new.
+    let known: Vec<ConstraintPoint> = boundary[0].iter().chain(holes.iter().flatten()).copied().collect();
+    let extent = known.iter().fold(1.0_f64, |m, p| m.max(p.position.x.abs()).max(p.position.y.abs()));
+    let near = extent * 1e-7;
+    let sides: Vec<(Vec2, Vec2, u32, u32, bool)> = std::iter::once((&boundary[0], false))
+        .chain(holes.iter().map(|ring| (ring, true)))
+        .flat_map(|(ring, hole)| (0..ring.len()).map(move |k| {
+            let (p, q) = (ring[k], ring[(k + 1) % ring.len()]);
+            (p.position, q.position, p.source.unwrap(), q.source.unwrap(), hole)
+        }))
         .collect();
+    let (ground_boundary, ground_holes) = if holes.is_empty() {
+        (boundary, Vec::new())
+    } else {
+        ground_less_holes(&boundary[0], &holes, &known, near)?
+    };
     let relax = RelaxOptions { iterations: RelaxOptions::standard().iterations, strength: regeneration.relax_strength, pin_boundary: false, pinned_targets: Default::default() };
-    let grid = ground_grid(boundary, holes.clone(), face_side, regeneration.seed, &GroundRefinement::default(), &relax)?;
+    let rings: Vec<Vec<ConstraintPoint>> = ground_boundary.iter().chain(&ground_holes).cloned().collect();
+    let boundary_count = ground_boundary.len();
+    let grid = ground_grid(ground_boundary, ground_holes, face_side, regeneration.seed, &GroundRefinement::default(), &relax)?;
 
     // Lifted back onto the surface.
     let mut origin: Vec<Option<Origin>> = vec![None; grid.mesh.vertices.len()];
@@ -422,22 +653,41 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
         let (corners, w) = locator.locate(point);
         vertices.push(support[corners[0]] * w[0] + support[corners[1]] * w[1] + support[corners[2]] * w[2]);
     }
+    let on_segment = |point: Vec2, from: Vec2, to: Vec2| {
+        let (dx, dy) = (to.x - from.x, to.y - from.y);
+        let length_squared = dx * dx + dy * dy;
+        let t = if length_squared > 0.0 { (((point.x - from.x) * dx + (point.y - from.y) * dy) / length_squared).clamp(0.0, 1.0) } else { 0.0 };
+        (point.x - from.x - dx * t).hypot(point.y - from.y - dy * t) <= near * 100.0
+    };
     let mut landed = Vec::new();
     for node in &grid.on_contour {
-        let ring = &rings_3d[if node.location.in_holes { node.location.ring + 1 } else { 0 }];
-        let (from, to) = (ring[node.location.segment], ring[(node.location.segment + 1) % ring.len()]);
+        let ring = &rings[if node.location.in_holes { boundary_count + node.location.ring } else { node.location.ring }];
+        let (p, q) = (ring[node.location.segment].position, ring[(node.location.segment + 1) % ring.len()].position);
+        // The side somebody holds this piece of the contour runs along: a
+        // structure's before the rim, where the two meet.
+        let Some(&(_, _, from, to, _)) = sides
+            .iter()
+            .filter(|side| on_segment(p, side.0, side.1) && on_segment(q, side.0, side.1))
+            .max_by_key(|side| side.4)
+        else {
+            continue;
+        };
         let (from_origin, a) = origin_of(from);
         let (to_origin, b) = origin_of(to);
-        // On the side itself, at the share of it the chart puts the corner at.
-        let chart_point = |source: u32| -> Vec2 {
-            let s = source as usize;
-            if s < patch_count { flat[s] } else { holes.iter().flatten().find(|p| p.source == Some(source)).map(|p| p.position).unwrap_or(Vec2::new(0.0, 0.0)) }
-        };
-        let (p, q, m) = (chart_point(from), chart_point(to), grid.mesh.vertices[node.vertex]);
-        let along = Vec2::new(q.x - p.x, q.y - p.y);
-        let length_squared = along.x * along.x + along.y * along.y;
-        let t = if length_squared > 0.0 { (((m.x - p.x) * along.x + (m.y - p.y) * along.y) / length_squared).clamp(0.0, 1.0) } else { 0.0 };
-        vertices[node.vertex] = a.lerp(b, t);
+        // Where the chart puts it on the surface, brought onto the side itself:
+        // a side's share measured in the chart is no share of it in 3D once
+        // the side runs on past the rim.
+        let lifted = vertices[node.vertex];
+        let along = b - a;
+        let t = if along.dot(along) > 0.0 { ((lifted - a).dot(along) / along.dot(along)).clamp(0.0, 1.0) } else { 0.0 };
+        let on_side = a.lerp(b, t);
+        // A side met only past the surface's rim lies elsewhere on the ground
+        // than the chart says: the corner stays where the chart put it, the
+        // ground's own, rather than be dragged across to it.
+        if on_side.distance(lifted) > face_side {
+            continue;
+        }
+        vertices[node.vertex] = on_side;
         landed.push(Landing { vertex: node.vertex, from: from_origin, to: to_origin });
     }
 

@@ -18,9 +18,8 @@ import {
   isGroundType,
   nearestOnSegment,
 } from "../../../features/edit-construction/index.ts";
-import { buildConstraintRings } from "./constraint-rings.ts";
 import { commitGround, indexedFaces, type GroundCommitRuntime } from "./ground-commit.ts";
-import { heightRangeOf, medianFaceSide, surfaceComponents, walkSurface } from "./ground-surface.ts";
+import { closedPatch, heightRangeOf, regrowFaceSide, surfaceComponents, walkSurface } from "./ground-surface.ts";
 import { meetStructures } from "./structure-contact.ts";
 import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
 import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
@@ -121,45 +120,104 @@ export function regrowGround(runtime: TerrainRegrowRuntime, fallout: CutFallout,
   ];
   const stroke = boxOf(planPoints, footprint !== undefined || vacated.length > 0 ? STROKE_MARGIN : 0);
   if (stroke === undefined) return 0;
+  // One stroke round each place: where it stood and where it stands are two
+  // when it moved far, and the ground it passed over between is left alone.
+  const strokes = [
+    ...(footprint ? [boxOf(footprint, STROKE_MARGIN)] : []),
+    ...vacated.map((piece) => boxOf(piece[0] ?? [], STROKE_MARGIN)),
+    ...(footprint === undefined && vacated.length === 0 ? [stroke] : []),
+    ...(removedStructure.length > 0 ? [boxOf(removedStructure.flatMap((face) => face.nodes.map((node) => [node.position.x, node.position.z] as const)), STROKE_MARGIN)] : []),
+  ].filter((box): box is NonNullable<typeof box> => box !== undefined);
   const nearby = timePhase("terreno em volta", () => runtime.getRegionTopologiesInBounds({
     minX: stroke.minX - STROKE_MARGIN, minZ: stroke.minZ - STROKE_MARGIN, maxX: stroke.maxX + STROKE_MARGIN, maxZ: stroke.maxZ + STROKE_MARGIN,
   }));
   const stale = new Set((fallout.draggedSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   const ground = nearby.filter((face) => isGroundType(face.surfaceType) && face.outerLoops.length === 1 && face.holes.length === 0);
-  const faceSide = medianFaceSide(consumed.length > 0 ? consumed : ground);
-  const band = { low: lowest - GROUND_CONTACT_CLEARANCE - GROUND_SIDE_REST_ROOM - faceSide, high: highest + BAND_OVER_FACES * faceSide };
+  const faceSide = regrowFaceSide(consumed.length > 0 ? consumed : ground);
+  // Down to where the contact law reaches under it, no further: ground deeper
+  // than that passes under the structure untouched.
+  const band = { low: lowest - GROUND_CONTACT_CLEARANCE - GROUND_SIDE_REST_ROOM, high: highest + BAND_OVER_FACES * faceSide };
   const inBand = (face: ConstructionRegionTopology) => {
     const { low, high } = heightRangeOf(face);
     return high >= band.low && low <= band.high;
   };
   const inStroke = (face: ConstructionRegionTopology) => {
     const c = centreOf(face);
-    return c.x >= stroke.minX && c.x <= stroke.maxX && c.z >= stroke.minZ && c.z <= stroke.maxZ;
+    return strokes.some((box) => c.x >= box.minX && c.x <= box.maxX && c.z >= box.minZ && c.z <= box.maxZ);
   };
 
   // **The layer**: walked from what the change consumed, over shared edges.
   const painted = new Set(fallout.paintedNodes.map((node) => node.id));
+  // **The rim of what was vacated**, at whatever height it runs: the faces
+  // with a side nobody else holds inside where a structure stood. A floor
+  // half sunk in a hill leaves a rim climbing the hill, over its band; a
+  // cave's ceiling over that floor holds no such side, so it never comes in.
+  const uses = new Map<string, number>();
+  for (const face of nearby) for (const use of [...face.outerLoops, ...face.holes].flat()) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
+  const vacatedBox = boxOf(vacated.flatMap((piece) => piece[0] ?? []), faceSide);
+  const insideVacated = (p: ConstructionPosition) => vacatedBox !== undefined && p.x >= vacatedBox.minX && p.x <= vacatedBox.maxX && p.z >= vacatedBox.minZ && p.z <= vacatedBox.maxZ;
+  const rimOfVacated = new Set(ground.filter((face) => face.outerLoops.flat().some((use) => {
+    if (uses.get(use.edgeId) !== 1) return false;
+    const at = new Map(face.nodes.map((node) => [node.id, node.position]));
+    const a = at.get(use.startNodeId), b = at.get(use.endNodeId);
+    return a !== undefined && b !== undefined && insideVacated(a) && insideVacated(b);
+  })).map((face) => face.surfaceKey.join("\u0000")));
+  const onRimOfVacated = (face: ConstructionRegionTopology) => rimOfVacated.has(face.surfaceKey.join("\u0000"));
   const seeds = [
     ...consumed.filter(inBand),
     ...ground.filter((face) => inBand(face) && face.nodes.some((node) => painted.has(node.id))),
+    ...ground.filter(onRimOfVacated),
   ];
-  const patch = walkSurface(ground, seeds, (face) => stale.has(face.surfaceKey.join("\u0000")) || (inBand(face) && (inStroke(face) || seeds.includes(face))));
+  const walked = walkSurface(ground, seeds, (face) => stale.has(face.surfaceKey.join("\u0000")) || onRimOfVacated(face) || (inBand(face) && (inStroke(face) || seeds.includes(face))));
+  // A disk the engine can lay: no corner pinched, no island of ground left inside.
+  // A face an edit dragged out of shape is laid again but never read as the
+  // surface: it runs from where it lay to where the structure went. So it is
+  // ringed by faces that are, and its ground comes back over the hole it leaves.
+  const staleNodes = new Set(walked.filter((face) => stale.has(face.surfaceKey.join("\u0000"))).flatMap((face) => face.nodes.map((node) => node.id)));
+  const ringed = [...walked, ...ground.filter((face) => inBand(face) && face.nodes.some((node) => staleNodes.has(node.id)))];
+  const closable = ground.filter((face) => inBand(face) || onRimOfVacated(face) || stale.has(face.surfaceKey.join("\u0000")));
+  const closed = closedPatch(ringed, closable);
+  // Every structure resting on it rests wholly inside it: its contact a hole
+  // the patch rings round, never a side running on past the patch's rim.
+  const patch = closedPatch([...closed, ...groundRoundContact(runtime, closed, closable, faceSide, groundTypeOf(consumed, closed))], closable);
   if (patch.length === 0) return 0;
   const patchKeys = new Set(patch.map((face) => face.surfaceKey.join("\u0000")));
   const around = nearby.filter((face) => !patchKeys.has(face.surfaceKey.join("\u0000")));
   // The ground the structures rest on, read from this layer alone.
   const layer = ground.filter((face) => inBand(face) && !stale.has(face.surfaceKey.join("\u0000")));
-  const groundType = hasTrait(consumed[0]?.surfaceType ?? "", "ground") ? consumed[0]!.surfaceType : patch[0]!.surfaceType;
+  const groundType = groundTypeOf(consumed, patch);
 
   let built = 0;
   surfaceComponents(patch).forEach((piece, pieceIndex) => {
     built += regrowPiece(runtime, {
-      piece, around, layer, groundType, faceSide, carriedFrom: fallout.carriedFrom,
+      piece, around, layer, groundType, faceSide, stale,
       operationId: `${causeId}:regrow-${pieceIndex}`, tableId,
       seed: hashOf(fallout.consumedSurfaceKeys),
     });
   });
   return built;
+}
+
+function groundTypeOf(consumed: readonly ConstructionRegionTopology[], patch: readonly ConstructionRegionTopology[]): string {
+  return hasTrait(consumed[0]?.surfaceType ?? "", "ground") ? consumed[0]!.surfaceType : patch[0]?.surfaceType ?? "terrain";
+}
+
+/** The ground of `closable` lying within a face of where a structure rests on `patch`'s layer. */
+function groundRoundContact(
+  runtime: TerrainRegrowRuntime,
+  patch: readonly ConstructionRegionTopology[],
+  closable: readonly ConstructionRegionTopology[],
+  faceSide: number,
+  groundType: string,
+): ConstructionRegionTopology[] {
+  if (patch.length === 0) return [];
+  const box = boxOf(patch.flatMap((face) => face.nodes.map((node) => [node.position.x, node.position.z] as const)), faceSide)!;
+  const meeting = meetStructures(runtime, box, groundType, closable);
+  const reaches = meeting.area.flatMap((piece) => {
+    const reach = boxOf(piece[0] ?? [], faceSide);
+    return reach ? [reach] : [];
+  });
+  return closable.filter((face) => face.nodes.some((node) => reaches.some((r) => node.position.x >= r.minX && node.position.x <= r.maxX && node.position.z >= r.minZ && node.position.z <= r.maxZ)));
 }
 
 interface PieceRequest {
@@ -168,7 +226,8 @@ interface PieceRequest {
   readonly layer: readonly ConstructionRegionTopology[];
   readonly groundType: string;
   readonly faceSide: number;
-  readonly carriedFrom: ReadonlyMap<ConstructionNodeId, ConstructionPosition> | undefined;
+  /** Keys of the faces an edit dragged out of shape: replaced, never read as the surface. */
+  readonly stale: ReadonlySet<string>;
   readonly operationId: string;
   readonly tableId: string;
   readonly seed: number;
@@ -183,43 +242,51 @@ function regrowPiece(runtime: TerrainRegrowRuntime, request: PieceRequest): numb
   // Where the structures rest on this layer: the holes the ground goes round.
   const meeting = meetStructures(runtime, box, request.groundType, request.layer);
   const table = meeting.constraints([]);
-  const rings = meeting.area.length > 0 ? buildConstraintRings(meeting.area, faceSide, table, meeting.liesOnSide) : [];
   const groundAt = groundSurfaceOf(request.layer, new Set(table.sources));
   const live = runtime.getSnapshot().map.nodePositions;
+  // The structures' own corners and sides, to name what the contact's corners are.
+  const corners = table.sources.flatMap((id) => {
+    const at = live.get(id)?.position;
+    return at ? [{ id, at }] : [];
+  });
+  const sidesOfStructures = table.rings.flatMap((ring) => ring.edges.flatMap((edge) => {
+    const a = edge && live.get(edge.startNodeId)?.position, b = edge && live.get(edge.endNodeId)?.position;
+    return edge && a && b ? [{ edge, a, b }] : [];
+  }));
+  const sideThrough = (point: { readonly x: number; readonly z: number }) => sidesOfStructures.find((side) => nearestOnSegment(point, side.a, side.b).distance < 1e-6)?.edge;
 
-  // One table of given points: the node each is, or where it lies and on which side.
+  // The contact's rings as they are -- never resampled, never snapped: each
+  // corner the structure's node it stands on, or a point on the side it lies
+  // on, which the ground then splits there.
   const given: { readonly node?: ConstructionNodeId; readonly position: ConstructionPosition; readonly side?: ConstructionRegionEdge }[] = [];
   const segmentSide = new Map<string, ConstructionRegionEdge>();
-  const holes = rings.filter((ring) => !ring.isHole && ring.points.length >= 3).map((ring) => {
-    const ids = ring.points.map((point, index) => {
-      const node = point.source !== undefined ? table.sources[point.source] : undefined;
-      const at = node !== undefined ? live.get(node)?.position : undefined;
-      const position = at ?? { x: point.x, y: meeting.heightAt(point) ?? groundAt(point) ?? 0, z: point.z };
-      // A corner of the ring partway along a structure's side splits that side.
-      const side = node === undefined
-        ? [ring.edges[index], ring.edges[(index - 1 + ring.points.length) % ring.points.length]].find((edge) => {
-          const a = edge && live.get(edge.startNodeId)?.position, b = edge && live.get(edge.endNodeId)?.position;
-          return a !== undefined && b !== undefined && nearestOnSegment(point, a, b).distance < 1e-3;
-        })
-        : undefined;
-      given.push({ node, position, side });
+  const holes = meeting.area.flatMap((piece) => {
+    const closed = piece[0] ?? [];
+    const ring = closed.length > 1 && closed[0]![0] === closed.at(-1)![0] && closed[0]![1] === closed.at(-1)![1] ? closed.slice(0, -1) : closed;
+    if (ring.length < 3) return [];
+    const ids = ring.map(([x, z]) => {
+      const point = { x, z };
+      const node = corners.find((corner) => Math.hypot(corner.at.x - x, corner.at.z - z) < 1e-6);
+      const side = node === undefined ? sideThrough(point) : undefined;
+      const position = node?.at ?? { x, y: meeting.heightAt(point) ?? groundAt(point) ?? 0, z };
+      given.push({ node: node?.id, position, side });
       return given.length - 1;
     });
     ids.forEach((id, index) => {
-      const edge = ring.edges[index];
-      if (edge !== undefined) segmentSide.set(`${id}:${ids[(index + 1) % ids.length]}`, edge);
+      const next = ids[(index + 1) % ids.length]!;
+      const a = given[id]!.position, b = given[next]!.position;
+      const edge = sidesOfStructures.find((side) => nearestOnSegment(a, side.a, side.b).distance < 1e-6 && nearestOnSegment(b, side.a, side.b).distance < 1e-6)?.edge;
+      if (edge !== undefined) segmentSide.set(`${id}:${next}`, edge);
     });
-    return ids.map((id) => ({ position: [given[id]!.position.x, given[id]!.position.y, given[id]!.position.z] as const, id }));
+    return [ids.map((id) => ({ position: [given[id]!.position.x, given[id]!.position.y, given[id]!.position.z] as const, id }))];
   });
 
-  // The piece as it lay: a node an edit carried away is read where it was.
-  const indexed = indexedFaces(piece);
-  const vertices = indexed.vertices.map((v, i) => {
-    const was = request.carriedFrom?.get(indexed.ids[i]!);
-    return was ? ([was.x, was.y, was.z] as const) : v;
-  });
+  // The surface as it lies, less what an edit dragged out of shape.
+  const surface = piece.filter((face) => !request.stale.has(face.surfaceKey.join("\u0000")));
+  if (surface.length === 0) return 0;
+  const indexed = indexedFaces(surface);
   const laid = timePhase(`terreno na superfície (${piece.length} faces)`, () => runtime.regenerateTerrainSurface({
-    patch: { vertices, faces: indexed.faces },
+    patch: { vertices: indexed.vertices, faces: indexed.faces },
     holes,
     faceSide,
     seed: request.seed,

@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+const require_fs = () => ({ writeFileSync });
+let regrowCount = 0;
 import { initSync, ConstructionSession } from "../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js";
 import { cloudTypesFor, createEditHistoryStack, hasTrait, surfaceTypesWithTrait } from "../src/features/edit-construction/index.ts";
 
@@ -73,8 +75,13 @@ export function sessionFixture() {
     },
     regenerateTerrainSurface(request) {
       try {
+        if (process.env.REGROW_DUMP_ALL) require_fs().writeFileSync(`${process.env.REGROW_DUMP_ALL}-${String(++regrowCount).padStart(3, "0")}.json`, JSON.stringify({ request }));
         return JSON.parse(session.regenerate_terrain_surface_json(JSON.stringify(request)));
-      } catch {
+      } catch (error) {
+        if (process.env.REGROW_DEBUG) {
+          console.error("[regrow]", String(error?.message ?? error));
+          if (process.env.REGROW_DUMP) require_fs().writeFileSync(`${process.env.REGROW_DUMP}-${Date.now()}.json`, JSON.stringify({ error: String(error?.message ?? error), request }));
+        }
         return undefined;
       }
     },
