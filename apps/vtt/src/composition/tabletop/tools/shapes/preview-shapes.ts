@@ -448,11 +448,13 @@ export function capsuleWireframe(
   radius: number,
   color: number,
   opacity = 0.75,
+  /** How tall against how wide: `1` round, less a squashed pile, `0` flat on its plan. */
+  squash = 1,
 ): PreviewDescriptor {
   const positions: number[] = [];
   const add = (a: ConstructionPosition, b: ConstructionPosition) => positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
   const plus = (p: ConstructionPosition, u: ConstructionPosition, s: number, v: ConstructionPosition, t: number): ConstructionPosition => ({
-    x: p.x + u.x * s + v.x * t, y: p.y + u.y * s + v.y * t, z: p.z + u.z * s + v.z * t,
+    x: p.x + u.x * s + v.x * t, y: p.y + (u.y * s + v.y * t) * squash, z: p.z + u.z * s + v.z * t,
   });
   const ring = (centre: ConstructionPosition, u: ConstructionPosition, v: ConstructionPosition) => {
     for (let i = 0; i < VOLUME_RING_SIDES; i++) {

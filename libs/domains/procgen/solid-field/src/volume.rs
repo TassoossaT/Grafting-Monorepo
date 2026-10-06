@@ -7,7 +7,7 @@
 use fast_surface_nets::ndshape::{RuntimeShape, Shape as _};
 use fast_surface_nets::{SurfaceNetsBuffer, surface_nets};
 
-use crate::field::{Shape, with_shapes};
+use crate::field::{Effect, Shape, with_shapes};
 use crate::mesh_distance::MeshDistance;
 use crate::table::TableFloor;
 use crate::vector::Vec3;
@@ -28,11 +28,22 @@ impl EditField<'_> {
         // Where no ground stands over or under a point, it is in no ground's
         // solid -- whatever the sign past a ground's open border says -- and
         // the table is the floor there.
-        let base = match self.table.and_then(|table| table.distance(point)) {
-            Some(table) => ground.abs().min(table),
+        let table = self.table.and_then(|table| table.distance(point).map(|distance| (distance, table.height)));
+        let base = match table {
+            Some((table, _)) => ground.abs().min(table),
             None => ground,
         };
-        with_shapes(base, point, self.shapes, self.blend)
+        // Where the point stands on what it was asked about, for a layer's depth.
+        let layered = self.shapes.iter().any(|shape| matches!(shape.effect, Effect::Raise | Effect::Lower));
+        let foot = if !layered {
+            point
+        } else {
+            match table {
+                Some((distance, height)) if distance <= ground.abs() => Vec3::new(point.x, height, point.z),
+                _ => self.ground.closest(point).map_or(point, |(closest, _)| closest),
+            }
+        };
+        with_shapes(base, point, foot, self.shapes, self.blend)
     }
 
     /// The direction out of the solid at `point`, unnormalised.

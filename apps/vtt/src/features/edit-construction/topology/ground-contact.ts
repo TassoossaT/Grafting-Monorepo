@@ -41,7 +41,43 @@ export const GROUND_SIDE_REST_ROOM = 0.25;
 type Plan = { readonly x: number; readonly z: number };
 
 /** The ground's height at a point in plan; `undefined` where there is no ground to speak of. */
-export type GroundHeightAt = (point: Plan) => number | undefined;
+/**
+ * The ground's height over a point in plan. Given the height of what stands
+ * there -- `reference` -- the ground that is that thing's own business: the
+ * first surface over it when that faces up (it is sunk in the ground there),
+ * else the first under it. A cave's ceiling over a floor is never its ground.
+ */
+export type GroundHeightAt = (point: Plan, reference?: number) => number | undefined;
+
+/**
+ * Of the ground surfaces over one point -- each its height there and whether
+ * it faces up -- the one a thing at `reference` meets: the nearest over it
+ * if that faces up, the thing being sunk in the ground there; else the
+ * nearest under it; `undefined` with neither, a ceiling alone over it.
+ */
+export function groundLayerAt(layers: readonly { readonly height: number; readonly facesUp: boolean }[], reference: number): number | undefined {
+  let over: { readonly height: number; readonly facesUp: boolean } | undefined;
+  let under: number | undefined;
+  for (const layer of layers) {
+    if (layer.height > reference + 1e-6) {
+      if (over === undefined || layer.height < over.height) over = layer;
+    } else if (under === undefined || layer.height > under) {
+      under = layer.height;
+    }
+  }
+  return over?.facesUp ? over.height : under;
+}
+
+/** Whether a ground face faces up: the tabletop winds ground with its right-hand normal pointing down. */
+export function facesUp(topology: ConstructionRegionTopology): boolean {
+  const ring = faceRings(topology)[0] ?? [];
+  let y = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+    y += (a.z - b.z) * (a.x + b.x);
+  }
+  return y < 0;
+}
 
 /** One square of a contact sampling grid, as a closed ring. */
 export type ContactCell = readonly (readonly [number, number])[];
@@ -89,7 +125,7 @@ export function groundContactOf(topology: ConstructionRegionTopology, groundAt: 
   const sampled = (reach: number) => {
     const over = (p: Plan) => {
       if (alongHeld(p)) return -1;
-      const ground = groundAt(p);
+      const ground = groundAt(p, surfaceAt(p));
       return ground === undefined ? 1 : surfaceAt(p) - ground - reach;
     };
     const values: number[][] = [];
@@ -203,7 +239,7 @@ export function groundSurfaceOf(ground: readonly ConstructionRegionTopology[], o
     const heightAt = surfaceHeightOf(topology);
     if (!heightAt) return [];
     const xs = topology.nodes.map((node) => node.position.x), zs = topology.nodes.map((node) => node.position.z);
-    return [{ topology, heightAt, minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) }];
+    return [{ topology, heightAt, up: facesUp(topology), minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) }];
   });
   const size = 4;
   const buckets = new Map<string, (typeof faces)[number][]>();
@@ -218,12 +254,27 @@ export function groundSurfaceOf(ground: readonly ConstructionRegionTopology[], o
   const rim = ground.flatMap((topology) => topology.nodes).filter((node) => !own.has(node.id)).map((node) => node.position);
   const nearby = groundHeightsOf(rim, GROUND_HOLE_REACH);
   const around = groundHeightsOf(rim, GROUND_READ_REACH);
-  return (point) => {
+  // Where a thing stands, the rim of a hole it cut is read from below and
+  // round it only: a ceiling's rim over it is no ground of its own.
+  const rimUnder = (reference: number) => {
+    const low = rim.filter((node) => node.y <= reference + GROUND_CONTACT_CLEARANCE);
+    return { nearby: groundHeightsOf(low, GROUND_HOLE_REACH), around: groundHeightsOf(low, GROUND_READ_REACH) };
+  };
+  const rimCache = new Map<number, ReturnType<typeof rimUnder>>();
+  return (point, reference) => {
+    const layers: { height: number; facesUp: boolean }[] = [];
     for (const face of buckets.get(`${Math.floor(point.x / size)}:${Math.floor(point.z / size)}`) ?? []) {
       if (point.x < face.minX - 1e-9 || point.x > face.maxX + 1e-9 || point.z < face.minZ - 1e-9 || point.z > face.maxZ + 1e-9) continue;
-      if (insideFace(face.topology, point)) return face.heightAt(point);
+      if (!insideFace(face.topology, point)) continue;
+      if (reference === undefined) return face.heightAt(point);
+      layers.push({ height: face.heightAt(point), facesUp: face.up });
     }
-    return nearby(point) ?? around(point);
+    if (reference === undefined) return nearby(point) ?? around(point);
+    if (layers.length > 0) return groundLayerAt(layers, reference);
+    const key = Math.round(reference * 100);
+    let low = rimCache.get(key);
+    if (!low) rimCache.set(key, (low = rimUnder(reference)));
+    return low.nearby(point) ?? low.around(point);
   };
 }
 

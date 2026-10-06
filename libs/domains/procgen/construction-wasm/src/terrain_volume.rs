@@ -19,7 +19,7 @@ pub struct FacesDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShapeDto {
-    /// `"carve"` or `"fill"`.
+    /// `"carve"`, `"fill"`, `"raise"` or `"lower"`.
     pub effect: String,
     pub path: Vec<[f64; 3]>,
     pub radius: f64,
@@ -29,6 +29,9 @@ pub struct ShapeDto {
     /// A column over the path's plan between these heights, instead of a swept shape.
     #[serde(default)]
     pub column: Option<ColumnDto>,
+    /// For `"raise"` and `"lower"`: how deep the layer is on the path.
+    #[serde(default)]
+    pub height: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +58,9 @@ pub struct TerrainVolumeEditRequest {
     /// The table's height, where new ground may rest on the bare table.
     #[serde(default)]
     pub table: Option<f64>,
+    /// Structures standing round the patch: the sides of it they hold are kept.
+    #[serde(default = "no_faces")]
+    pub neighbours: FacesDto,
 }
 
 fn no_faces() -> FacesDto {
@@ -90,11 +96,15 @@ pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainV
             let effect = match shape.effect.as_str() {
                 "carve" => Effect::Carve,
                 "fill" => Effect::Fill,
+                "raise" => Effect::Raise,
+                "lower" => Effect::Lower,
                 other => return Err(format!("unknown shape effect {other:?}")),
             };
-            let form = match shape.column {
-                Some(column) => Form::Column { low: column.low, high: column.high },
-                None => Form::Swept { squash: shape.squash.unwrap_or(1.0) },
+            let form = match (shape.column, shape.height, effect) {
+                (_, Some(height), Effect::Raise | Effect::Lower) => Form::Profile { height },
+                (_, None, Effect::Raise | Effect::Lower) => return Err("a raise or lower needs its height".to_string()),
+                (Some(column), _, _) => Form::Column { low: column.low, high: column.high },
+                (None, _, _) => Form::Swept { squash: shape.squash.unwrap_or(1.0) },
             };
             Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form })
         })
@@ -102,7 +112,7 @@ pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainV
     let edited = edit_surface(
         &faces(request.patch),
         &faces(request.context),
-        &SurfaceEdit { shapes, blend: request.blend, face_side: request.face_side, seed: request.seed, table: request.table },
+        &SurfaceEdit { shapes, blend: request.blend, face_side: request.face_side, seed: request.seed, table: request.table, neighbours: faces(request.neighbours) },
     )?;
     Ok(TerrainVolumeEditResponse {
         vertices: edited.vertices.into_iter().map(|v| [v.x, v.y, v.z]).collect(),

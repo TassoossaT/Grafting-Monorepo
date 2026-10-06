@@ -546,11 +546,21 @@ export interface ConstructionIrregularQuadGridRequest {
   readonly refinement?: ConstructionGridRefinementOptions;
 }
 
-/** A capsule swept along a path that carves the ground or fills it in. */
+/**
+ * A form swept along a path that changes the ground's solid:
+ * - `carve` / `fill`: a capsule, `squash` times as tall as it is wide (round
+ *   when omitted) -- or, with `column`, the column over the path's plan
+ *   between two heights -- taken out or added;
+ * - `raise` / `lower`: a layer of earth `height` deep on the path, thinning by
+ *   a cosine to nothing at `radius`, laid over the ground or taken off it.
+ */
 export interface ConstructionVolumeShape {
-  readonly effect: "carve" | "fill";
+  readonly effect: "carve" | "fill" | "raise" | "lower";
   readonly path: readonly (readonly [number, number, number])[];
   readonly radius: number;
+  readonly squash?: number;
+  readonly column?: { readonly low: number; readonly high: number };
+  readonly height?: number;
 }
 
 /** Faces as indices into their own vertices, all wound the same way. */
@@ -571,6 +581,10 @@ export interface ConstructionTerrainVolumeEditRequest {
   /** How wide one finished face should be. */
   readonly faceSide: number;
   readonly seed?: number;
+  /** The table's height, where new ground may rest on the bare table. Omitted never reads the table. */
+  readonly table?: number;
+  /** Structures standing round the patch: never solid, never laid again; the sides of it they hold are kept. */
+  readonly neighbours?: ConstructionIndexedFaces;
 }
 
 /** The faces laid in place of the patch: the ring round it kept, node for node. */

@@ -18,7 +18,9 @@ import {
   GROUND_CONTACT_CLEARANCE,
   GROUND_SIDE_REST_ROOM,
   GROUND_THROUGH_TOLERANCE,
+  facesUp,
   groundContactOf,
+  groundLayerAt,
   groundSurfaceOf,
   hasTrait,
   insideFace,
@@ -326,13 +328,18 @@ function departingGroundContactOf(
     }
   }
 
+  // Of the ground over a point, the layer the departing face met: the first
+  // surface over it facing up, else the first under it -- never a ceiling.
   const findFace = (p: { readonly x: number; readonly z: number }) => {
     const list = buckets.get(`${Math.floor(p.x / size)}:${Math.floor(p.z / size)}`);
     if (!list) return undefined;
-    for (const t of list) {
-      if (insideFace(t, p)) return t;
-    }
-    return undefined;
+    const reference = surfaceAt(p);
+    const layers = list.filter((t) => insideFace(t, p)).flatMap((t) => {
+      const height = surfaceHeightOf(t)?.(p);
+      return height === undefined ? [] : [{ t, height, facesUp: facesUp(t) }];
+    });
+    const height = groundLayerAt(layers, reference);
+    return height === undefined ? undefined : layers.find((layer) => layer.height === height)?.t;
   };
 
   const held = new Set(hits.flatMap((t) => t.nodes.map((n) => n.id)));

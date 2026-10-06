@@ -148,7 +148,7 @@ fn a_sphere_carved_into_the_hillside_lays_back_irregular_ground_on_the_same_ring
     let blend = 0.8;
     let (patch, context, _) = split(&all, &shapes, 2.5 + blend + 2.0 * 2.0);
     let started = Instant::now();
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 2.0, seed: 7, table: None }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 2.0, seed: 7, table: None, neighbours: Faces::default() }).expect("the edit lays");
     if probe() {
         println!("sphere: {} ms", started.elapsed().as_millis());
     }
@@ -166,7 +166,7 @@ fn a_tunnel_carved_through_the_hill_opens_both_sides_and_keeps_its_roof() {
     let blend = 0.6;
     let (patch, context, _) = split(&all, &shapes, 1.8 + blend + 2.0 * 2.0);
     let started = Instant::now();
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.5, seed: 7, table: None }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.5, seed: 7, table: None, neighbours: Faces::default() }).expect("the edit lays");
     if probe() {
         println!("tunnel: {} ms", started.elapsed().as_millis());
     }
@@ -190,7 +190,7 @@ fn an_earth_bridge_filled_over_flat_ground_rises_from_it_on_the_same_ring() {
     }];
     let blend = 0.5;
     let (patch, context, _) = split(&all, &shapes, 1.2 + blend + 2.0 * 2.0);
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.2, seed: 7, table: None }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.2, seed: 7, table: None, neighbours: Faces::default() }).expect("the edit lays");
     assert_edit("bridge", &patch, &out, 1.2);
     let top = out.vertices.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
     assert!(top > 3.5, "the deck stands over the ground: {top:.2}");
@@ -205,13 +205,14 @@ fn a_tunnel_whose_patch_reaches_only_past_its_axis_still_lays() {
     let shapes = vec![Shape::capsule(Effect::Carve, vec![Vec3::new(-14.0, y, 0.0), Vec3::new(14.0, y, 0.0)], 1.8)];
     let blend = 1.8 * 0.35;
     let (patch, context, _) = split(&all, &shapes, blend + 2.0 * 2.0);
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend, face_side: 1.08, seed: 1, table: None }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend, face_side: 1.08, seed: 1, table: None, neighbours: Faces::default() }).expect("the edit lays");
     assert_edit("axis reach", &patch, &out, 1.08);
 }
 
-/// A pile of earth laid along a stroke: a capsule squashed to `height` over `radius`.
+/// A layer of earth laid along a stroke, or taken away along it.
 fn mound(effect: Effect, path: Vec<Vec3>, radius: f64, height: f64) -> Shape {
-    Shape { effect, path, radius, form: Form::Swept { squash: height / radius } }
+    let effect = if effect == Effect::Fill { Effect::Raise } else { Effect::Lower };
+    Shape { effect, path, radius, form: Form::Profile { height } }
 }
 
 fn no_folds(name: &str, out: &EditedSurface) {
@@ -223,7 +224,7 @@ fn no_folds(name: &str, out: &EditedSurface) {
 fn a_pile_of_earth_on_the_bare_table_rests_on_it() {
     let shapes = vec![mound(Effect::Fill, vec![Vec3::new(-5.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 4.0, 2.0)];
     let empty = Faces::default();
-    let out = edit_surface(&empty, &empty, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: Some(0.0) }).expect("laid on the table");
+    let out = edit_surface(&empty, &empty, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: Some(0.0), neighbours: Faces::default() }).expect("laid on the table");
     no_folds("pile on the table", &out);
     let top = out.vertices.iter().map(|v| v.y).fold(f64::MIN, f64::max);
     let bottom = out.vertices.iter().map(|v| v.y).fold(f64::MAX, f64::min);
@@ -257,7 +258,7 @@ fn a_pile_laid_off_the_edge_of_the_ground_runs_on_onto_the_table() {
     let half = Faces { vertices: all.vertices.clone(), faces: all.faces.iter().filter(|f| f.iter().all(|&v| all.vertices[v].x <= 0.0)).cloned().collect() };
     let shapes = vec![mound(Effect::Fill, vec![Vec3::new(-4.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 3.0, 2.0)];
     let (patch, context, _) = split(&half, &shapes, 3.0 + 0.8 + 4.0);
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: Some(0.0) }).expect("laid");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: Some(0.0), neighbours: Faces::default() }).expect("laid");
     no_folds("pile off the edge", &out);
     let reach = out.vertices.iter().map(|v| v.x).fold(f64::MIN, f64::max);
     if probe() {
@@ -272,7 +273,7 @@ fn a_trench_dug_along_flat_ground_goes_down_as_deep_as_asked() {
     let all = ground(2.0, 12, |_, _| 0.0);
     let shapes = vec![mound(Effect::Carve, vec![Vec3::new(-5.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 3.0, 2.0)];
     let (patch, context, _) = split(&all, &shapes, 3.0 + 0.8 + 4.0);
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: None }).expect("dug");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: None, neighbours: Faces::default() }).expect("dug");
     assert_edit("trench", &patch, &out, 2.0);
     let bottom = out.vertices.iter().map(|v| v.y).fold(f64::MAX, f64::min);
     assert!((-2.6..-1.6).contains(&bottom), "about the trench's depth: {bottom}");
@@ -288,7 +289,7 @@ fn a_hillside_levelled_comes_out_flat_where_it_was_levelled() {
         Shape { effect: Effect::Carve, path, radius: 3.0, form: Form::Column { low: level, high: level + 4.0 } },
     ];
     let (patch, context, _) = split(&all, &shapes, 3.0 + 0.6 + 4.0);
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.6, face_side: 2.0, seed: 3, table: None }).expect("levelled");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.6, face_side: 2.0, seed: 3, table: None, neighbours: Faces::default() }).expect("levelled");
     assert_edit("level", &patch, &out, 2.0);
     let inside: Vec<f64> = out.vertices.iter().filter(|v| v.x.abs() < 1.0 && v.z.abs() < 1.0).map(|v| v.y).collect();
     if probe() {

@@ -5,6 +5,8 @@ import { hasTrait, surfaceTypesWithTrait } from "../src/features/edit-constructi
 import { executeTerrainCut } from "../src/composition/tabletop/terrain/terrain-cut-executor.ts";
 import { terrainSculptTool } from "../src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts";
 import { DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/tools/tool-types.ts";
+import { sessionFixture } from "./platform-session-fixture.mjs";
+import { commitPlatformContour } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 
 test("ground is a declared trait, not a name prefix", () => {
   assert.deepEqual(surfaceTypesWithTrait("ground"), ["terrain", "terrain-grass"]);
@@ -98,182 +100,71 @@ test("executeTerrainCut: isolates non-terrain structures (never splits edges or 
   assert.equal(edgeSplits.length, 0, "must never split edges of non-terrain topologies");
 });
 
-test("terrainSculptTool: add mode creates terrain successfully even when starting on empty ground", () => {
-  const feedbacks = [];
-  const addedPatches = [];
+/** The brush dragged along `points` on the bare table, against the real engine. */
+function brush(ctx, points, params) {
+  const info = console.info, warn = console.warn;
+  console.info = () => {};
+  console.warn = () => {};
+  try {
+    const samples = points.map(([x, z], i) => ({ point: { x, y: 0, z }, screenX: i * 10, screenY: 0 }));
+    terrainSculptTool.onPointerUp(ctx, { start: samples[0], current: samples.at(-1), samples }, { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], ...params });
+  } finally {
+    console.info = info;
+    console.warn = warn;
+  }
+}
 
-  const mockContext = {
-    tableId: "table-1",
-    nextSequence: () => 1,
-    reportFeedback: (fb) => feedbacks.push(fb),
-    history: { record() {} },
-    runtime: {
-      transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
-      getFootprintCoverage: () => [],
-      getAllRegionTopologies: () => [],
-      getRegionTopologiesInBounds: () => [],
-      getSnapshot: () => ({ tableId: "table-1", map: { nodePositions: new Map() } }),
-      generateHeightmap: () => new Float32Array(100),
-      generateIrregularQuadGrid: () => ({
-        vertices: [
-          { x: 1, z: 1 },
-          { x: 3, z: 1 },
-          { x: 3, z: 3 },
-          { x: 1, z: 3 },
-        ],
-        quads: [[0, 1, 2, 3]],
-        onContour: [],
-      }),
-      addPatch: (patch) => {
-        addedPatches.push(patch);
-        return { createdSurfaceKeys: [["terrain", "t1"]], removedSurfaceKeys: [], skippedRegionIds: [] };
-      },
-      applyPatchReplacement: () => ({ createdSurfaceKeys: [], removedSurfaceKeys: [], skippedRegionIds: [] }),
-      applyRegionEdit: () => {},
-    },
-  };
-
-  const gesture = {
-    samples: [
-      { point: { x: 2, y: 0, z: 2 } },
-      { point: { x: 4, y: 0, z: 2 } },
-    ],
-  };
-
-  terrainSculptTool.onPointerUp(mockContext, gesture, {
-    ...DEFAULT_TOOL_PARAMS["terrain-sculpt"],
-    mode: "add",
+function bareTable() {
+  const fixture = sessionFixture();
+  const { runtime, session } = fixture;
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  runtime.getSnapshot = () => ({
+    tableId: "t",
+    map: { nodePositions: new Map(JSON.parse(session.snapshot_json()).nodes.map((n) => [n.id, { position: { x: n.position[0], y: n.position[1], z: n.position[2] } }])) },
   });
+  return fixture;
+}
 
-  assert.equal(feedbacks.length, 1);
-  assert.equal(feedbacks[0].tone, "success");
-  assert.match(feedbacks[0].message, /Terreno: \d+ faces elevadas/);
-  assert.equal(addedPatches.length, 1);
-  assert.equal(addedPatches[0].regions[0].surfaceType, "terrain");
+const line = (x0, x1) => Array.from({ length: Math.round((x1 - x0) / 0.5) + 1 }, (_, i) => [x0 + i * 0.5, 0]);
+
+test("terrainSculptTool: add on the bare table lays ground resting on it", () => {
+  const { runtime, ctx, calls, session } = bareTable();
+  try {
+    brush(ctx, line(-4, 4), { mode: "add" });
+    assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    const ground = runtime.getAllRegionTopologies().filter((t) => hasTrait(t.surfaceType, "ground"));
+    assert.ok(ground.length > 10, `ground laid: ${ground.length} faces`);
+    assert.ok(ground.every((t) => t.nodes.every((n) => n.position.y > -0.05)), "nothing under the table");
+  } finally { session.free(); }
 });
 
-test("terrainSculptTool: add mode overlapping a wall creates terrain without modifying wall and without error", () => {
-  const feedbacks = [];
-  const addedPatches = [];
-  const regionEditOps = [];
-
-  const wallTopology = {
-    surfaceKey: ["wall", "w1"],
-    surfaceType: "wall-white",
-    physical: true,
-    nodes: [
-      { id: "w0", position: { x: 0, y: 0, z: 0 } },
-      { id: "w1", position: { x: 4, y: 0, z: 0 } },
-      { id: "w2", position: { x: 4, y: 3, z: 0 } },
-      { id: "w3", position: { x: 0, y: 3, z: 0 } },
-    ],
-    outerLoops: [
-      [
-        { startNodeId: "w0", endNodeId: "w1", forward: true },
-        { startNodeId: "w1", endNodeId: "w2", forward: true },
-        { startNodeId: "w2", endNodeId: "w3", forward: true },
-        { startNodeId: "w3", endNodeId: "w0", forward: true },
-      ],
-    ],
-    holes: [],
-  };
-
-  const mockContext = {
-    tableId: "table-1",
-    nextSequence: () => 1,
-    reportFeedback: (fb) => feedbacks.push(fb),
-    history: { record() {} },
-    runtime: {
-      transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
-      getFootprintCoverage: () => [
-        {
-          surfaceKey: ["wall", "w1"],
-          surfaceType: "wall-white",
-          coverage: "centroid",
-          nodeIds: ["w0", "w1", "w2", "w3"],
-        },
-      ],
-      getAllRegionTopologies: () => [wallTopology],
-      getRegionTopologiesInBounds: () => [wallTopology],
-      getSnapshot: () => ({ tableId: "table-1", map: { nodePositions: new Map() } }),
-      generateHeightmap: () => new Float32Array(100),
-      generateIrregularQuadGrid: () => ({
-        vertices: [
-          { x: 1, z: 1 },
-          { x: 3, z: 1 },
-          { x: 3, z: 3 },
-          { x: 1, z: 3 },
-        ],
-        quads: [[0, 1, 2, 3]],
-        onContour: [],
-      }),
-      addPatch: (patch) => {
-        addedPatches.push(patch);
-        return { createdSurfaceKeys: [["terrain", "t1"]], removedSurfaceKeys: [], skippedRegionIds: [] };
-      },
-      applyPatchReplacement: () => ({ createdSurfaceKeys: [], removedSurfaceKeys: [], skippedRegionIds: [] }),
-      applyRegionEdit: (ops) => {
-        regionEditOps.push(...ops);
-      },
-    },
-  };
-
-  const gesture = {
-    samples: [
-      { point: { x: 2, y: 0, z: 2 } },
-      { point: { x: 4, y: 0, z: 2 } },
-    ],
-  };
-
-  terrainSculptTool.onPointerUp(mockContext, gesture, {
-    ...DEFAULT_TOOL_PARAMS["terrain-sculpt"],
-    mode: "add",
-  });
-
-  assert.equal(feedbacks.length, 1);
-  assert.equal(feedbacks[0].tone, "success");
-  assert.equal(addedPatches.length, 1);
-  assert.equal(addedPatches[0].regions[0].surfaceType, "terrain");
-
-  // Zero edge splits on the wall
-  const edgeSplits = regionEditOps.filter((op) => op.kind === "split-edge");
-  assert.equal(edgeSplits.length, 0, "must not split wall edges when painting terrain");
+test("terrainSculptTool: add laid across a floor standing on the table leaves the floor as it was", () => {
+  const { runtime, ctx, calls, session } = bareTable();
+  try {
+    commitPlatformContour(ctx, [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, z]) => ({ point: { x, y: 3, z } })), { mode: "create", elevation: 3, shape: "rectangle" });
+    const floor = () => runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform");
+    const before = floor();
+    assert.ok(before, "a floor stands");
+    brush(ctx, line(-5, 5), { mode: "add" });
+    assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    const after = floor();
+    assert.equal(after.nodes.length, before.nodes.length, "no side of the floor split");
+    for (const node of before.nodes) {
+      const now = after.nodes.find((n) => n.id === node.id);
+      assert.ok(now && Math.hypot(now.position.x - node.position.x, now.position.y - node.position.y, now.position.z - node.position.z) < 1e-9, "the floor's corners where they were");
+    }
+    assert.ok(runtime.getAllRegionTopologies().some((t) => hasTrait(t.surfaceType, "ground")), "and ground laid");
+  } finally { session.free(); }
 });
 
-test("terrainSculptTool: dig mode reports info and does nothing when only non-terrain structures are covered", () => {
-  const feedbacks = [];
-  const mockContext = {
-    tableId: "table-1",
-    nextSequence: () => 1,
-    reportFeedback: (fb) => feedbacks.push(fb),
-    history: { record() {} },
-    runtime: {
-      transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
-      getFootprintCoverage: () => [
-        {
-          surfaceKey: ["platform", "p1"],
-          surfaceType: "platform",
-          coverage: "centroid",
-          nodeIds: ["p0", "p1", "p2", "p3"],
-        },
-      ],
-      getSnapshot: () => ({ tableId: "table-1", map: { nodePositions: new Map() } }),
-    },
-  };
-
-  const gesture = {
-    samples: [
-      { point: { x: 2, y: 0, z: 2 } },
-      { point: { x: 3, y: 0, z: 2 } },
-    ],
-  };
-
-  terrainSculptTool.onPointerUp(mockContext, gesture, {
-    ...DEFAULT_TOOL_PARAMS["terrain-sculpt"],
-    mode: "dig",
-  });
-
-  assert.equal(feedbacks.length, 1);
-  assert.equal(feedbacks[0].tone, "info");
-  assert.equal(feedbacks[0].message, "Nada a cavar aqui.");
+test("terrainSculptTool: dig over the bare table, a floor standing on it, reports there is nothing to dig", () => {
+  const { runtime, ctx, calls, session } = bareTable();
+  try {
+    commitPlatformContour(ctx, [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, z]) => ({ point: { x, y: 0.3, z } })), { mode: "create", elevation: 0.3, shape: "rectangle" });
+    const before = runtime.getAllRegionTopologies().length;
+    brush(ctx, line(-3, 3), { mode: "dig" });
+    assert.equal(calls.feedback.at(-1)?.tone, "info", JSON.stringify(calls.feedback.at(-1)));
+    assert.equal(calls.feedback.at(-1)?.message, "Nada a cavar aqui.");
+    assert.equal(runtime.getAllRegionTopologies().length, before, "nothing changed");
+  } finally { session.free(); }
 });

@@ -49,6 +49,10 @@ pub struct SurfaceEdit {
     /// The table's height, where the edit may rest new ground on it: solid
     /// below it wherever no ground stands. `None` never reads the table.
     pub table: Option<f64>,
+    /// Faces round the patch that are no ground -- structures standing in it:
+    /// never solid, never laid again, but a side of the patch one of them
+    /// holds is a ring side, kept where it is.
+    pub neighbours: Faces,
 }
 
 /// The faces laid in place of the ones handed in.
@@ -144,13 +148,25 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
     // new ground may run on past it, out over the table.
     let key = |p: Vec3| ((p.x * 1e6).round() as i64, (p.y * 1e6).round() as i64, (p.z * 1e6).round() as i64);
     let pair = |a: (i64, i64, i64), b: (i64, i64, i64)| if a < b { (a, b) } else { (b, a) };
-    let context_sides: HashSet<_> = context
-        .faces
-        .iter()
-        .flat_map(|face| (0..face.len()).map(move |i| (face[i], face[(i + 1) % face.len()])))
-        .map(|(a, b)| pair(key(context.vertices[a]), key(context.vertices[b])))
+    let context_sides: HashSet<_> = [context, &edit.neighbours]
+        .into_iter()
+        .flat_map(|faces| {
+            faces
+                .faces
+                .iter()
+                .flat_map(move |face| (0..face.len()).map(move |i| (face[i], face[(i + 1) % face.len()])))
+                .map(move |(a, b)| pair(key(faces.vertices[a]), key(faces.vertices[b])))
+        })
         .collect();
-    let held = |a: usize, b: usize| table.is_none() || context_sides.contains(&pair(key(patch.vertices[a]), key(patch.vertices[b])));
+    // A free side stays the ground's border unless a shape reaches it: only a
+    // stroke laid over the border carries the ground on past it.
+    let reached = |a: usize, b: usize| {
+        let middle = (patch.vertices[a] + patch.vertices[b]) * 0.5;
+        edit.shapes.iter().any(|shape| shape.distance(middle) < edit.blend + cell)
+    };
+    let held = |a: usize, b: usize| {
+        table.is_none() || context_sides.contains(&pair(key(patch.vertices[a]), key(patch.vertices[b]))) || !reached(a, b)
+    };
     // Rings held all round, and chains: the runs of held sides of a ring
     // partly free.
     let mut closed: Vec<Vec<usize>> = Vec::new();

@@ -198,7 +198,14 @@ export function indexedFaces(faces: readonly ConstructionRegionTopology[]): {
   const index = new Map<ConstructionNodeId, number>();
   const ids: ConstructionNodeId[] = [];
   const vertices: [number, number, number][] = [];
-  const rings = faces.map((face) => {
+  // In the order of their keys, never the order the session happened to hand
+  // them over in: the engines number corners as they meet them, and the same
+  // ground has to be the same request every time.
+  const ordered = [...faces].sort((a, b) => {
+    const ka = a.surfaceKey.join("\u0000"), kb = b.surfaceKey.join("\u0000");
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+  const rings = ordered.map((face) => {
     const at = new Map(face.nodes.map((node) => [node.id, node.position]));
     return (face.outerLoops[0] ?? []).map((use) => {
       let i = index.get(use.startNodeId);

@@ -28,19 +28,42 @@ const PATCH_MARGIN_FACES = 2;
 /** How far past the faces laid again, in faces, the ground asked where solid is reaches. */
 const CONTEXT_MARGIN_FACES = 4;
 
-/** How far a shape blends into the ground round it. */
-const blendOf = (shape: ConstructionVolumeShape) => shape.radius * 0.35;
+/** How thin a shape is at its thinnest -- the engine's own measure (`Shape::thickness`). */
+function thicknessOf(shape: ConstructionVolumeShape): number {
+  if (shape.effect === "raise" || shape.effect === "lower") return shape.radius;
+  if (shape.column) return Math.min(shape.radius, Math.max(1e-3, (shape.column.high - shape.column.low) / 2));
+  return shape.radius * Math.min(1, Math.max(1e-3, shape.squash ?? 1));
+}
 
-function distanceToPath(point: ConstructionPosition, path: ConstructionVolumeShape["path"]): number {
-  if (path.length === 1) return Math.hypot(point.x - path[0]![0], point.y - path[0]![1], point.z - path[0]![2]);
+/** How far the shapes blend into the ground round them. */
+const blendOf = (shapes: readonly ConstructionVolumeShape[]) => Math.min(...shapes.map(thicknessOf)) * 0.35;
+
+/** Distance from `point` to `path`, heights scaled by `yScale`. */
+function distanceToPath(point: ConstructionPosition, path: ConstructionVolumeShape["path"], yScale = 1): number {
+  const px = point.x, py = point.y * yScale, pz = point.z;
+  if (path.length === 1) return Math.hypot(px - path[0]![0], py - path[0]![1] * yScale, pz - path[0]![2]);
   let best = Infinity;
   for (let i = 0; i + 1 < path.length; i++) {
-    const [ax, ay, az] = path[i]!, [bx, by, bz] = path[i + 1]!;
+    const [ax, ay0, az] = path[i]!, [bx, by0, bz] = path[i + 1]!;
+    const ay = ay0 * yScale, by = by0 * yScale;
     const dx = bx - ax, dy = by - ay, dz = bz - az, l = dx * dx + dy * dy + dz * dz;
-    const t = l > 0 ? Math.max(0, Math.min(1, ((point.x - ax) * dx + (point.y - ay) * dy + (point.z - az) * dz) / l)) : 0;
-    best = Math.min(best, Math.hypot(point.x - ax - dx * t, point.y - ay - dy * t, point.z - az - dz * t));
+    const t = l > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / l)) : 0;
+    best = Math.min(best, Math.hypot(px - ax - dx * t, py - ay - dy * t, pz - az - dz * t));
   }
   return best;
+}
+
+/** Signed distance to a shape, negative inside -- the engine's own (`Shape::distance`). */
+export function shapeDistance(point: ConstructionPosition, shape: ConstructionVolumeShape): number {
+  // A layer reaches as far as the capsule round its path.
+  if (shape.effect === "raise" || shape.effect === "lower") return distanceToPath(point, shape.path) - shape.radius;
+  if (shape.column) {
+    const across = distanceToPath(point, shape.path, 0) - shape.radius;
+    const up = Math.max(shape.column.low - point.y, point.y - shape.column.high);
+    return Math.hypot(Math.max(across, 0), Math.max(up, 0)) + Math.min(Math.max(across, up), 0);
+  }
+  const squash = Math.max(1e-3, shape.squash ?? 1);
+  return (distanceToPath(point, shape.path, 1 / squash) - shape.radius) * Math.min(1, squash);
 }
 
 /** A face's own ring of node ids, in its walk order; `undefined` for a face with holes, which this edit leaves alone. */
@@ -59,35 +82,60 @@ function faceSideOf(faces: readonly ConstructionRegionTopology[]): number {
 }
 
 /**
- * Carves `shape` into the ground or fills it in, as one transaction. Throws
- * where nothing could be laid; the ground is then left as it was.
+ * Carves `shapes` into the ground or fills them in, in order, as one
+ * transaction. With `table`, new ground may rest on the bare table -- a fill
+ * where no ground stands at all lays it there. No faces where no ground is in
+ * reach and nothing may rest on the table; throws where nothing could be
+ * laid, the ground then left as it was.
  */
-export function commitTerrainVolumeEdit(ctx: ToolContext, shape: ConstructionVolumeShape, options: { readonly faceSide?: number; readonly seed: number }): { readonly faces: number } {
-  const blend = blendOf(shape);
-  const xs = shape.path.map((p) => p[0]), zs = shape.path.map((p) => p[2]);
+export function commitTerrainVolumeEdit(
+  ctx: ToolContext,
+  shapes: readonly ConstructionVolumeShape[],
+  options: {
+    readonly faceSide?: number;
+    readonly seed: number;
+    readonly table?: number;
+    readonly surfaceType?: string;
+    /** The face size to lay where no ground stands to take it from. */
+    readonly emptyFaceSide?: number;
+  },
+): { readonly faces: number } {
+  if (shapes.length === 0) throw new Error("nada a cavar ou erguer");
+  const blend = blendOf(shapes);
+  const xs = shapes.flatMap((shape) => shape.path.map((p) => p[0])), zs = shapes.flatMap((shape) => shape.path.map((p) => p[2]));
+  const widest = Math.max(...shapes.map((shape) => shape.radius));
   const guess = options.faceSide ?? 2;
-  const reach = shape.radius + blend + PATCH_MARGIN_FACES * guess;
-  const outer = reach + CONTEXT_MARGIN_FACES * guess;
-  const nearby = ctx.runtime.getRegionTopologiesInBounds({
+  const margin = blend + PATCH_MARGIN_FACES * guess;
+  const outer = widest + margin + CONTEXT_MARGIN_FACES * guess;
+  const standing = ctx.runtime.getRegionTopologiesInBounds({
     minX: Math.min(...xs) - outer, minZ: Math.min(...zs) - outer, maxX: Math.max(...xs) + outer, maxZ: Math.max(...zs) + outer,
-  }).filter((topology) => hasTrait(topology.surfaceType, "ground") && ringOf(topology) !== undefined);
-  const patchFaces = nearby.filter((topology) => topology.nodes.some((node) => distanceToPath(node.position, shape.path) < reach));
-  if (patchFaces.length === 0) throw new Error("não há terreno ao alcance");
+  });
+  const nearby = standing.filter((topology) => hasTrait(topology.surfaceType, "ground") && ringOf(topology) !== undefined);
+  // Structures standing in the ground: the sides of it they hold are kept.
+  const structures = standing.filter((topology) => !hasTrait(topology.surfaceType, "ground") && ringOf(topology) !== undefined);
+  // The faces within the shapes' reach in three dimensions: a cave's ceiling
+  // over a pile laid on its floor is out of reach, and never laid again.
+  const patchFaces = nearby.filter((topology) => topology.nodes.some((node) => shapes.some((shape) => shapeDistance(node.position, shape) < margin)));
+  if (patchFaces.length === 0 && options.table === undefined) return { faces: 0 };
   const patchKeys = new Set(patchFaces.map((face) => face.surfaceKey.join("\u0000")));
   const contextFaces = nearby.filter((topology) => !patchKeys.has(topology.surfaceKey.join("\u0000")));
   // The ground's own face size; the engine lays finer where the shape is narrow.
-  const faceSide = options.faceSide ?? faceSideOf(patchFaces);
+  const faceSide = options.faceSide ?? (patchFaces.length > 0 ? faceSideOf(patchFaces) : options.emptyFaceSide ?? 2);
+  const surfaceType = patchFaces[0]?.surfaceType ?? options.surfaceType ?? "terrain";
 
   const patch = indexedFaces(patchFaces);
   const context = indexedFaces(contextFaces);
+  const neighbours = indexedFaces(structures);
 
   const edited = ctx.runtime.editTerrainVolume({
     patch: { vertices: patch.vertices, faces: patch.faces },
     context: { vertices: context.vertices, faces: context.faces },
-    shapes: [shape],
+    shapes,
     blend,
     faceSide,
     seed: options.seed,
+    ...(options.table !== undefined ? { table: options.table } : {}),
+    neighbours: { vertices: neighbours.vertices, faces: neighbours.faces },
   });
   if (!edited) throw new Error("o núcleo recusou a edição");
 
@@ -99,7 +147,7 @@ export function commitTerrainVolumeEdit(ctx: ToolContext, shape: ConstructionVol
       tableId: ctx.tableId,
       replaced: patchFaces,
       around: contextFaces,
-      surfaceType: patchFaces[0]!.surfaceType,
+      surfaceType,
       faceSide,
       laid: {
         vertices: edited.vertices,
@@ -178,4 +226,32 @@ export function fillShape(points: readonly ConstructionPosition[], radius: numbe
 export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {
   const shape = mode === "carve" ? carveShape(points, radius) : fillShape(points, radius, rise);
   return shape ? shape.path.map(([x, y, z]) => ({ x, y, z })) : [];
+}
+
+/**
+ * A layer of earth laid along a stroke -- or the trench dug along it:
+ * `height` deep where the stroke ran, thinning to nothing at the brush's
+ * radius, over the ground it lies on -- a hillside, a cave's floor or its
+ * wall alike.
+ */
+export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+  if (path.length === 0) return undefined;
+  return { effect, radius, height, path: path.map((p) => [p.x, p.y, p.z] as const) };
+}
+
+/**
+ * Levelling along a stroke at the height it starts on: the column over the
+ * stroke's plan filled up to that level and cut down to it, `reach` above
+ * and below and no further -- never up to a cave's ceiling.
+ */
+export function levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number): readonly ConstructionVolumeShape[] {
+  const path = thinned(points, radius * PATH_STEP);
+  if (path.length === 0) return [];
+  const level = path[0]!.y;
+  const flat = path.map((p) => [p.x, level, p.z] as const);
+  return [
+    { effect: "fill", radius, path: flat, column: { low: level - reach, high: level } },
+    { effect: "carve", radius, path: flat, column: { low: level, high: level + reach } },
+  ];
 }

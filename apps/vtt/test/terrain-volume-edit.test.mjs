@@ -138,8 +138,9 @@ test("a fill from bank to bank over flat ground leaves one mesh of ground with a
 
 test("the carve is ghosted as the volume it takes: a sphere under the pointer, a capsule along the drag", () => {
   const tool = { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], mode: "carve", brushRadius: 1.8, faceSize: 2 };
+  // Every stroke is a volume, and shows it under the pointer before it starts.
   assert.equal(terrainSculptTool.previewOnHover(tool), true);
-  assert.equal(terrainSculptTool.previewOnHover({ ...tool, mode: "add" }), false);
+  assert.equal(terrainSculptTool.previewOnHover({ ...tool, mode: "add" }), true);
   const at = (x, z) => ({ point: { x, y: hill(x, z), z } });
   const hover = terrainSculptTool.previewFor({ start: at(-8, 0), current: at(-8, 0), samples: [at(-8, 0)] }, tool, {});
   assert.equal(hover.kind, "segments");

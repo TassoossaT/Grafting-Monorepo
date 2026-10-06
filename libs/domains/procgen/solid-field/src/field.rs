@@ -16,6 +16,13 @@ pub enum Effect {
     Carve,
     /// Adds solid: a bridge, a ledge.
     Fill,
+    /// Lays a layer of earth over the solid near the path: as deep as the
+    /// shape's `Form::Profile` height on it, thinning to nothing at its
+    /// radius -- a pile following the ground it is laid on, a hillside or a
+    /// cave's wall alike.
+    Raise,
+    /// Takes such a layer away: the trench dug along a stroke.
+    Lower,
 }
 
 /// The solid a shape stands for, round its path.
@@ -29,6 +36,9 @@ pub enum Form {
     /// `high`: what a level is cut down to or filled up to, never reaching
     /// past those heights -- to a cave's ceiling, say.
     Column { low: f64, high: f64 },
+    /// A layer `height` deep on the path, thinning by a cosine to nothing at
+    /// the radius -- for [`Effect::Raise`] and [`Effect::Lower`].
+    Profile { height: f64 },
 }
 
 /// A form swept along a path, carving or filling.
@@ -73,7 +83,17 @@ impl Shape {
                 let up = (low - point.y).max(point.y - high);
                 across.max(0.0).hypot(up.max(0.0)) + across.max(up).min(0.0)
             }
+            // Where the layer reaches: the capsule round the path.
+            Form::Profile { .. } => to_path(point, &self.path, 1.0) - self.radius,
         }
+    }
+
+    /// How deep the layer is at `point`: the profile's height on the path,
+    /// a cosine down to nothing at the radius. Zero for any other form.
+    pub fn depth(&self, point: Vec3) -> f64 {
+        let Form::Profile { height } = self.form else { return 0.0 };
+        let along = to_path(point, &self.path, 1.0) / self.radius.max(1e-9);
+        if along >= 1.0 { 0.0 } else { height * 0.5 * (1.0 + (std::f64::consts::PI * along).cos()) }
     }
 
     /// How thin the shape is at its thinnest: what the faces laid on it must
@@ -82,6 +102,10 @@ impl Shape {
         match self.form {
             Form::Swept { squash } => self.radius * squash.clamp(1e-3, 1.0),
             Form::Column { low, high } => self.radius.min(((high - low) * 0.5).max(1e-3)),
+            // A layer of earth thins smoothly, but a tall one over a narrow
+            // brush makes a sharp ridge: its crest bends as tightly as
+            // 2 r^2 / (pi h).
+            Form::Profile { height } => self.radius.min(2.0 * self.radius * self.radius / (std::f64::consts::PI * height.abs().max(1e-6))),
         }
     }
 
@@ -101,6 +125,7 @@ impl Shape {
                 (min - Vec3::new(across, up, across), max + Vec3::new(across, up, across))
             }
             Form::Column { low, high } => (Vec3::new(min.x - across, low - blend, min.z - across), Vec3::new(max.x + across, high + blend, max.z + across)),
+            Form::Profile { height } => (min - Vec3::splat(across + height), max + Vec3::splat(across + height)),
         }
     }
 }
@@ -117,13 +142,18 @@ pub fn smooth_min(a: f64, b: f64, k: f64) -> f64 {
 
 /// `base` -- the signed distance to whatever already says where solid is --
 /// with every shape applied in order, so a fill made after a carve fills it
-/// back in.
-pub fn with_shapes(base: f64, point: Vec3, shapes: &[Shape], blend: f64) -> f64 {
+/// back in. `foot` is where `point` stands on the ground it was asked about:
+/// a layer's depth is read there, so a pile is as deep as asked over the
+/// ground it lies on, not at the height it already rose to.
+pub fn with_shapes(base: f64, point: Vec3, foot: Vec3, shapes: &[Shape], blend: f64) -> f64 {
     shapes.iter().fold(base, |field, shape| {
         let shape_distance = shape.distance(point);
         match shape.effect {
             Effect::Fill => smooth_min(field, shape_distance, blend),
             Effect::Carve => -smooth_min(-field, shape_distance, blend),
+            // The surface moved out by the layer's depth, or in by it.
+            Effect::Raise => field - shape.depth(foot),
+            Effect::Lower => field + shape.depth(foot),
         }
     })
 }
