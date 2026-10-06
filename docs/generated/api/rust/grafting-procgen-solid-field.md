@@ -94,6 +94,17 @@ the length of a face.
 
 Signed distance from `point` to the surface: negative inside solid.
 
+### `pub fn grafting_procgen_solid_field::mesh_distance::MeshDistance::signed_distance_at_border(&self, point: grafting_procgen_solid_field::vector::Vec3) -> (f64, bool)`
+
+Signed distance, and whether the nearest point of the surface lies on
+its open border -- where the sign says nothing: past the edge of an
+open sheet of ground, inside and outside are undefined.
+
+### `pub fn grafting_procgen_solid_field::mesh_distance::MeshDistance::signed_distance_at_border_within(&self, point: grafting_procgen_solid_field::vector::Vec3, reach: f64) -> (f64, bool)`
+
+[`Self::signed_distance_at_border`], exact only within `reach`: past it
+the size is a stand-in and only the sign is to be read.
+
 ### `pub fn grafting_procgen_solid_field::regenerate::regenerate_surface(patch: &grafting_procgen_solid_field::edit::Faces, regeneration: &grafting_procgen_solid_field::regenerate::Regeneration) -> core::result::Result<grafting_procgen_solid_field::regenerate::RegeneratedSurface, alloc::string::String>`
 
 Lays `patch` again on its own surface, going round `regeneration.holes`.
@@ -140,7 +151,8 @@ walk it.
 Unfolds what flips alone cannot: every free corner of a triangle facing
 into the solid moved to the middle of its neighbours and settled back on
 the surface, flips tried again after each round, until none faces in or
-the rounds run out.
+the rounds run out. Each triangle is asked which way it faces once, then
+again only when a corner of it moved.
 
 ### `pub fn grafting_procgen_solid_field::trimesh::untangle(triangles: &mut [[usize; 3]], vertices: &[grafting_procgen_solid_field::vector::Vec3], locked: &std::collections::hash::set::HashSet<(usize, usize)>, facing: &dyn core::ops::function::Fn(grafting_procgen_solid_field::vector::Vec3) -> grafting_procgen_solid_field::vector::Vec3)`
 
@@ -196,10 +208,12 @@ along whichever side keeps its new diagonal shorter, end to end.
 
 Signed distance, negative inside solid.
 
-### `pub fn grafting_procgen_solid_field::volume::EditField<'_>::extract(&self, min: grafting_procgen_solid_field::vector::Vec3, max: grafting_procgen_solid_field::vector::Vec3, cell: f64) -> (alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>, alloc::vec::Vec<[usize; 3]>)`
+### `pub fn grafting_procgen_solid_field::volume::EditField<'_>::extract(&self, min: grafting_procgen_solid_field::vector::Vec3, max: grafting_procgen_solid_field::vector::Vec3, cell: f64) -> (alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>, alloc::vec::Vec<[usize; 3]>, usize)`
 
 The surface inside the box `min..max`, read on a grid `cell` apart:
-vertices and triangles wound so their normal points out of the solid.
+vertices and triangles wound so their normal points out of the solid,
+and how many faces the grid read both ways had to be settled -- solid
+or air finer than the grid, which a finer grid may read as it is.
 
 ### `pub fn grafting_procgen_solid_field::volume::EditField<'_>::gradient(&self, point: grafting_procgen_solid_field::vector::Vec3, step: f64) -> grafting_procgen_solid_field::vector::Vec3`
 
@@ -209,6 +223,8 @@ The direction out of the solid at `point`, unnormalised.
 
 `point` moved onto the surface along the gradient, a few Newton steps,
 never further than `limit` from where it started.
+
+### `pub fn grafting_procgen_solid_field::volume::EditField<'a>::clone(&self) -> grafting_procgen_solid_field::volume::EditField<'a>`
 
 ### `pub grafting_procgen_solid_field::EditedSurface::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
@@ -531,6 +547,12 @@ Puts a point back on the surface.
 ### `pub grafting_procgen_solid_field::volume::EditField::blend: f64`
 
 ### `pub grafting_procgen_solid_field::volume::EditField::ground: &'a grafting_procgen_solid_field::mesh_distance::MeshDistance`
+
+### `pub grafting_procgen_solid_field::volume::EditField::reach: f64`
+
+How far from the ground distances are measured exactly; past it only
+their sign is right -- all a grid read needs of a sample far from the
+surface. `INFINITY` measures everywhere.
 
 ### `pub grafting_procgen_solid_field::volume::EditField::shapes: &'a [grafting_procgen_solid_field::field::Shape]`
 

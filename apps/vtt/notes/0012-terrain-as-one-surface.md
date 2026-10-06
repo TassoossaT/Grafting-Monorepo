@@ -155,11 +155,20 @@ Read this before the plan sections above; where they disagree, this wins.
   - Rings are paired with borders by the mean gap measured both ways.
   - The stitch picks its diagonal by length alone. A preference for the triangle facing out of the solid drifted it out of phase and fanned triangles 13 m across.
 - **Volume-edit patch** (`terrain-volume-edit.ts`): it grows over the surface from the face nearest each point of the stroke, never from whatever lies near in 3D. Through a thin roof, a tunnel's ceiling lies a metre under the hill.
-  - When the engine refuses, the patch grows inward from its holes, one ring of faces at a time, twice at most. This covers a layer laid across a gap cut in a tunnel's roof, which the edit closes over.
+  - When the engine refuses, the patch grows inward from its holes, one ring of faces at a time, twice at most. This covers a layer laid across a gap cut in a tunnel's roof, which the edit closes over. A grown patch no larger than the last one tried is never sent again.
   - `unfold` runs before the remesh, which then evens out the corners it drew close together. Run after the remesh, it left micro-edges that the commit dropped as faces with repeated corners, opening holes.
   - A layer reaches a quarter face past its radius.
   - A level reaches one face.
   - A bore or an arch reaches two faces.
+- **E1 cost.** A stroke over existing ground takes 0.01–0.3 s native. The fourth crossing stroke of a recorded session took 4.7 s and was refused at 3.9–6.5 s before that.
+  - `MeshDistance` is a dense bucket grid searched shell by shell. It is exact only within `EditField.reach`; a grid read uses 4 cells + blend + layer height. Past the reach, the nearest triangle middle stands in: the sign is right, the size is not.
+  - A grid read samples every other point first. The rest are read only where the read corners round them disagree in sign or lie within a cell's diagonal + 1.75 cells of the surface. The field is 1-Lipschitz (squash is scaled to keep it so), so the surface comes out the same wherever the field is continuous.
+  - Each grid is read once per edit, whatever mending is asked of it. The winding vote reads at most about 256 triangles.
+  - `untangle` and `unfold` ask the field which way a triangle faces once, then again only for triangles a flip or a move touched. Corners move one after another, each to where its neighbours stand now. Moving them all from the old positions changed the tunnel results.
+- **Faces read both ways** (`EditField::untwist_faces`). A trough narrower than a cell, running slantwise through the grid, gives checkerboard cell faces, which Surface Nets reads as edges four faces hold. An example is the uphill foot of a narrow, tall layer on a hill.
+  - The field at the face's middle says which pair joins; the weaker corner of the other pair is turned over.
+  - The clean tiers reject a read that needed this, because it signals detail finer than the grid, which a finer grid may read cleanly. The last tier uses the settled read instead of pruning and fanning, which folded that foot.
+  - The read box comes from the shapes' plain bounds. An oriented box for layers shifted the grid's phase, and with it which troughs read both ways: that was luck, not a fix.
 - **Regrow walks restable ground only.** It takes faces whose outward normal points up by at least 0.2, plus the vacated rim and dragged faces, so a tunnel's walls and ceiling are never relaid. `test/terrain-layers.test.mjs` holds this for a floor laid in a tunnel, the same floor moved, and a layer laid on the tunnel floor.
 - **Determinism.** `indexedFaces` orders faces by key. Wasm `HashMap` order shifts with process history, which changed region order from the session and, with it, the meshes.
 - **Render.** A fan fallback covers a single-loop face that flattens onto no plane. Surfaces were already double-sided, so orientation needed no change.

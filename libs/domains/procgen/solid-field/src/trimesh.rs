@@ -121,32 +121,52 @@ pub fn zipper_open(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[
     triangles
 }
 
+/// Whether triangle `[a, b, c]` faces out of the solid, the way `facing` says out is.
+fn faces_out(vertices: &[Vec3], [a, b, c]: [usize; 3], facing: &dyn Fn(Vec3) -> Vec3) -> bool {
+    let normal = (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]);
+    normal.length() > 1e-12 && normal.dot(facing((vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0))) > 0.0
+}
+
 /// Turns over the triangles facing into the solid where a flip of the edge
 /// they share with a neighbour leaves both facing out: the strip stitched to
 /// a ring folds where the ring and the new surface's border run unevenly
 /// beside each other, and a flip undoes the fold. Locked edges never flip.
 pub fn untangle(triangles: &mut [[usize; 3]], vertices: &[Vec3], locked: &HashSet<(usize, usize)>, facing: &dyn Fn(Vec3) -> Vec3) {
-    let faces_out = |[a, b, c]: [usize; 3]| {
-        let normal = (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]);
-        normal.length() > 1e-12 && normal.dot(facing((vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0))) > 0.0
-    };
+    let mut out: Vec<bool> = triangles.iter().map(|&t| faces_out(vertices, t, facing)).collect();
+    untangle_known(triangles, vertices, locked, facing, &mut out);
+}
+
+/// [`untangle`] with which way each triangle faces already known -- asking
+/// the solid is the dear part, so only the sides of triangles facing in are
+/// tried, and only the triangles a flip makes are asked again.
+fn untangle_known(triangles: &mut [[usize; 3]], vertices: &[Vec3], locked: &HashSet<(usize, usize)>, facing: &dyn Fn(Vec3) -> Vec3, out: &mut [bool]) {
     for _ in 0..4 {
-        let mut by_edge: HashMap<(usize, usize), usize> = HashMap::new();
+        if out.iter().all(|&o| o) {
+            return;
+        }
+        let mut by_edge: HashMap<(usize, usize), usize> = HashMap::with_capacity(triangles.len() * 3);
         for (t, &[a, b, c]) in triangles.iter().enumerate() {
             for edge in [(a, b), (b, c), (c, a)] {
                 by_edge.insert(edge, t);
             }
         }
-        let mut edges: Vec<(usize, usize)> = by_edge.keys().copied().filter(|&(a, b)| a < b).collect();
-        edges.sort_unstable();
+        let mut candidates: Vec<(usize, usize)> = triangles
+            .iter()
+            .enumerate()
+            .filter(|&(t, _)| !out[t])
+            .flat_map(|(_, &[a, b, c])| [(a, b), (b, c), (c, a)])
+            .map(|(a, b)| (a.min(b), a.max(b)))
+            .collect();
+        candidates.sort_unstable();
+        candidates.dedup();
         let mut touched: HashSet<usize> = HashSet::new();
         let mut flipped = 0;
-        for (a, b) in edges {
+        for (a, b) in candidates {
             if locked.contains(&(a, b)) {
                 continue;
             }
             let (Some(&one), Some(&two)) = (by_edge.get(&(a, b)), by_edge.get(&(b, a))) else { continue };
-            if touched.contains(&one) || touched.contains(&two) || (faces_out(triangles[one]) && faces_out(triangles[two])) {
+            if touched.contains(&one) || touched.contains(&two) || (out[one] && out[two]) {
                 continue;
             }
             // A triangle with no corner off the edge is degenerate: nothing to flip.
@@ -161,16 +181,18 @@ pub fn untangle(triangles: &mut [[usize; 3]], vertices: &[Vec3], locked: &HashSe
             }
             // `one` walks a -> b -> c, `two` walks b -> a -> d; flipped they walk c -> d.
             let (first, second) = ([c, a, d], [d, b, c]);
-            if faces_out(first) && faces_out(second) {
+            if faces_out(vertices, first, facing) && faces_out(vertices, second, facing) {
                 triangles[one] = first;
                 triangles[two] = second;
+                out[one] = true;
+                out[two] = true;
                 touched.insert(one);
                 touched.insert(two);
                 flipped += 1;
             }
         }
         if flipped == 0 {
-            break;
+            return;
         }
     }
 }
@@ -178,7 +200,8 @@ pub fn untangle(triangles: &mut [[usize; 3]], vertices: &[Vec3], locked: &HashSe
 /// Unfolds what flips alone cannot: every free corner of a triangle facing
 /// into the solid moved to the middle of its neighbours and settled back on
 /// the surface, flips tried again after each round, until none faces in or
-/// the rounds run out.
+/// the rounds run out. Each triangle is asked which way it faces once, then
+/// again only when a corner of it moved.
 pub fn unfold(
     vertices: &mut [Vec3],
     triangles: &mut [[usize; 3]],
@@ -187,35 +210,41 @@ pub fn unfold(
     facing: &dyn Fn(Vec3) -> Vec3,
     settle: &dyn Fn(Vec3) -> Vec3,
 ) {
+    let mut out: Vec<bool> = triangles.iter().map(|&t| faces_out(vertices, t, facing)).collect();
     for _ in 0..UNFOLD_ROUNDS {
-        untangle(triangles, vertices, locked_edges, facing);
-        let inward: Vec<[usize; 3]> = triangles
-            .iter()
-            .copied()
-            .filter(|&[a, b, c]| (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]).dot(facing((vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0))) <= 0.0)
-            .collect();
-        if inward.is_empty() {
-            return;
-        }
-        let mut neighbours: HashMap<usize, Vec<usize>> = HashMap::new();
-        for &[a, b, c] in triangles.iter() {
-            for (p, q) in [(a, b), (b, c), (c, a), (b, a), (c, b), (a, c)] {
-                neighbours.entry(p).or_default().push(q);
-            }
-        }
-        let mut moving: Vec<usize> = inward.iter().flatten().copied().filter(|&v| !locked[v]).collect();
+        untangle_known(triangles, vertices, locked_edges, facing, &mut out);
+        let mut moving: Vec<usize> = (0..triangles.len()).filter(|&t| !out[t]).flat_map(|t| triangles[t]).filter(|&v| !locked[v]).collect();
         moving.sort_unstable();
         moving.dedup();
         if moving.is_empty() {
             return;
         }
+        let mut is_moving = vec![false; vertices.len()];
+        for &v in &moving {
+            is_moving[v] = true;
+        }
+        let mut neighbours: HashMap<usize, Vec<usize>> = HashMap::with_capacity(moving.len());
+        for &[a, b, c] in triangles.iter() {
+            for (p, q) in [(a, b), (b, c), (c, a), (b, a), (c, b), (a, c)] {
+                if is_moving[p] {
+                    neighbours.entry(p).or_default().push(q);
+                }
+            }
+        }
+        // One corner after another, each to where its neighbours stand now --
+        // those already moved this round included.
         for v in moving {
             let around = &neighbours[&v];
             let middle = around.iter().fold(Vec3::default(), |sum, &n| sum + vertices[n]) * (1.0 / around.len() as f64);
             vertices[v] = settle(middle);
         }
+        for (t, &triangle) in triangles.iter().enumerate() {
+            if triangle.iter().any(|&v| is_moving[v]) {
+                out[t] = faces_out(vertices, triangle, facing);
+            }
+        }
     }
-    untangle(triangles, vertices, locked_edges, facing);
+    untangle_known(triangles, vertices, locked_edges, facing, &mut out);
 }
 
 /// Rounds [`unfold`] takes at most.

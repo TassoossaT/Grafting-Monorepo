@@ -13,24 +13,37 @@ use crate::table::TableFloor;
 use crate::vector::Vec3;
 
 /// The ground after the edit, as a signed distance.
+#[derive(Clone, Copy)]
 pub struct EditField<'a> {
     pub ground: &'a MeshDistance,
     pub shapes: &'a [Shape],
     pub blend: f64,
     /// The table under the ground, solid where no ground stands.
     pub table: Option<&'a TableFloor>,
+    /// How far from the ground distances are measured exactly; past it only
+    /// their sign is right -- all a grid read needs of a sample far from the
+    /// surface. `INFINITY` measures everywhere.
+    pub reach: f64,
 }
 
 impl EditField<'_> {
     /// Signed distance, negative inside solid.
     pub fn distance(&self, point: Vec3) -> f64 {
-        let ground = self.ground.signed_distance(point);
         // Where no ground stands over or under a point, it is in no ground's
         // solid -- whatever the sign past a ground's open border says -- and
-        // the table is the floor there.
-        let base = match self.table.and_then(|table| table.distance(point)) {
-            Some(table) => ground.abs().min(table),
-            None => ground,
+        // the table is the floor there. So too where the nearest ground is its
+        // open border: under the rim of a pile laid on the table, the sheet's
+        // sign is no answer, and the table's is.
+        let base = match self.table {
+            Some(table) => {
+                let (ground, at_border) = self.ground.signed_distance_at_border_within(point, self.reach);
+                match table.distance(point) {
+                    Some(floor) => ground.abs().min(floor),
+                    None if at_border => ground.abs().min(point.y - table.height),
+                    None => ground,
+                }
+            }
+            None => self.ground.signed_distance_at_border_within(point, self.reach).0,
         };
         with_shapes(base, point, self.shapes, self.blend)
     }
@@ -63,18 +76,117 @@ impl EditField<'_> {
         if moved.length() > limit { point + moved.normalized() * limit } else { current }
     }
 
+    /// Settles every cell face Surface Nets would read both ways: corners
+    /// alike across one diagonal and unlike the other pair, as where a trough
+    /// narrower than a cell runs slantwise through the grid. Read as it
+    /// stands, the four sides of such a face each hand the edge across it a
+    /// quad -- an edge four faces hold. The field at the face's middle says
+    /// which pair the solid (or the air) joins through; the weaker corner of
+    /// the other pair is turned over to it, moving the surface less than a
+    /// cell where it was finer than a cell to begin with. How many faces it
+    /// settled.
+    fn untwist_faces(&self, samples: &mut [f32], shape: &RuntimeShape<u32, 3>, size: [u32; 3], at: &dyn Fn([u32; 3]) -> Vec3, cell: f64) -> usize {
+        let nudge = (cell * 1e-3) as f32;
+        let mut settled = 0;
+        for _ in 0..UNTWIST_ROUNDS {
+            let mut turned = false;
+            for axis in 0..3 {
+                let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+                for index in 0..shape.size() {
+                    let corner = shape.delinearize(index);
+                    if corner[u] + 1 >= size[u] || corner[v] + 1 >= size[v] {
+                        continue;
+                    }
+                    let step = |mut c: [u32; 3], du: u32, dv: u32| {
+                        c[u] += du;
+                        c[v] += dv;
+                        c
+                    };
+                    let (c00, c10, c01, c11) = (corner, step(corner, 1, 0), step(corner, 0, 1), step(corner, 1, 1));
+                    let solid = |c: [u32; 3]| samples[shape.linearize(c) as usize] < 0.0;
+                    if solid(c00) != solid(c11) || solid(c10) != solid(c01) || solid(c00) == solid(c10) {
+                        continue;
+                    }
+                    let middle = (at(c00) + at(c11)) * 0.5;
+                    let inside = self.distance(middle) < 0.0;
+                    let (x, y) = if inside == solid(c00) { (c10, c01) } else { (c00, c11) };
+                    let (x, y) = (shape.linearize(x) as usize, shape.linearize(y) as usize);
+                    let weaker = if samples[x].abs() <= samples[y].abs() { x } else { y };
+                    samples[weaker] = if inside { -nudge } else { nudge };
+                    turned = true;
+                    settled += 1;
+                }
+            }
+            if !turned {
+                break;
+            }
+        }
+        settled
+    }
+
     /// The surface inside the box `min..max`, read on a grid `cell` apart:
-    /// vertices and triangles wound so their normal points out of the solid.
-    pub fn extract(&self, min: Vec3, max: Vec3, cell: f64) -> (Vec<Vec3>, Vec<[usize; 3]>) {
+    /// vertices and triangles wound so their normal points out of the solid,
+    /// and how many faces the grid read both ways had to be settled -- solid
+    /// or air finer than the grid, which a finer grid may read as it is.
+    pub fn extract(&self, min: Vec3, max: Vec3, cell: f64) -> (Vec<Vec3>, Vec<[usize; 3]>, usize) {
         let count = |low: f64, high: f64| ((high - low) / cell).ceil().max(1.0) as u32 + 1;
         let size = [count(min.x, max.x), count(min.y, max.y), count(min.z, max.z)];
         let shape = RuntimeShape::<u32, 3>::new(size);
         let mut samples = vec![0f32; shape.size() as usize];
+        // Every other sample read first -- the last on each axis too -- and
+        // the rest read only near the surface. The field rises at most one
+        // per unit (squashed forms are scaled to keep it so), and it is exact
+        // to `reach` from the ground: a sample `away` from a read one holding
+        // `value` is at least `min(|value|, reach) - away` from the surface,
+        // and one more than a cell's diagonal from it lies in no cell the
+        // surface crosses -- its sign is all Surface Nets reads, and its sign
+        // is the read one's. Where the field is whole the surface comes out
+        // the same; where the ground's sign jumps, a pocket smaller than two
+        // cells between read samples goes unread -- a crumb the mending would
+        // only have to sweep up.
+        let coarse = |i: u32, n: u32| i.is_multiple_of(2) || i == n - 1;
+        let at = |[x, y, z]: [u32; 3]| min + Vec3::new(x as f64, y as f64, z as f64) * cell;
+        let sure = self.reach;
+        let clear = cell * 1.75;
         for index in 0..shape.size() {
             let [x, y, z] = shape.delinearize(index);
-            let point = min + Vec3::new(x as f64, y as f64, z as f64) * cell;
-            samples[index as usize] = self.distance(point) as f32;
+            if coarse(x, size[0]) && coarse(y, size[1]) && coarse(z, size[2]) {
+                samples[index as usize] = self.distance(at([x, y, z])) as f32;
+            }
         }
+        for index in 0..shape.size() {
+            let [x, y, z] = shape.delinearize(index);
+            let odd = [!coarse(x, size[0]), !coarse(y, size[1]), !coarse(z, size[2])];
+            let steps = odd.iter().filter(|&&o| o).count();
+            if steps == 0 {
+                continue;
+            }
+            // Every read sample round it, on both sides of each odd axis: the
+            // ground's sign jumps past its open border, so no one of them
+            // vouches for the others.
+            let away = (steps as f64).sqrt() * cell;
+            let mut sign = 0.0;
+            let mut nearest = f64::INFINITY;
+            let mut agree = true;
+            for corner in 0..8u32 {
+                if (0..3).any(|axis| !odd[axis] && corner & (1 << axis) != 0) {
+                    continue;
+                }
+                let pick = |axis: usize, i: u32| if odd[axis] { if corner & (1 << axis) != 0 { i + 1 } else { i - 1 } } else { i };
+                let value = samples[shape.linearize([pick(0, x), pick(1, y), pick(2, z)]) as usize] as f64;
+                if sign == 0.0 {
+                    sign = value.signum();
+                }
+                agree &= value.signum() == sign;
+                nearest = nearest.min(value.abs());
+            }
+            samples[index as usize] = if agree && nearest.min(sure) - away > clear {
+                (sign * (nearest - away)) as f32
+            } else {
+                self.distance(at([x, y, z])) as f32
+            };
+        }
+        let settled = self.untwist_faces(&mut samples, &shape, size, &at, cell);
         let mut buffer = SurfaceNetsBuffer::default();
         surface_nets(&samples, &shape, [0; 3], [size[0] - 1, size[1] - 1, size[2] - 1], &mut buffer);
         let vertices: Vec<Vec3> = buffer
@@ -88,8 +200,11 @@ impl EditField<'_> {
         // and a triangle turned against its neighbours reads as a hole.
         let step = cell * 0.25;
         let mut triangles: Vec<[usize; 3]> = buffer.indices.chunks_exact(3).map(|t| [t[0] as usize, t[1] as usize, t[2] as usize]).collect();
+        // A vote, so a spread few hundred of them answer as well as all.
+        let stride = (triangles.len() / 256).max(1);
         let agreement: f64 = triangles
             .iter()
+            .step_by(stride)
             .map(|&[a, b, c]| {
                 let centre = (vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0);
                 let normal = (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]);
@@ -101,6 +216,10 @@ impl EditField<'_> {
                 t.swap(1, 2);
             }
         }
-        (vertices, triangles)
+        (vertices, triangles, settled)
     }
 }
+
+/// Passes [`EditField::untwist_faces`] takes at most: one turned corner can
+/// leave a face beside it to settle.
+const UNTWIST_ROUNDS: usize = 4;

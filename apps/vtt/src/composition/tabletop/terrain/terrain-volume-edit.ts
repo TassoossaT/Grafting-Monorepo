@@ -31,9 +31,10 @@ const PATCH_MARGIN_FACES = 2;
 /** How far past the faces laid again, in faces, the ground asked where solid is reaches. */
 const CONTEXT_MARGIN_FACES = 4;
 
-/** How thin a shape is at its thinnest -- the engine's own measure (`Shape::thickness`). */
+/** How thin a shape is at its thinnest, the scale its blend is taken from: the engine's `Shape::thickness`, but a layer by its height too. */
 function thicknessOf(shape: ConstructionVolumeShape): number {
-  if (shape.effect === "raise" || shape.effect === "lower") return shape.radius;
+  // A layer blends into nothing: its own height is the scale it changes the ground at.
+  if (shape.effect === "raise" || shape.effect === "lower") return Math.min(shape.radius, Math.abs(shape.height ?? shape.radius));
   if (shape.column) return Math.min(shape.radius, Math.max(1e-3, (shape.column.high - shape.column.low) / 2));
   return shape.radius * Math.min(1, Math.max(1e-3, shape.squash ?? 1));
 }
@@ -166,8 +167,10 @@ export function commitTerrainVolumeEdit(
     return edited ? { edited, patch, patchFaces, contextFaces, faceSide } : undefined;
   };
   // A hole in the patch the edit closes over is laid again with it: tried as
-  // walked first, then grown inward from its holes a ring at a time.
-  const laid = attempt(walked) ?? attempt(grownInward(walked, nearby, 1)) ?? attempt(grownInward(walked, nearby, 2));
+  // walked first, then grown inward from its holes a ring at a time -- a
+  // patch no larger than the last one tried is the same refusal, never asked twice.
+  const tries = [walked, grownInward(walked, nearby, 1), grownInward(walked, nearby, 2)];
+  const laid = tries.reduce<ReturnType<typeof attempt>>((done, patchFaces, index) => done ?? (index > 0 && patchFaces.length === tries[index - 1]!.length ? undefined : attempt(patchFaces)), undefined);
   if (!laid) throw new Error("o núcleo recusou a edição");
   const { edited, patch, patchFaces, contextFaces, faceSide } = laid;
   const surfaceType = patchFaces[0]?.surfaceType ?? options.surfaceType ?? "terrain";

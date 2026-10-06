@@ -71,6 +71,12 @@ fn to_path(point: Vec3, path: &[Vec3], y_scale: f64) -> f64 {
 /// the ground's normal there: the nearest point of the path, and of the
 /// offset to it only the part across the ground.
 fn across_path(point: Vec3, path: &[Vec3], up: &[Vec3]) -> f64 {
+    across_and_along(point, path, up).0
+}
+
+/// [`across_path`], and how far `point` lies off the ground's plane at the
+/// path along its normal: the part of the offset `across_path` leaves out.
+fn across_and_along(point: Vec3, path: &[Vec3], up: &[Vec3]) -> (f64, f64) {
     let mut best = (f64::INFINITY, Vec3::default(), Vec3::new(0.0, 1.0, 0.0));
     let mut consider = |at: Vec3, normal: Vec3| {
         let d = point.distance(at);
@@ -79,7 +85,7 @@ fn across_path(point: Vec3, path: &[Vec3], up: &[Vec3]) -> f64 {
         }
     };
     match path.len() {
-        0 => return f64::INFINITY,
+        0 => return (f64::INFINITY, f64::INFINITY),
         1 => consider(path[0], up[0]),
         _ => {
             for k in 0..path.len() - 1 {
@@ -93,7 +99,8 @@ fn across_path(point: Vec3, path: &[Vec3], up: &[Vec3]) -> f64 {
     }
     let (_, at, normal) = best;
     let offset = point - at;
-    (offset - normal * offset.dot(normal)).length()
+    let along = offset.dot(normal);
+    ((offset - normal * along).length(), along.abs())
 }
 
 impl Shape {
@@ -117,7 +124,13 @@ impl Shape {
                 let up = (low - point.y).max(point.y - high);
                 across.max(0.0).hypot(up.max(0.0)) + across.max(up).min(0.0)
             }
-            // Where the layer reaches: the capsule round the path.
+            // Where the layer reaches: across the ground as far as its
+            // radius, off it as far as its height -- never a ball round the
+            // path, which reaches metres under the ground it lies on.
+            Form::Profile { height } if self.up.len() == self.path.len() => {
+                let (across, along) = across_and_along(point, &self.path, &self.up);
+                (across - self.radius).max(along - height.abs())
+            }
             Form::Profile { .. } => to_path(point, &self.path, 1.0) - self.radius,
         }
     }
@@ -139,9 +152,7 @@ impl Shape {
         match self.form {
             Form::Swept { squash } => self.radius * squash.clamp(1e-3, 1.0),
             Form::Column { low, high } => self.radius.min(((high - low) * 0.5).max(1e-3)),
-            // A layer of earth thins smoothly, but a tall one over a narrow
-            // brush makes a sharp ridge: its crest bends as tightly as
-            // 2 r^2 / (pi h).
+            // A layer of earth thins smoothly: nothing in it narrower than its radius.
             Form::Profile { height } => self.radius.min(2.0 * self.radius * self.radius / (std::f64::consts::PI * height.abs().max(1e-6))),
         }
     }

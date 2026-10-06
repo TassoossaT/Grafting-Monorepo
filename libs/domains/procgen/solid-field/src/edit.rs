@@ -21,7 +21,7 @@ use grafting_procgen_irregular_grid::ortho::{ortho_along, weld_faces_tracked};
 use grafting_procgen_irregular_grid::pair::pair_triangles;
 use grafting_procgen_irregular_grid::{FaceMesh, Random, Vec2, regular_cell_targets};
 
-use crate::field::{Effect, Shape};
+use crate::field::{Effect, Form, Shape};
 use crate::mesh_distance::MeshDistance;
 use crate::trimesh::{Remesh, border_loops, unfold, untangle, zipper, zipper_open};
 use crate::vector::Vec3;
@@ -78,6 +78,10 @@ const MOST_HOLE_CELLS: f64 = 16.0;
 /// Remesh rounds.
 const REMESH_ROUNDS: usize = 6;
 
+/// A grid's read of the surface: its vertices and triangles, and how many
+/// faces it read both ways (see [`EditField::extract`]).
+type Read = (Vec<Vec3>, Vec<[usize; 3]>, usize);
+
 /// Lays `patch` again with `edit` carved into or filled onto it. `context`
 /// is the ground round it -- never laid again, only asked where solid is.
 pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Result<EditedSurface, String> {
@@ -124,6 +128,7 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         TableFloor::new(height, all_vertices.clone(), triangles, length)
     });
     let ground = MeshDistance::new(all_vertices, &all_faces, length);
+    let base = EditField { ground: &ground, shapes: &[], blend: edit.blend, table: table.as_ref(), reach: f64::INFINITY };
     // Each layer read across the ground at its path: the ground's normal out
     // of the solid there, or the table's where it is the floor.
     let layered: Vec<Shape> = edit
@@ -140,8 +145,11 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
                         if table.as_ref().is_some_and(|t| !t.covered(at)) {
                             return Vec3::new(0.0, 1.0, 0.0);
                         }
-                        let axis = |offset: Vec3| ground.signed_distance(at + offset) - ground.signed_distance(at - offset);
-                        let gradient = Vec3::new(axis(Vec3::new(probe, 0.0, 0.0)), axis(Vec3::new(0.0, probe, 0.0)), axis(Vec3::new(0.0, 0.0, probe)));
+                        // Out of the ground and the table together, as the edit reads them:
+                        // smooth over a pile's rim, where the open sheet alone is not.
+                        // Read on the surface the stroke ran over, not inside the solid under it.
+                        let on = base.project(at, probe, length * 4.0);
+                        let gradient = base.gradient(on, probe);
                         if gradient.length() > 1e-9 { gradient.normalized() } else { Vec3::new(0.0, 1.0, 0.0) }
                     })
                     .collect();
@@ -151,7 +159,9 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         .collect();
     let patch_only = MeshDistance::new(patch.vertices.clone(), &patch.faces.iter().map(outward).collect::<Vec<_>>(), length);
     let context_only = MeshDistance::new(context.vertices.clone(), &context.faces.iter().map(outward).collect::<Vec<_>>(), length);
-    let field = EditField { ground: &ground, shapes: &layered, blend: edit.blend, table: table.as_ref() };
+    let field = EditField { ground: &ground, shapes: &layered, blend: edit.blend, table: table.as_ref(), reach: f64::INFINITY };
+    // How far off the old surface a layer can move it.
+    let layer_height = layered.iter().filter_map(|s| match s.form { Form::Profile { height } => Some(height.abs()), _ => None }).fold(0.0, f64::max);
     // A point of the new surface lying on the table where the table is the floor.
     let on_table = |point: Vec3| table.as_ref().is_some_and(|t| t.holds(point, cell * 0.3));
     let step = cell * 0.25;
@@ -240,7 +250,7 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         min = min.min(v);
         max = max.max(v);
     }
-    for shape in &edit.shapes {
+    for shape in &layered {
         let (low, high) = shape.bounds(edit.blend);
         min = min.min(low);
         max = max.max(high);
@@ -250,9 +260,24 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
     // Read at the face size first, finer where that reads the surface
     // wrong: solid thinner than a cell -- a shallow roof -- comes back with
     // edges three faces hold, or two faces walking one edge the same way.
-    let read = |grid: f64, mend: bool| -> Option<(Vec<Vec3>, Vec<[usize; 3]>)> {
+    let reads: std::cell::RefCell<HashMap<u64, Read>> = std::cell::RefCell::new(HashMap::new());
+    // `mend`: 0 a clean read only; 1 a read with no malformed edge whose
+    // holes the fan will close; 2 anything, faces read both ways settled
+    // and what is malformed still pruned.
+    let read = |grid: f64, mend: u8| -> Option<(Vec<Vec3>, Vec<[usize; 3]>)> {
         let pad = Vec3::splat(grid * 2.0);
-        let (extracted, extracted_triangles) = field.extract(min - pad, max + pad, grid);
+        // Read once per grid, whichever mending is asked of it; measured
+        // exactly only near the ground, where the grid reads the surface.
+        let (extracted, extracted_triangles, settled) = reads
+            .borrow_mut()
+            .entry(grid.to_bits())
+            .or_insert_with(|| EditField { reach: grid * 4.0 + edit.blend + layer_height, ..field }.extract(min - pad, max + pad, grid))
+            .clone();
+        // Read both ways somewhere: finer than the grid there, so read finer
+        // first -- and settled, not pruned, when nothing reads it cleanly.
+        if settled > 0 && mend < 2 {
+            return None;
+        }
         // Kept: what lies over the patch or in a shape's reach, clear of the ring.
         let clearance = cell * 1.25;
         let reach = edit.blend + grid * 1.5;
@@ -261,7 +286,12 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
             .copied()
             .filter(|&[a, b, c]| {
                 let centre = (extracted[a] + extracted[b] + extracted[c]) * (1.0 / 3.0);
-                let near = patch_only.distance(centre) < cell * 1.5 || edit.shapes.iter().any(|s| s.distance(centre) < reach);
+                // Near what the edit can change: the ground being laid again,
+                // a layer's height off it (or off the table, where that is the
+                // floor), or a bore's or an arch's own reach.
+                let surface_gap = patch_only.distance(centre).min(table.as_ref().map_or(f64::INFINITY, |t| if t.covered(centre) { f64::INFINITY } else { (centre.y - t.height).abs() }));
+                let near = surface_gap < cell * 1.5 + layer_height
+                    || layered.iter().any(|s| !matches!(s.effect, Effect::Raise | Effect::Lower) && s.distance(centre) < reach);
                 // Inside the ring: nearer the ground being laid again than the
                 // ground round it. A shape reaching on past the patch is the
                 // ground beyond's business; read there, the new surface runs
@@ -271,22 +301,30 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
             })
             .collect();
         let whole = pruned(kept.clone()).len() == kept.len();
-        if !whole && !mend {
+        if !whole && mend < 2 {
             return None;
         }
         let kept = joined_to_rings(&pruned(kept), &ring_points, &extracted, cell * 3.0, &on_table);
         // Every ring has a border of the new surface running along it, and a
         // clean read has no other -- but where it rests on the table.
-        let borders: Vec<Vec<usize>> = border_loops(&kept).into_iter().filter(|border| !border.iter().all(|&v| on_table(extracted[v]))).collect();
+        // A hole small enough for the fan that closes it later is no border:
+        // asked to read it again finer, the grid reads it again elsewhere.
+        let small = |border: &Vec<usize>| {
+            let around: f64 = (0..border.len()).map(|k| extracted[border[k]].distance(extracted[border[(k + 1) % border.len()]])).sum();
+            around <= cell * MOST_HOLE_CELLS && !ring_points.iter().any(|ring| mean_gap_to(ring, border, &extracted) < cell * 3.0)
+        };
+        let borders: Vec<Vec<usize>> = border_loops(&kept).into_iter().filter(|border| !border.iter().all(|&v| on_table(extracted[v])) && !small(border)).collect();
         if kept.is_empty() {
             return None;
         }
         let follows = |ring: &Vec<Vec3>| borders.iter().any(|border| mean_gap_to(ring, border, &extracted) < cell * 3.0);
-        let clean = mend || borders.len() == expected_borders;
+        let clean = mend > 0 || borders.len() == expected_borders;
         (clean && ring_points.iter().all(follows)).then_some((extracted, kept))
     };
-    // A clean read at either size first; mended only where neither is.
-    let (extracted, kept) = [(cell, false), (cell / 2.0, false), (cell, true), (cell / 2.0, true)]
+    // A clean read first; one with nothing malformed whose holes the fan
+    // closes; the grid twice as fine -- eight times the reads -- only where a
+    // read is malformed; pruned and mended last.
+    let (extracted, kept) = [(cell, 0), (cell, 1), (cell / 2.0, 0), (cell / 2.0, 1), (cell, 2), (cell / 2.0, 2)]
         .into_iter()
         .find_map(|(grid, mend)| read(grid, mend))
         .ok_or("a superfície nova não encontra o terreno em volta")?;
