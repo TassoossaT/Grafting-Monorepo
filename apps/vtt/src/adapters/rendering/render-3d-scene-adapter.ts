@@ -65,6 +65,8 @@ import {
   NODE_HANDLE_VISUAL_KIND,
   nodeHandleSceneItem,
   nodeHandleSceneItemId,
+  nodeHandleMeshSceneItem,
+  nodeHandleMeshSceneItemId,
   nodeHandleTransform,
   type NodeHandlePickData,
   type NodeHandleVisualParams,
@@ -457,15 +459,15 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       this.#confirmedTokenChanges += 1;
     } else if (change.type === "node-handle-removed") {
       engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
+      engine.scene.remove(nodeHandleMeshSceneItemId(change.nodeId), origin);
       this.#nodeHandles.delete(change.nodeId);
       this.#nodeHandleGlyphs.delete(change.nodeId);
       this.#meshHandles.delete(change.nodeId);
     } else if (change.type === "node-handle-upserted") {
       const previous = this.#nodeHandles.get(change.handle.nodeId);
       const glyph = change.handle.glyph ?? "point";
-      if (change.handle.mesh || this.#meshHandles.has(change.handle.nodeId) || previous === undefined || this.#nodeHandleGlyphs.get(change.handle.nodeId) !== glyph) {
-        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position, glyph, change.handle.mesh, change.handle.emphasized), origin);
-        if (change.handle.mesh) this.#meshHandles.add(change.handle.nodeId); else this.#meshHandles.delete(change.handle.nodeId);
+      if (previous === undefined || this.#nodeHandleGlyphs.get(change.handle.nodeId) !== glyph) {
+        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position, glyph), origin);
         this.#nodeHandleGlyphs.set(change.handle.nodeId, glyph);
       } else if (
         previous.x !== change.handle.position.x ||
@@ -477,6 +479,12 @@ export class Render3dSceneAdapter implements SceneRenderPort {
           nodeHandleTransform(change.handle.position, glyph),
           origin,
         );
+      }
+      if (change.handle.mesh) {
+        engine.scene.put(nodeHandleMeshSceneItem(change.handle.nodeId, change.handle.position, glyph, change.handle.mesh, change.handle.emphasized), origin);
+        this.#meshHandles.add(change.handle.nodeId);
+      } else if (this.#meshHandles.delete(change.handle.nodeId)) {
+        engine.scene.remove(nodeHandleMeshSceneItemId(change.handle.nodeId), origin);
       }
       this.#nodeHandles.set(change.handle.nodeId, change.handle.position);
     } else if (change.type === "surface-pick-target-removed") {

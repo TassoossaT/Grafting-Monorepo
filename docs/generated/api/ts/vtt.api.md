@@ -334,6 +334,12 @@ Large enough to stay a comfortable pointer/touch target at typical table-view ca
 
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_VISUAL_KIND: "vtt-construction-node-handle"`
 
+### `function vtt.node-handle-scene-item.nodeHandleMeshSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph, mesh: RenderMeshData, emphasized: boolean): SceneItem<NodeHandleVisualParams>`
+
+### `function vtt.node-handle-scene-item.nodeHandleMeshSceneItemId(nodeId: string): string`
+
+The continuous part of a handle coexists with its point control.
+
 ### `function vtt.node-handle-scene-item.nodeHandleSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph, mesh?: RenderMeshData, emphasized: boolean): SceneItem<NodeHandleVisualParams>`
 
 ### `function vtt.node-handle-scene-item.nodeHandleSceneItemId(nodeId: string): string`

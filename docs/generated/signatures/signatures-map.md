@@ -3564,6 +3564,11 @@ export function nodeHandleSceneItem(
   emphasized = false,
   ): SceneItem<NodeHandleVisualParams> {
   return {
+export function nodeHandleMeshSceneItemId(nodeId: string): string {
+  return `${nodeHandleSceneItemId(nodeId)}:mesh`;
+  }
+export function nodeHandleMeshSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph, mesh: RenderMeshData, emphasized = false): SceneItem<NodeHandleVisualParams> {
+  return { ...nodeHandleSceneItem(nodeId, position, glyph, mesh, emphasized), id: nodeHandleMeshSceneItemId(nodeId) };
 
 // src/adapters/rendering/render-3d-scene-adapter.ts
 export const VIEW_FOV_DEGREES = 38;
@@ -3849,7 +3854,7 @@ export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopolog
 // src/composition/tabletop/handle-glyphs.ts
 export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>> = {
   /** A control point of a spine. */
-  anchor: "point",
+  anchor: "midpoint",
   /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
   /** On the edge of a span's band: push it out or in. */

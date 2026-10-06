@@ -45,3 +45,11 @@ export function nodeHandleSceneItem(
     data: Object.freeze({ entity: "construction-node-handle", nodeId }) satisfies NodeHandlePickData,
   };
 }
+
+/** The continuous part of a handle coexists with its point control. */
+export function nodeHandleMeshSceneItemId(nodeId: string): string {
+  return `${nodeHandleSceneItemId(nodeId)}:mesh`;
+}
+export function nodeHandleMeshSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph, mesh: RenderMeshData, emphasized = false): SceneItem<NodeHandleVisualParams> {
+  return { ...nodeHandleSceneItem(nodeId, position, glyph, mesh, emphasized), id: nodeHandleMeshSceneItemId(nodeId) };
+}

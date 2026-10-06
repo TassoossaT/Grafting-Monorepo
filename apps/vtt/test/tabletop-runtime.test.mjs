@@ -1131,6 +1131,7 @@ test("road presentation exposes only spine anchors, insertion points and width h
     runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
     assert.deepEqual(shown(),spineHandles);
+    assert.equal(render.changes.filter(change=>change.type==="node-handle-upserted"&&change.handle.nodeId===curveAnchorId("spine:a")).at(-1).handle.glyph,"midpoint","vertex anchors retain a diamond handle");
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
     const strip=render.changes.filter(change=>change.type==="node-handle-upserted"&&change.handle.nodeId===curvePickId("spine-edge:a","midpoint")).at(-1).handle;
     assert.ok(strip.mesh?.indices.length>0,"the curve itself is a pickable mesh handle");
@@ -1193,8 +1194,8 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
     const glyphOf = (id) => upserted.find((handle) => handle.nodeId === id)?.glyph;
     assert.deepEqual(
       [glyphOf("structure-pivot:spine:s:0"), glyphOf("structure-rotate:spine:s:0"), glyphOf("structure-height:spine:s:0"), glyphOf("structure-turns:spine:s:0"), glyphOf(curveAnchorId("spine:s:1"))],
-      ["move", "rotate", "height", "turns", "point"],
-      "each whole-spine handle reads as what it does; a control point is drawn as a point",
+      ["move", "rotate", "height", "turns", "midpoint"],
+      "each whole-spine handle reads as what it does; a control point is drawn as a diamond",
     );
   } finally { session.free(); }
 });
