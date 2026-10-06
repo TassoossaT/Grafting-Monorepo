@@ -1158,7 +1158,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
 
     let map = this.#foldAffectedSurfaces(
-      createMapProjection(),
+      Object.freeze({ ...createMapProjection(), revision: this.#snapshot.map.revision + 1 }),
       meshes.map((mesh) => mesh.surfaceKey),
       meshes,
     );

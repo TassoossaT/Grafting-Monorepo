@@ -1246,3 +1246,38 @@ for (const surfaceType of ["terrain", "wall-white", "platform"]) for (const same
  const last=new Map();for(const change of render.changes){const dep=change.dependency,id=dep.layer+":"+dep.scopeId;assert.ok(dep.revision>(last.get(id)??-1),"every lifetime, including undo/redo, has newer render revisions");last.set(id,dep.revision);}
  }finally{await runtime.dispose();}
 });
+
+test("undo, redo and rollback keep map revisions increasing and project the restored graph positions",async()=>{
+ const {sessionFixture,addFace}=await import("./platform-session-fixture.mjs");
+ const {vertexOverlayOf}=await import("../src/composition/tabletop/topology-overlay/vertex-overlay.ts");
+ const {edgeOverlayOf}=await import("../src/composition/tabletop/topology-overlay/edge-overlay.ts");
+ const real=sessionFixture(),construction=createFakeConstructionPort();
+ try {
+  addFace(real.runtime,"undo-position","platform",[[0,0],[4,0],[4,4],[0,4]].map(([x,z],i)=>({id:`undo:${i}`,position:{x,y:0,z}})));
+  Object.assign(construction,{
+   getGraphSnapshot:real.runtime.getGraphSnapshot,getNodePositions:()=>real.runtime.getGraphSnapshot().nodes,
+   getAllRegionTopologies:real.runtime.getAllRegionTopologies,getRegionTopology:real.runtime.getRegionTopology,
+   getAllSurfaceMeshes:()=>[],getSurfaceMeshesReport:()=>({meshes:[],failed:[]}),
+   beginTransaction:id=>real.session.begin_transaction(id),commitTransaction:id=>real.session.commit_transaction(id),rollbackTransaction:id=>real.session.rollback_transaction(id),
+   undoRegionOverlay:id=>real.session.undo_region_overlay(id),redoRegionOverlay:id=>real.session.redo_region_overlay(id),
+   moveVertices:moves=>JSON.parse(real.session.move_vertices_json(JSON.stringify(moves.map(m=>({nodeId:m.nodeId,position:[m.position.x,m.position.y,m.position.z]}))))),
+  });
+  const runtime=createTabletopRuntime({tableId:"undo-debug",renderPort:createFakeRenderPort(),constructionPort:construction});await runtime.start();
+  const edgePositions=()=>edgeOverlayOf(real.runtime,real.runtime.getAllRegionTopologies(),real.runtime.getGraphSnapshot(),real.runtime).map(g=>[g.role,[...g.positions]]);
+  const before=real.session.snapshot_json(),beforeEdges=edgePositions();
+  runtime.transact("move-debug","local",()=>runtime.applyRegionEdit([{kind:"move-vertex",nodeId:"undo:0",position:{x:2,y:1,z:3}}],"local","move-debug"));
+  const moved=real.session.snapshot_json(),movedEdges=edgePositions();assert.notDeepEqual(movedEdges,beforeEdges);let revision=runtime.getSnapshot().map.revision;
+  const check=expected=>{
+   assert.equal(real.session.snapshot_json(),expected,"authoritative graph equals its checkpoint");
+   assert.deepEqual(edgePositions(),expected===before?beforeEdges:movedEdges,"debug edges follow the restored checkpoint coordinates");
+   assert.ok(runtime.getSnapshot().map.revision>revision,"overlay must observe each restore even when node/face counts stay identical");revision=runtime.getSnapshot().map.revision;
+   const graph=runtime.getGraphSnapshot();assert.deepEqual([...vertexOverlayOf(graph)],graph.nodes.flatMap(n=>[n.position.x,n.position.y,n.position.z]));
+   for(const node of graph.nodes)assert.deepEqual(runtime.getSnapshot().map.nodePositions.get(node.id).position,node.position);
+  };
+  runtime.undoTransaction("move-debug","local");check(before);
+  runtime.redoTransaction("move-debug","local");check(moved);
+  runtime.undoTransaction("move-debug","local");check(before);
+  assert.throws(()=>runtime.transact("rollback-debug","local",()=>{runtime.applyRegionEdit([{kind:"move-vertex",nodeId:"undo:0",position:{x:8,y:2,z:9}}],"local","rollback-debug");throw Error("cancel");}),/cancel/);check(before);
+  await runtime.dispose();
+ } finally {real.session.free();}
+});

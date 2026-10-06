@@ -5607,13 +5607,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 // src/composition/tabletop/use-debug-stats.ts
 export const RECENT_CHANGES = 8;
 export interface ChangeRecord {
+  /** Identity of this observation; multiple observations may share a map revision. */
+  readonly id: number;
   /** The map's revision once the change was read. */
   readonly revision: number;
   /** What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads. */
   readonly label: string;
   /** The commits' time together, in milliseconds; absent when no timed commit made it. */
-  readonly ms?: number;
-  /** The slowest phase of any of those commits. */
 export interface DebugStats {
   /** The last full window of frames; absent until one has passed. */
   readonly frame?: FrameStats;
@@ -5623,7 +5623,7 @@ export interface DebugStats {
   readonly readMs?: number;
   /** Bytes of JavaScript heap in use, where the browser says. */
 export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): DebugStats {
-  const [frame, setFrame] = useState<FrameStats | undefined>(undefined);
+  const changeSequence = useRef(0);
 
 // src/entities/map/index.ts
 export type {

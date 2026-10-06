@@ -5112,6 +5112,10 @@ What the map was made of afterwards, to read the totals the change led to.
 
 How long telling the change apart took, in milliseconds.
 
+### `property vtt.use-debug-stats.ChangeRecord.id: number`
+
+Identity of this observation; multiple observations may share a map revision.
+
 ### `property vtt.use-debug-stats.ChangeRecord.label: string`
 
 What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads.
