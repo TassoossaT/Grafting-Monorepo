@@ -582,6 +582,42 @@ export interface ConstructionTerrainVolumeEdit {
   readonly source: readonly (number | null)[];
 }
 
+/** A point of a structure's ring the regenerated ground goes round, by the caller's own index. */
+export interface ConstructionGivenPoint {
+  readonly position: readonly [number, number, number];
+  readonly id: number;
+}
+
+/** One repair of the ground on its own surface: the patch laid again, the rings it goes round. */
+export interface ConstructionTerrainRegenerateRequest {
+  /** The faces laid again: a disk, holes allowed -- a hole is laid over unless a ring keeps it. */
+  readonly patch: ConstructionIndexedFaces;
+  /** Closed rings where structures rest on the ground: no ground inside. */
+  readonly holes?: readonly (readonly ConstructionGivenPoint[])[];
+  /** How wide one finished face should be, measured on the surface. */
+  readonly faceSide: number;
+  readonly seed?: number;
+  /** The generator's relaxation strength. Omitted takes 0.7. */
+  readonly relaxStrength?: number;
+}
+
+/** What a corner of regenerated ground already was: a patch vertex, or a given point by its id. */
+export type ConstructionSurfaceOrigin =
+  | { readonly kind: "patch"; readonly index: number }
+  | { readonly kind: "given"; readonly index: number };
+
+/** The faces laid in place of the patch, on its own surface. */
+export interface ConstructionTerrainRegeneration {
+  readonly vertices: readonly (readonly [number, number, number])[];
+  /** In the winding the patch's faces had. */
+  readonly faces: readonly (readonly number[])[];
+  /** Index-aligned with `vertices`. */
+  readonly origin: readonly (ConstructionSurfaceOrigin | null)[];
+  /** New corners lying on a side somebody holds, with that side's two ends. */
+  readonly landed: readonly { readonly vertex: number; readonly from: ConstructionSurfaceOrigin; readonly to: ConstructionSurfaceOrigin }[];
+  readonly refinementComplete: boolean;
+}
+
 /** One corner the generator put along a contour the caller supplied. */
 export interface ConstructionGridContourNode {
   /** Index into {@link ConstructionIrregularQuadGrid.vertices}. */
@@ -804,6 +840,12 @@ export interface ConstructionSessionPort extends BezierPort {
    * ring of nodes round it kept. Pure. `undefined` where the engine refuses.
    */
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined;
+  /**
+   * Lays a patch of ground again on its own surface, its shape unchanged,
+   * going round the structures' rings. Pure. `undefined` where the engine
+   * refuses.
+   */
+  regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined;
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;

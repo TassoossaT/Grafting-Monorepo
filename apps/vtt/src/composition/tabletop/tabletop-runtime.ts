@@ -43,6 +43,8 @@ import type {
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
   ConstructionTerrainVolumeEdit,
+  ConstructionTerrainRegenerateRequest,
+  ConstructionTerrainRegeneration,
   ConstructionTerrainVolumeEditRequest,
   ConstructionNodeId,
   ConstructionHostPoint,
@@ -186,6 +188,8 @@ export interface TabletopRuntime extends BezierPort {
   generateIrregularQuadGrid(
     request: ConstructionIrregularQuadGridRequest,
   ): ConstructionIrregularQuadGrid | undefined;
+  /** One repair of the ground on its own surface. See `ConstructionSessionPort.regenerateTerrainSurface`. */
+  regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined;
   /** One edit of the ground's own mesh. See `ConstructionSessionPort.editTerrainVolume`. */
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined;
   /** Every region's boundary. */
@@ -1012,6 +1016,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): ConstructionIrregularQuadGrid | undefined {
     this.#requireReady("generating a terrain grid");
     return this.#construction.generateIrregularQuadGrid(request);
+  }
+
+  regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined {
+    this.#requireReady("regenerating the ground on its surface");
+    return this.#construction.regenerateTerrainSurface(request);
   }
 
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined {

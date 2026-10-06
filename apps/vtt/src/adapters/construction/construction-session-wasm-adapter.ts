@@ -41,6 +41,8 @@ import type {
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
   ConstructionTerrainVolumeEdit,
+  ConstructionTerrainRegenerateRequest,
+  ConstructionTerrainRegeneration,
   ConstructionTerrainVolumeEditRequest,
   ConstructionPatch,
   ConstructionPatchOutcome,
@@ -524,6 +526,15 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     }
 
     return this.#generateSingleGrid(request);
+  }
+
+  regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined {
+    try {
+      return JSON.parse(this.#read().regenerate_terrain_surface_json(JSON.stringify(request))) as ConstructionTerrainRegeneration;
+    } catch {
+      // A refusal: the patch describes no ground the engine can lay again.
+      return undefined;
+    }
   }
 
   editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined {

@@ -689,6 +689,16 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Lays a patch of ground again on its own surface, its shape unchanged:
+    /// the repair round a structure, wherever the ground is. Pure -- reads
+    /// nothing from this session and mutates nothing in it; the caller
+    /// registers the result. See `terrain_regenerate`.
+    pub fn regenerate_terrain_surface_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = crate::terrain_regenerate::regenerate_terrain_surface(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     /// Which of the given XZ points already sit inside a region -- what a
     /// generator consults so it only builds over open ground. See
     /// `footprint::classify_points`.

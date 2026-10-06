@@ -1,13 +1,12 @@
 import type {
   ConstructionNodeId,
-  ConstructionOrientedEdgeUse,
-  ConstructionPatchRegion,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionVolumeShape,
 } from "@/ports";
 
-import { createBoundaryEdges, hasTrait } from "../../../features/edit-construction/index.ts";
+import { hasTrait } from "../../../features/edit-construction/index.ts";
+import { commitGround, indexedFaces } from "./ground-commit.ts";
 import type { ToolContext } from "../tools/core/tool-context.ts";
 
 /**
@@ -79,29 +78,8 @@ export function commitTerrainVolumeEdit(ctx: ToolContext, shape: ConstructionVol
   // The ground's own face size; the engine lays finer where the shape is narrow.
   const faceSide = options.faceSide ?? faceSideOf(patchFaces);
 
-  // Indexed faces, each list its own vertices.
-  const indexed = (faces: readonly ConstructionRegionTopology[]) => {
-    const index = new Map<ConstructionNodeId, number>();
-    const ids: ConstructionNodeId[] = [];
-    const vertices: [number, number, number][] = [];
-    const rings = faces.map((face) => {
-      const at = new Map(face.nodes.map((node) => [node.id, node.position]));
-      return ringOf(face)!.map((id) => {
-        let i = index.get(id);
-        if (i === undefined) {
-          const p = at.get(id)!;
-          i = vertices.length;
-          index.set(id, i);
-          ids.push(id);
-          vertices.push([p.x, p.y, p.z]);
-        }
-        return i;
-      });
-    });
-    return { ids, vertices, faces: rings };
-  };
-  const patch = indexed(patchFaces);
-  const context = indexed(contextFaces);
+  const patch = indexedFaces(patchFaces);
+  const context = indexedFaces(contextFaces);
 
   const edited = ctx.runtime.editTerrainVolume({
     patch: { vertices: patch.vertices, faces: patch.faces },
@@ -114,51 +92,27 @@ export function commitTerrainVolumeEdit(ctx: ToolContext, shape: ConstructionVol
   if (!edited) throw new Error("o núcleo recusou a edição");
 
   const operationId = `${ctx.tableId}:terrain-volume:${ctx.nextSequence()}`;
-  // The ring's corners are the very nodes standing; every other corner is new.
-  const nodeIdOf = (vertex: number): ConstructionNodeId => {
-    const source = edited.source[vertex];
-    return source === null || source === undefined ? `${operationId}:v${vertex}` : patch.ids[source]!;
-  };
-  const nodes = edited.vertices.flatMap(([x, y, z], vertex) => (edited.source[vertex] === null || edited.source[vertex] === undefined) ? [{ id: nodeIdOf(vertex), position: { x, y, z } }] : []);
-
-  // The ring's edges are the very edges the ground beyond holds.
-  const standing = new Map<string, { readonly edgeId: string; readonly start: ConstructionNodeId }>();
-  for (const face of patchFaces) {
-    for (const use of face.outerLoops.flat()) {
-      const start = use.reversed ? use.endNodeId : use.startNodeId;
-      standing.set([use.startNodeId, use.endNodeId].sort().join("\u0000"), { edgeId: use.edgeId, start });
-    }
-  }
-  // An edge only the faces laid again held -- the map's own border -- goes
-  // with them when they are replaced, so it is declared again here.
-  const heldBeyond = new Set(contextFaces.flatMap((face) => face.outerLoops.flat().map((use) => use.edgeId)));
-  const redeclared = new Map<string, { readonly edgeId: string; readonly startNodeId: ConstructionNodeId; readonly endNodeId: ConstructionNodeId }>();
-  const builder = createBoundaryEdges(ctx.tableId, { kind: "private-when-full", runPrefix: operationId, existingUses: new Map() });
-  const useOf = (a: ConstructionNodeId, b: ConstructionNodeId): ConstructionOrientedEdgeUse => {
-    const existing = standing.get([a, b].sort().join("\u0000"));
-    if (!existing) return builder.use(a, b);
-    if (!heldBeyond.has(existing.edgeId)) {
-      redeclared.set(existing.edgeId, { edgeId: existing.edgeId, startNodeId: existing.start, endNodeId: existing.start === a ? b : a });
-    }
-    return { edgeId: existing.edgeId, reversed: existing.start !== a };
-  };
-  const surfaceType = patchFaces[0]!.surfaceType;
-  const regions: ConstructionPatchRegion[] = edited.faces.flatMap((face, f) => {
-    const ring = face.map(nodeIdOf);
-    if (new Set(ring).size < 3) return [];
-    return [{ regionId: `${operationId}:f${f}`, boundary: ring.map((id, k) => useOf(id, ring[(k + 1) % ring.length]!)), holes: [], surfaceType, physical: true }];
-  });
-
+  let built = 0;
   const { recorded } = ctx.runtime.transact(operationId, "local", () => {
-    const outcome = ctx.runtime.applyPatchReplacement({
+    built = commitGround(ctx.runtime, {
       operationId,
-      sourceSurfaceKeys: patchFaces.map((face) => face.surfaceKey),
-      patch: { nodes, edges: [...builder.all(), ...redeclared.values()], regions },
-    }, "local", operationId);
-    if (outcome.skippedRegionIds.length > 0) throw new Error(`${outcome.skippedRegionIds.length} faces recusadas pelo motor`);
+      tableId: ctx.tableId,
+      replaced: patchFaces,
+      around: contextFaces,
+      surfaceType: patchFaces[0]!.surfaceType,
+      faceSide,
+      laid: {
+        vertices: edited.vertices,
+        faces: edited.faces,
+        nodeOf: (vertex) => {
+          const source = edited.source[vertex];
+          return source === null || source === undefined ? undefined : patch.ids[source];
+        },
+      },
+    }).built;
   });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
-  return { faces: regions.length };
+  return { faces: built };
 }
 
 /** At least this far between the points a stroke's path keeps, as a fraction of its radius. */
