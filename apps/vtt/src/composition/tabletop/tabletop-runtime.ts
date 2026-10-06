@@ -1,4 +1,5 @@
-import { curvePick, curveEdgesOf, curveSegments, sceneHandles, type HandleFocus } from "../../features/edit-construction/index.ts";
+import { appendRibbonQuads } from "./tools/shapes/ribbon-mesh-preview.ts";
+import { curvePick, curvePickId, curveEdgesOf, sampleRibbons, sceneHandles, type HandleFocus } from "../../features/edit-construction/index.ts";
 import type { RenderHandleGlyph } from "../../ports/index.ts";
 import { HANDLE_GLYPHS } from "./handle-glyphs.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
@@ -363,7 +364,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   /** Whose handles show -- see `setHandleFocus`. */
   #handleFocus: HandleFocus | undefined = undefined;
   #handleSelection: string | undefined = undefined;
-  #spineHandlePreviewShown = false;
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
   #generation = 0;
@@ -648,6 +648,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     generation: number,
     glyph?: RenderHandleGlyph,
+    mesh?: RenderMeshData,
+    emphasized = false,
   ): void {
     if (this.#handlesHidden || (this.#pointHandlesOnly && !this.#pointHandleIds.has(nodeId))) return;
     const revision = ++this.#renderRevision;
@@ -658,7 +660,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       causeId,
       runtimeGeneration: generation,
       dependency: { layer: "handles", scopeId: nodeId, revision },
-      handle: glyph === undefined ? { nodeId, position } : { nodeId, position, glyph },
+      handle: { nodeId, position, ...(glyph ? { glyph } : {}), ...(mesh ? { mesh, emphasized } : {}) },
     });
   }
 
@@ -689,25 +691,24 @@ export class AppTabletopRuntime implements TabletopRuntime {
       for (const id of [...this.#nodeHandleRevisions.keys()]) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     }
     this.#sceneHandleGlyphs = new Map(handles.map((handle) => [handle.id, HANDLE_GLYPHS[handle.kind]]));
-    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, HANDLE_GLYPHS[handle.kind]);
-    this.#sceneHandleIds = live;
-    // The edit spine is its own presentation, independent of graph debug.
-    if (this.#pointHandlesOnly && typeof this.#construction.curveBatch === "function") {
+    // Continuous curve handles use the same identity and gesture as the midpoint control.
+    const meshes = new Map<string, RenderMeshData>();
+    if (this.#pointHandlesOnly && !this.#handlesHidden && typeof this.#construction.curveBatch === "function") {
       const focus = this.#handleFocus;
       const edges = curveEdgesOf(graph, [], this.#construction).filter((edge) => !focus || (focus.spineNodes.has(edge.startNodeId) && focus.spineNodes.has(edge.endNodeId)));
-      const positions = Float32Array.from(edges.flatMap((edge) => [...curveSegments(this.#construction, edge.curve)]));
-      for (let index = 1; index < positions.length; index += 3) positions[index] += 0.025;
-      if (positions.length) {
-        this.showPreview({ kind: "segments", positions, color: 0xffbc55, opacity: 0.95 }, "spine-handles");
-        this.#spineHandlePreviewShown = true;
-      } else if (this.#spineHandlePreviewShown) {
-        this.clearPreview("spine-handles");
-        this.#spineHandlePreviewShown = false;
-      }
-    } else if (this.#spineHandlePreviewShown) {
-      this.clearPreview("spine-handles");
-      this.#spineHandlePreviewShown = false;
+      const outlines = sampleRibbons(this.#construction, edges.map((edge) => {
+        const selected = this.#handleSelection === curvePickId(edge.edgeId, "midpoint");
+        const halfWidth = selected ? 0.15 : 0.11;
+        return { curve: edge.curve, offsets: [-halfWidth, halfWidth] };
+      }), 0.025);
+      edges.forEach((edge, index) => {
+        const positions: number[] = [], indices: number[] = [];
+        appendRibbonQuads(positions, indices, outlines[index]!.map((p) => [p.x, p.y, p.z] as const), 0.065);
+        if (indices.length) meshes.set(curvePickId(edge.edgeId, "midpoint"), { positions: Float32Array.from(positions), indices: Uint32Array.from(indices) });
+      });
     }
+    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, HANDLE_GLYPHS[handle.kind], meshes.get(handle.id), this.#handleSelection === handle.id);
+    this.#sceneHandleIds = live;
   }
 
   setConstructionHandleSelection(id: string | undefined): void {

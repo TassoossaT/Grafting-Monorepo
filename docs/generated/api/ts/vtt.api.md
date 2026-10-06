@@ -320,7 +320,11 @@ Opaque per-item data a pick result echoes back, letting the adapter recover whic
 
 ### `interface vtt.node-handle-scene-item.NodeHandleVisualParams`
 
+### `property vtt.node-handle-scene-item.NodeHandleVisualParams.emphasized?: boolean`
+
 ### `property vtt.node-handle-scene-item.NodeHandleVisualParams.glyph: RenderHandleGlyph`
+
+### `property vtt.node-handle-scene-item.NodeHandleVisualParams.mesh?: RenderMeshData`
 
 ### `variable vtt.node-handle-scene-item.HANDLE_SCALE: 0.32`
 
@@ -330,7 +334,7 @@ Large enough to stay a comfortable pointer/touch target at typical table-view ca
 
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_VISUAL_KIND: "vtt-construction-node-handle"`
 
-### `function vtt.node-handle-scene-item.nodeHandleSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph): SceneItem<NodeHandleVisualParams>`
+### `function vtt.node-handle-scene-item.nodeHandleSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph, mesh?: RenderMeshData, emphasized: boolean): SceneItem<NodeHandleVisualParams>`
 
 ### `function vtt.node-handle-scene-item.nodeHandleSceneItemId(nodeId: string): string`
 
@@ -12465,9 +12469,15 @@ already keeps this port renderer-agnostic.
 
 ### `interface vtt.scene-render-port.RenderNodeHandle`
 
+### `property vtt.scene-render-port.RenderNodeHandle.emphasized?: boolean`
+
 ### `property vtt.scene-render-port.RenderNodeHandle.glyph?: RenderHandleGlyph`
 
 How the handle is drawn; absent is a plain point.
+
+### `property vtt.scene-render-port.RenderNodeHandle.mesh?: RenderMeshData`
+
+Optional world-space mesh for a continuous handle instead of a point sprite.
 
 ### `property vtt.scene-render-port.RenderNodeHandle.nodeId: string`
 

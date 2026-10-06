@@ -3551,6 +3551,8 @@ export function nodeHandleSceneItemId(nodeId: string): string {
 export const HANDLE_SCALE = 0.32;
 export interface NodeHandleVisualParams {
   readonly glyph: RenderHandleGlyph;
+  readonly mesh?: RenderMeshData;
+  readonly emphasized?: boolean;
   }
 export function nodeHandleTransform(position: ConstructionPosition, glyph: RenderHandleGlyph = "point"): Transform {
   return { position, scale: glyph === "point" ? HANDLE_SCALE : GLYPH_SCALE };
@@ -3558,10 +3560,10 @@ export function nodeHandleSceneItem(
   nodeId: string,
   position: ConstructionPosition,
   glyph: RenderHandleGlyph = "point",
+  mesh?: RenderMeshData,
+  emphasized = false,
   ): SceneItem<NodeHandleVisualParams> {
   return {
-  id: nodeHandleSceneItemId(nodeId),
-  layer: NODE_HANDLE_LAYER_ID,
 
 // src/adapters/rendering/render-3d-scene-adapter.ts
 export const VIEW_FOV_DEGREES = 38;

@@ -7,7 +7,7 @@ Contrato consolidado em 2026-10-06, após os refinamentos filhos de #303 e as de
 - O tipo declara suas capacidades, escopo e reações. Ferramentas genéricas despacham essas declarações.
 - Criação mostra preview; confirmação produz uma transação que inclui geometria, vínculos e reações. Desfazer opera sobre essa transação.
 - Editar estruturas existentes exige alças. Os pontos do grafo e o corpo não são atalhos de edição.
-- Espinhas têm uma apresentação de edição própria, independente do debug, e alças com identidade separada dos nós.
+- Espinhas têm uma faixa contínua selecionável acompanhando a curva, independente do debug, e alças com identidade separada dos nós. A faixa é uma malha de alça confirmada, não um preview: usa a identidade de edição do trecho, ganha destaque ao selecionar e permite arrastar a curvatura. Âncoras e controles de largura permanecem disponíveis.
 - Desconectar, apagar trecho e fechar são alças contextuais da espinha selecionada. Remover ponto usa Delete; largura tem alças de trecho e de extremidade.
 - O painel lateral contém parâmetros do tipo. O painel genérico “Editar estrutura existente” foi removido.
 

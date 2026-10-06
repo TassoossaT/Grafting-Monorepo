@@ -149,6 +149,9 @@ export interface RenderNodeHandle {
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
   /** How the handle is drawn; absent is a plain point. */
   readonly glyph?: RenderHandleGlyph;
+  /** Optional world-space mesh for a continuous handle instead of a point sprite. */
+  readonly mesh?: RenderMeshData;
+  readonly emphasized?: boolean;
 }
 
 export type ConfirmedNodeHandleRenderChange =

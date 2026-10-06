@@ -1132,7 +1132,13 @@ test("road presentation exposes only spine anchors, insertion points and width h
     runtime.setConstructionHandlePresentation("spine-points");
     assert.deepEqual(shown(),spineHandles);
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
-    assert.equal(render.previews.get("spine-handles").kind, "segments");
+    const strip=render.changes.filter(change=>change.type==="node-handle-upserted"&&change.handle.nodeId===curvePickId("spine-edge:a","midpoint")).at(-1).handle;
+    assert.ok(strip.mesh?.indices.length>0,"the curve itself is a pickable mesh handle");
+    assert.equal(render.previews.has("spine-handles"),false,"a decorative preview is no longer the spine presentation");
+    const positions=[...strip.mesh.positions];runtime.setConstructionHandleSelection(strip.nodeId);
+    const selectedStrip=render.changes.filter(change=>change.type==="node-handle-upserted"&&change.handle.nodeId===strip.nodeId).at(-1).handle;
+    assert.equal(selectedStrip.emphasized,true);assert.notDeepEqual([...selectedStrip.mesh.positions],positions,"selected curve has a wider hit area");
+    runtime.setConstructionHandleSelection(undefined);
     runtime.setConstructionHandlePresentation("none");
     assert.deepEqual(shown(), [], "direct selection has no edit handles intercepting picks");
     runtime.setConstructionHandlePresentation("spine-points");

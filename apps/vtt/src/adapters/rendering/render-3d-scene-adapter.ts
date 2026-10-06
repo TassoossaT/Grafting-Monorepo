@@ -135,6 +135,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #nodeHandles = new Map<string, { readonly x: number; readonly y: number; readonly z: number }>();
   /** The glyph each handle is drawn with: a changed one is re-put, not moved. */
   readonly #nodeHandleGlyphs = new Map<string, import("@/ports").RenderHandleGlyph>();
+  readonly #meshHandles = new Set<string>();
   /** Which preview channels currently have something on them, so an unnamed clear can empty them all. */
   readonly #previewChannels = new Set<string>();
   /** How many labels each preview channel has put up, so a shorter set takes the surplus down. */
@@ -186,11 +187,15 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     } as const;
     registry.register<NodeHandleVisualParams>({
       kind: NODE_HANDLE_VISUAL_KIND,
-      describe: (params) => ({
+      describe: (params) => params.mesh ? {
+        geometry: { shape: "mesh", data: params.mesh },
+        material: { surface: "unlit", color: params.emphasized ? 0xfff3ce : 0xffc878, opacity: params.emphasized ? 1 : 0.9, doubleSided: true, depthWrite: false, clippable: true },
+        pickable: true,
+      } : {
         geometry: { shape: "sprite" },
         material: { surface: "unlit", color: 0xffffff, texture: glyphTextures[params.glyph], clippable: true },
-      }),
-      equals: (left, right) => left.glyph === right.glyph,
+      },
+      equals: (left, right) => left.glyph === right.glyph && left.mesh === right.mesh && left.emphasized === right.emphasized,
     });
     registry.register<MapChunkVisualParams>({
       kind: MAP_SURFACE_VISUAL_KIND,
@@ -454,11 +459,13 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
       this.#nodeHandles.delete(change.nodeId);
       this.#nodeHandleGlyphs.delete(change.nodeId);
+      this.#meshHandles.delete(change.nodeId);
     } else if (change.type === "node-handle-upserted") {
       const previous = this.#nodeHandles.get(change.handle.nodeId);
       const glyph = change.handle.glyph ?? "point";
-      if (previous === undefined || this.#nodeHandleGlyphs.get(change.handle.nodeId) !== glyph) {
-        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position, glyph), origin);
+      if (change.handle.mesh || this.#meshHandles.has(change.handle.nodeId) || previous === undefined || this.#nodeHandleGlyphs.get(change.handle.nodeId) !== glyph) {
+        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position, glyph, change.handle.mesh, change.handle.emphasized), origin);
+        if (change.handle.mesh) this.#meshHandles.add(change.handle.nodeId); else this.#meshHandles.delete(change.handle.nodeId);
         this.#nodeHandleGlyphs.set(change.handle.nodeId, glyph);
       } else if (
         previous.x !== change.handle.position.x ||
@@ -597,6 +604,8 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     this.#runtimeGeneration = 0;
     this.#tokens.clear();
     this.#nodeHandles.clear();
+    this.#nodeHandleGlyphs.clear();
+    this.#meshHandles.clear();
     this.#consumedRevisions.clear();
     this.#rendererDisposes += 1;
   }
