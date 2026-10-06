@@ -3849,7 +3849,7 @@ Something a commit survived but should not have had to.
 
 ### `variable vtt.demolish-tool.demolishTool: ConstructionTool<"demolish">`
 
-Direct structure selection, with type-declared scope and one transaction per gesture.
+Direct face selection and one transaction per gesture.
 
 ### `variable vtt.opening-stands.openingStands: readonly OpeningStand[]`
 
@@ -7575,6 +7575,10 @@ inferred from a symmetric "compatible" flag.
 
 ### `function vtt.creation-interaction.forbid(reason: string): CreationInteraction`
 
+### `variable vtt.organic-structure.demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]>`
+
+Owner-provided terrain deletion entry point; no generic face deletion fallback.
+
 ### `variable vtt.organic-structure.ORGANIC_ROLES: { body: "organic-body"; boundaryEdge: "organic-boundary-edge"; boundaryVertex: "organic-boundary-vertex" }`
 
 The role model for a procedurally generated, non-enumerable boundary --
@@ -7596,7 +7600,7 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
 
-### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction, traits: readonly StructureTrait[]): StructureTypeDefinition`
+### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction, traits: readonly StructureTrait[], demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome): StructureTypeDefinition`
 
 ### `function vtt.organic-structure.pathInteractionOver(_covered: StructureView, _paintedSubtype?: string): CreationInteraction`
 
@@ -8154,7 +8158,7 @@ contour faces one edit replaces (`standingRegionsForCloud`, below).
 
 ### `function vtt.path-cloud-scope.extractCorridorsFromEdgeId(edgeId: string): readonly string[]`
 
-### `function vtt.path-cloud-scope.removalPatchForRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot): ConstructionGraphPatch`
+### `function vtt.path-cloud-scope.removalPatchForRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot, remaining: readonly ConstructionRegionTopology[]): ConstructionGraphPatch`
 
 Retires the authoring spans owned by deleted contour faces, including disconnected remnants.
 
@@ -9455,6 +9459,10 @@ Whether regions of this type vertically conform to a support with these traits b
 How this type is generated, recorded next to the roles it implies --
 the doc's whole point is that these two halves must not drift apart.
 
+### `property vtt.structure-type.StructureTypeDefinition.demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome`
+
+Absent means remove only the pointed face and prune its orphaned graph elements.
+
 ### `property vtt.structure-type.StructureTypeDefinition.deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext) => ReadonlyMap<string, ConstructionPosition>`
 
 Positions this type derives for its own unmoved nodes once motion has
@@ -9515,13 +9523,9 @@ cloud as the change left it.
 
 Present when this type is regenerated whole from a recipe its faces keep -- see RecipeGeneration.
 
-### `property vtt.structure-type.StructureTypeDefinition.removalPatch?: (regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot) => ConstructionGraphPatch`
+### `property vtt.structure-type.StructureTypeDefinition.removalPatch?: (regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot, remaining: readonly ConstructionRegionTopology[]) => ConstructionGraphPatch`
 
 Authoring graph owned by deleted faces, removed in the same transaction.
-
-### `property vtt.structure-type.StructureTypeDefinition.removeWithHost?: boolean`
-
-A face pinned to a removed host cannot survive without that host.
 
 ### `property vtt.structure-type.StructureTypeDefinition.requiresMotionSolver?: boolean`
 
@@ -9585,6 +9589,20 @@ is what keeps a type from branching on another type's identity.
 ### `property vtt.structure-type.StructureView.label: string`
 
 ### `property vtt.structure-type.StructureView.traits: ReadonlySet<StructureTrait>`
+
+### `interface vtt.structure-type.SurfaceRemovalContext`
+
+A type's optional deletion action, executed inside the gesture's transaction.
+
+### `property vtt.structure-type.SurfaceRemovalContext.graph: ConstructionGraphSnapshot`
+
+### `property vtt.structure-type.SurfaceRemovalContext.region: ConstructionRegionTopology`
+
+### `property vtt.structure-type.SurfaceRemovalContext.remaining: readonly ConstructionRegionTopology[]`
+
+### `property vtt.structure-type.SurfaceRemovalContext.removeFace: () => RegionEditOutcome`
+
+### `property vtt.structure-type.SurfaceRemovalContext.replace: (request: ApplyPatchReplacementRequest) => ConstructionPatchOutcome`
 
 ### `type vtt.structure-type.EditResolution = { kind: "allow" } | { kind: "deny"; reason: string } | { kind: "regenerate"; reason: string }`
 

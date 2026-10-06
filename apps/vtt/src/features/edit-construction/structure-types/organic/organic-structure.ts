@@ -89,10 +89,12 @@ export function organicStructureType(
   structural: "regenerate" | "deny",
   interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction,
   traits: readonly StructureTrait[],
+  demolish?: StructureTypeDefinition["demolish"],
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
     label,
+    demolish,
     traits: Object.freeze([...traits]),
     creation,
     roleFor: organicRoleFor,
@@ -137,3 +139,8 @@ export function pathInteractionOver(
 ): CreationInteraction {
   return CUT;
 }
+
+/** Owner-provided terrain deletion entry point; no generic face deletion fallback. */
+export const demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]> = (_context) => {
+  throw new Error("A função de apagar terreno ainda não foi implementada.");
+};

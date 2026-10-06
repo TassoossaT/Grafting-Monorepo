@@ -6,6 +6,8 @@ import type {
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
+  ConstructionPatchOutcome,
+  RegionEditOutcome,
 } from "@/ports";
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
@@ -456,7 +458,18 @@ export interface RecipeHandle {
   readonly part?: unknown;
 }
 
+/** A type's optional deletion action, executed inside the gesture's transaction. */
+export interface SurfaceRemovalContext {
+  readonly region: ConstructionRegionTopology;
+  readonly graph: ConstructionGraphSnapshot;
+  readonly remaining: readonly ConstructionRegionTopology[];
+  readonly removeFace: () => RegionEditOutcome;
+  readonly replace: (request: ApplyPatchReplacementRequest) => ConstructionPatchOutcome;
+}
+
 export interface StructureTypeDefinition {
+  /** Absent means remove only the pointed face and prune its orphaned graph elements. */
+  readonly demolish?: (context: SurfaceRemovalContext) => RegionEditOutcome;
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;
@@ -495,9 +508,7 @@ export interface StructureTypeDefinition {
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
   /** Authoring graph owned by deleted faces, removed in the same transaction. */
-  readonly removalPatch?: (regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot) => ConstructionGraphPatch;
-  /** A face pinned to a removed host cannot survive without that host. */
-  readonly removeWithHost?: boolean;
+  readonly removalPatch?: (regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot, remaining: readonly ConstructionRegionTopology[]) => ConstructionGraphPatch;
   /** Present when this type is regenerated whole from a recipe its faces keep -- see {@link RecipeGeneration}. */
   readonly recipe?: RecipeGeneration;
   /** Whether this type also exposes its connected cloud's handles when it carries a recipe. */

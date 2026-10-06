@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, surfaceKeyText, resolvePolicy } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, surfaceKeyText } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionSurfaceKey } from "@/ports";
 
 import type { ConstructionTool, ReleasedGesture, ToolContext, ToolGesture } from "../core/tool-context.ts";
@@ -8,47 +8,21 @@ import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 
 const DEMOLISH_COLOR = 0xef4444;
 
-function resolveScopeForSurface(
-  ctx: ToolContext,
-  seedKey: ConstructionSurfaceKey,
-  targetKeysSet: Set<string>,
-  targetKeysList: ConstructionSurfaceKey[],
-): void {
-  const strKey = surfaceKeyText(seedKey);
-  if (targetKeysSet.has(strKey)) return;
-
-  const topology = ctx.runtime.getRegionTopology(seedKey);
-  if (topology === undefined) return;
-
-  const policy = resolvePolicy(topology, { kind: "region" });
-  if (policy.scope === "cloud") {
-    const cloudOutcome = ctx.runtime.cloudFor({ seed: seedKey, surfaceType: topology.surfaceType });
-    const keys = cloudOutcome.surfaceKeys.length > 0 ? cloudOutcome.surfaceKeys : [seedKey];
-    for (const key of keys) {
-      const s = surfaceKeyText(key);
-      if (!targetKeysSet.has(s)) {
-        targetKeysSet.add(s);
-        targetKeysList.push(key);
-      }
-    }
-  } else {
-    targetKeysSet.add(strKey);
-    targetKeysList.push(seedKey);
-  }
-}
-
 /** The same picked targets feed the highlight and commit; empty space selects nothing. */
 function targetsFor(ctx: ToolContext, gesture: ToolGesture): readonly ConstructionSurfaceKey[] {
   const seen = new Set<string>(), keys: ConstructionSurfaceKey[] = [];
   const picked = new Map(ctx.runtime.getAllRegionTopologies().map((topology) => [surfaceRefFromNodeSet(topology.surfaceKey), topology.surfaceKey]));
   for (const sample of gesture.samples) {
     const key = sample.surfaceRef ? picked.get(sample.surfaceRef) : undefined;
-    if (key) resolveScopeForSurface(ctx, key, seen, keys);
+    if (key && !seen.has(surfaceKeyText(key))) {
+      seen.add(surfaceKeyText(key));
+      keys.push(key);
+    }
   }
   return keys;
 }
 
-/** Direct structure selection, with type-declared scope and one transaction per gesture. */
+/** Direct face selection and one transaction per gesture. */
 export const demolishTool: ConstructionTool<"demolish"> = {
   id: "demolish",
   usesRuler: false,

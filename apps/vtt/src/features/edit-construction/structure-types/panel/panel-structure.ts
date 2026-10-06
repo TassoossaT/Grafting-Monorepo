@@ -333,7 +333,6 @@ export const openingStructureType: StructureTypeDefinition = Object.freeze({
   label: "Abertura",
   creation: "one face pinned to its host faces, cutting them where it stands",
   traits: Object.freeze(["cuts"] as const),
-  removeWithHost: true,
   roleFor: openingRoleFor,
   policyFor: openingPolicyFor,
   interactionOver: panelInteractionOver,

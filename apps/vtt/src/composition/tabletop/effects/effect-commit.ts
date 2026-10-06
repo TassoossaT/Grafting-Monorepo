@@ -48,7 +48,7 @@ export function dispatchEffects(
 ): readonly ReactionRecord[] {
   // Every shape change is also a reshape, for what stands on the changed cloud to follow.
   const reshaped = effects.flatMap((effect): Effect[] => (effect.kind === "cut" ? [effect, { ...effect, kind: "reshape" }] : [effect]));
-  return timePhase("reações", () => runEffects(runtime, {
+  return timePhase("reaÃ§Ãµes", () => runEffects(runtime, {
     regionsNear: (bounds) => typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(bounds)
       : runtime.getAllRegionTopologies(),
@@ -202,22 +202,16 @@ export function commitSurfaceRemoval(
   return runtime.transact(options.transactionId, origin, () => {
     const targets = new Map(keys.map((key) => [surfaceKeyText(key), key]));
     const standing = runtime.getAllRegionTopologies();
-    let expanded = true;
-    while (expanded) {
-      expanded = false;
-      for (const region of standing) {
-        const id = surfaceKeyText(region.surfaceKey);
-        if (targets.has(id) || !structureTypeFor(region.surfaceType)?.removeWithHost) continue;
-        if (!region.nodes.some((node) => node.pin && targets.has(surfaceKeyText(node.pin.hostSurfaceKey)))) continue;
-        targets.set(id, region.surfaceKey);
-        expanded = true;
-      }
-    }
+    const remaining = standing.filter((region) => !targets.has(surfaceKeyText(region.surfaceKey)));
     const removed = topologiesOf(runtime, [...targets.values()]);
     const authoring = runtime.getGraphSnapshot();
     let outcome = EMPTY_OUTCOME;
     for (const key of targets.values()) {
-      const res = runtime.removeSurface({ surfaceKey: key }, origin, options.transactionId);
+      const region = removed.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(key));
+      if (!region) continue;
+      const removeFace = () => runtime.removeSurface({ surfaceKey: key }, origin, options.transactionId);
+      const action = structureTypeFor(region.surfaceType)?.demolish;
+      const res = action ? action({ region, graph: authoring, remaining, removeFace, replace: (request) => runtime.applyPatchReplacement(request, origin, options.transactionId) }) : removeFace();
       outcome = mergeOutcomes(outcome, res);
     }
     const byType = new Map<string, ConstructionRegionTopology[]>();
@@ -227,7 +221,7 @@ export function commitSurfaceRemoval(
       byType.set(topology.surfaceType, list);
     }
     for (const [, group] of byType) {
-      const graphPatch = structureTypeFor(group[0]!.surfaceType)?.removalPatch?.(group, authoring);
+      const graphPatch = structureTypeFor(group[0]!.surfaceType)?.removalPatch?.(group, authoring, remaining);
       if (graphPatch && (graphPatch.removedEdgeIds?.length ?? 0) > 0) {
         const cleanup = runtime.applyPatchReplacement({ operationId: options.transactionId + ":authoring:" + encodeURIComponent(group[0]!.surfaceType), sourceSurfaceKeys: [], patch: { nodes: [], edges: [], regions: [] }, graphPatch }, origin, options.transactionId);
         outcome = mergeOutcomes(outcome, cleanup);

@@ -25,7 +25,9 @@ Contrato consolidado em 2026-10-06, após os refinamentos filhos de #303 e as de
 | Telhado | Criação sobre plataforma; preview da cobertura | Alças e detalhes da receita de telhado, incluindo extensão e lucarna | Comportamento refinado na #311; depende de sua base |
 | Abertura | Gesto restrito ao perímetro da parede; preview no hospedeiro | Alças de posição e formato, cantos e lados; Delete | Contrato do hospedeiro e fusão da #313 |
 | Terreno | Ferramenta própria de escultura; preview do pincel | Pincel e regeneração estrutural existentes | A edição de terreno em andamento permanece com o dono; não é expandida nesta entrega |
-| Demolir | Seleção direta com destaque da geometria; clique ou arraste sobre estruturas | Sem raio; confirmação ao soltar; alças de edição ficam ocultas | Todos os tipos registrados; superfície ou nuvem conforme o tipo; reações e desfazer atômico; #291. Interação confirmada pelo dono após revisão do pincel. |
+| Demolir | Seleção direta com destaque somente da face apontada; arraste acumula faces | Sem raio; confirmação ao soltar; alças de edição ficam ocultas | Não expande para nuvem, gesto de criação ou faces hospedadas. Limpa elementos órfãos, preserva vértices, arestas e espinhas ainda usados por faces sobreviventes; reações e desfazer atômico; #291. Terreno chama sua função própria, a ser implementada pelo dono. |
+
+A definição do tipo pode declarar `demolish(context)` para substituir a remoção padrão. O contexto contém a face apontada, o grafo, as faces que permanecerão e as operações `removeFace` e `replace`, dentro da mesma transação. As duas variantes de terreno declaram `demolishTerrainRegion` em `organic-structure.ts`; enquanto o dono não implementar a função, ela informa que está pendente e a transação não altera o grafo. Não há fallback para apagar a nuvem ou reconstruir automaticamente uma face de terreno.
 
 ## Partes do refinamento e destino
 

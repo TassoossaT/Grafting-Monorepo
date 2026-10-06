@@ -6844,7 +6844,7 @@ export function organicStructureType(
   structural: "regenerate" | "deny",
   interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction,
   traits: readonly StructureTrait[],
-  ): StructureTypeDefinition {
+  demolish?: StructureTypeDefinition["demolish"],
 export function terrainInteractionOver(covered: StructureView): CreationInteraction {
   if (covered.traits.has("ground")) return RESTACK;
   return forbid(`terrain cannot be created above "${covered.label}"`);
@@ -6854,6 +6854,8 @@ export function pathInteractionOver(
   ): CreationInteraction {
   return CUT;
   }
+export const demolishTerrainRegion: NonNullable<StructureTypeDefinition["demolish"]> = (_context) => {
+  throw new Error("A função de apagar terreno ainda não foi implementada.");
 
 // src/features/edit-construction/structure-types/organic/terrain-cloud.ts
 export function terrainCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
@@ -6949,9 +6951,9 @@ export const openingStructureType: StructureTypeDefinition = Object.freeze({
   label: "Abertura",
   creation: "one face pinned to its host faces, cutting them where it stands",
   traits: Object.freeze(["cuts"] as const),
-  removeWithHost: true,
   roleFor: openingRoleFor,
   policyFor: openingPolicyFor,
+  interactionOver: panelInteractionOver,
 
 // src/features/edit-construction/structure-types/path/bezier-road-edit.ts
 export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegeneration | undefined {
@@ -7113,7 +7115,7 @@ export function standingRegionsForCloud(
   return topologies.filter((topology) => {
   if (topology.surfaceType !== PATH_SURFACE_TYPE) return false;
   const owners = surfaceCorridors(topology.surfaceKey[1] ?? "");
-export function removalPatchForRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot): ConstructionGraphPatch {
+export function removalPatchForRegions(regions: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot, remaining: readonly ConstructionRegionTopology[] = []): ConstructionGraphPatch {
   const edges = graph.edges.filter((edge) => {
   if (!isRoadSpan(edge)) return false;
   const owners = new Set(extractCorridorsFromEdgeId(edge.edgeId));
