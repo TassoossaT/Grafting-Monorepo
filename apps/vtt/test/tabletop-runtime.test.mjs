@@ -1132,6 +1132,11 @@ test("road presentation exposes only spine anchors, insertion points and width h
     runtime.setConstructionHandlePresentation("spine-points");
     assert.deepEqual(shown(),spineHandles);
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
+    assert.equal(render.previews.get("spine-handles").kind, "segments");
+    runtime.setConstructionHandlePresentation("none");
+    assert.deepEqual(shown(), [], "direct selection has no edit handles intercepting picks");
+    runtime.setConstructionHandlePresentation("spine-points");
+    assert.deepEqual(shown(), spineHandles);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
     assert.equal(render.previews.has("spine-handles"),false);
@@ -1217,4 +1222,27 @@ test("the handle layer holds edit handles only: a plain vertex never gets a dot 
     assert.ok(!shown().has("mesh:vertex"), "nor after the presentation went to points and back");
     assert.ok(shown().has(curvePickId("spine-edge:a", "midpoint")), "and the edit handle stays");
   } finally { await runtime.dispose(); real.session.free(); }
+});
+
+for (const surfaceType of ["terrain", "wall-white", "platform"]) for (const sameIdentity of [true,false]) test(`removed ${surfaceType} render chunk accepts a recreated face (${sameIdentity ? "same" : "new"} identity)`,async()=>{
+ const render=createFakeRenderPort(),construction=createFakeConstructionPort();
+ const key=["recreate:a","recreate:b","recreate:c"];
+ let liveKey=key,exists=true;
+ const face={surfaceKey:key,surfaceType,physical:true,mesh:{positions:new Float32Array([0,0,0,3,0,0,0,3,0]),indices:new Uint32Array([0,1,2])}};
+ construction.getSurfaceMeshesReport=keys=>({meshes:keys.length?[{...face,surfaceKey:liveKey}]:[],failed:[]});
+ construction.getAllSurfaceMeshes=()=>exists?[{...face,surfaceKey:liveKey}]:[];
+ construction.removeSurface=()=>{exists=false;return {...emptyRegionEdit(),removedSurfaceKeys:[liveKey]};};
+ construction.undoRegionOverlay=()=>{exists=true;};
+ construction.redoRegionOverlay=()=>{exists=false;};
+ const runtime=createTabletopRuntime({tableId:"recreate",renderPort:render,constructionPort:construction});
+ await runtime.start();
+ const add=()=>{exists=true;construction.createsNext([liveKey]);runtime.addPatch(EMPTY_PATCH,"local","add");};
+ try {add();runtime.removeSurface({surfaceKey:key},"local","remove");if(!sameIdentity)liveKey=["new:a","new:b","new:c"];add();
+ const revisions=new Map(),accepted=[];
+ for(const change of render.changes){const dep=change.dependency,id=dep.layer+":"+dep.scopeId;if(dep.revision<=(revisions.get(id)??-1))continue;revisions.set(id,dep.revision);accepted.push(change);}
+ assert.equal(accepted.filter(c=>c.type==="map-chunk-upserted").length,2,"recreated face reaches renderer");
+ assert.equal(accepted.filter(c=>c.type==="surface-pick-target-upserted").length,2,"recreated face stays pickable");
+ runtime.removeSurface({surfaceKey:liveKey},"local","remove-again");runtime.undoTransaction("remove-again","local");runtime.redoTransaction("remove-again","local");runtime.undoTransaction("remove-again","local");
+ const last=new Map();for(const change of render.changes){const dep=change.dependency,id=dep.layer+":"+dep.scopeId;assert.ok(dep.revision>(last.get(id)??-1),"every lifetime, including undo/redo, has newer render revisions");last.set(id,dep.revision);}
+ }finally{await runtime.dispose();}
 });

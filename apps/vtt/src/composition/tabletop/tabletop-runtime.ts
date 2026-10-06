@@ -219,6 +219,8 @@ export interface TabletopRuntime extends BezierPort {
   redoTransaction(transactionId: string, origin: ChangeOrigin): void;
   /** Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`. */
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  /** Exact geometry of picked structures, for a selection or editing preview. */
+  previewSurfaces?(surfaceKeys: readonly ConstructionSurfaceKey[], color: number): RenderPreviewDescriptor | undefined;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
   cloudFor(request: CloudRequest): CloudOutcome;
   /** Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning. */
@@ -231,7 +233,7 @@ export interface TabletopRuntime extends BezierPort {
     originY: number,
   ): Float32Array;
   /** Local editing presentation; never changes the graph or persistence. */
-  setConstructionHandlePresentation?(mode: "all" | "spine-points"): void;
+  setConstructionHandlePresentation?(mode: "all" | "spine-points" | "none"): void;
   setConstructionHandleSelection?(id: string | undefined): void;
   /**
    * Which types' whole-structure handles the scene shows -- the active tool's
@@ -347,10 +349,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   /** The height the map is cut at, if it is: kept here so a cut asked for before the renderer starts is not lost. */
   #heightCut: number | undefined;
   /** Monotonic across hide/show cycles so renderer revision guards accept restored controls. */
-  #handleRevision = 0;
+  #renderRevision = 0;
   /** The construction transaction under way, which a nested commit of the same id joins. */
   #openTransaction: string | undefined;
   #pointHandlesOnly = false;
+  #handlesHidden = false;
   #pointHandleIds = new Set<string>();
   /** Every handle the scene handle registry listed last, and the glyph each was drawn with. */
   #sceneHandleIds = new Set<string>();
@@ -437,7 +440,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     generation: number,
   ): void {
-    const revision = (this.#surfacePickRevisions.get(surfaceRef) ?? 0) + 1;
+    const revision = ++this.#renderRevision;
     this.#surfacePickRevisions.set(surfaceRef, revision);
     this.#render.applyConfirmed({
       type: "surface-pick-target-upserted",
@@ -458,7 +461,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       origin,
       causeId,
       runtimeGeneration: generation,
-      dependency: { layer: "surface-picks", scopeId: surfaceRef, revision: revision + 1 },
+      dependency: { layer: "surface-picks", scopeId: surfaceRef, revision: ++this.#renderRevision },
       surfaceRef,
     });
     this.#surfacePickRevisions.delete(surfaceRef);
@@ -577,13 +580,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
           origin,
           causeId,
           runtimeGeneration: generation,
-          dependency: { layer: "terrain", scopeId: chunkId, revision: revision + 1 },
+          dependency: { layer: "terrain", scopeId: chunkId, revision: ++this.#renderRevision },
           chunkId,
         });
         this.#chunkRevisions.delete(chunkId);
         continue;
       }
-      const revision = (this.#chunkRevisions.get(chunkId) ?? 0) + 1;
+      const revision = ++this.#renderRevision;
       this.#chunkRevisions.set(chunkId, revision);
       this.#render.applyConfirmed({
         type: "map-chunk-upserted",
@@ -646,8 +649,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     generation: number,
     glyph?: RenderHandleGlyph,
   ): void {
-    if (this.#pointHandlesOnly && !this.#pointHandleIds.has(nodeId)) return;
-    const revision = ++this.#handleRevision;
+    if (this.#handlesHidden || (this.#pointHandlesOnly && !this.#pointHandleIds.has(nodeId))) return;
+    const revision = ++this.#renderRevision;
     this.#nodeHandleRevisions.set(nodeId, revision);
     this.#render.applyConfirmed({
       type: "node-handle-upserted",
@@ -666,7 +669,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
    */
   #syncSceneHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
     const graph = this.#construction.getGraphSnapshot();
-    const handles = sceneHandles({
+    const handles = this.#handlesHidden ? [] : sceneHandles({
       graph,
       ...(this.#handleSelection ? { selected: this.#handleSelection } : {}),
       topologies: this.#construction.getAllRegionTopologies(),
@@ -680,7 +683,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
     const live = new Set(handles.map((handle) => handle.id));
     for (const id of this.#sceneHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
-    if (this.#pointHandlesOnly) {
+    if (this.#pointHandlesOnly || this.#handlesHidden) {
       // Only these show while a tool edits spines by their points: every other handle goes.
       this.#pointHandleIds = live;
       for (const id of [...this.#nodeHandleRevisions.keys()]) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
@@ -715,7 +718,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
   #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
-    const revision = ++this.#handleRevision;
+    const revision = ++this.#renderRevision;
     if (!this.#nodeHandleRevisions.delete(nodeId)) return;
     this.#render.applyConfirmed({
       type: "node-handle-removed",
@@ -1261,6 +1264,15 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return outcome;
   }
 
+  previewSurfaces(surfaceKeys: readonly ConstructionSurfaceKey[], color: number): RenderPreviewDescriptor | undefined {
+    this.#requireReady("previewing surfaces");
+    const { meshes } = this.#construction.getSurfaceMeshesReport(surfaceKeys);
+    if (meshes.length === 0) return undefined;
+    const mesh = mergeSurfaceMeshes(meshes);
+    if (!mesh.indices) return undefined;
+    return { kind: "mesh", positions: mesh.positions, indices: mesh.indices, color, opacity: 0.45 };
+  }
+
   cloudFor(request: CloudRequest): CloudOutcome {
     this.#requireReady("querying a cloud");
     return this.#construction.cloudFor({ ...request, surfaceTypes: request.surfaceTypes ?? cloudTypesFor(request.surfaceType) });
@@ -1314,10 +1326,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
     if (this.#snapshot.status === "ready") this.#render.setFloorClipHeight(height);
   }
 
-  setConstructionHandlePresentation(mode: "all" | "spine-points"): void {
+  setConstructionHandlePresentation(mode: "all" | "spine-points" | "none"): void {
     const points = mode === "spine-points";
-    if (this.#pointHandlesOnly === points) return;
+    const hidden = mode === "none";
+    if (this.#pointHandlesOnly === points && this.#handlesHidden === hidden) return;
     this.#pointHandlesOnly = points;
+    this.#handlesHidden = hidden;
     if (this.#snapshot.status !== "ready") return;
     this.#syncSceneHandles("programmatic","handle-presentation",this.#generation);
   }

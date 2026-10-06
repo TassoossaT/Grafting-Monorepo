@@ -453,9 +453,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />
       ) : activeTool === "demolish" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
-          {sliderRow("Raio", params.demolish.radius, 0.1, 10, 0.05, (radius) =>
-            onParamsChange("demolish", { ...params.demolish, radius })
-          )}
+          <p>Passe o cursor para destacar a estrutura. Clique para apagar ou arraste sobre várias; solte para confirmar. Um desfazer restaura o gesto inteiro.</p>
         </div>
       ) : (
         <TerrainSculptFields

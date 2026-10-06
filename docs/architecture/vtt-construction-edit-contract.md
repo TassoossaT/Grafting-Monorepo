@@ -25,7 +25,7 @@ Contrato consolidado em 2026-10-06, após os refinamentos filhos de #303 e as de
 | Telhado | Criação sobre plataforma; preview da cobertura | Alças e detalhes da receita de telhado, incluindo extensão e lucarna | Comportamento refinado na #311; depende de sua base |
 | Abertura | Gesto restrito ao perímetro da parede; preview no hospedeiro | Alças de posição e formato, cantos e lados; Delete | Contrato do hospedeiro e fusão da #313 |
 | Terreno | Ferramenta própria de escultura; preview do pincel | Pincel e regeneração estrutural existentes | A edição de terreno em andamento permanece com o dono; não é expandida nesta entrega |
-| Demolir | Clique em estrutura ou arraste de pincel circular; preview da área | Raio no painel; remoção ao soltar | Todos os tipos registrados; superfície ou nuvem conforme o tipo; reações e desfazer atômico; #291 |
+| Demolir | Seleção direta com destaque da geometria; clique ou arraste sobre estruturas | Sem raio; confirmação ao soltar; alças de edição ficam ocultas | Todos os tipos registrados; superfície ou nuvem conforme o tipo; reações e desfazer atômico; #291. Interação confirmada pelo dono após revisão do pincel. |
 
 ## Partes do refinamento e destino
 

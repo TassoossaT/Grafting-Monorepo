@@ -1042,6 +1042,10 @@ before calling here.
 
 Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.previewSurfaces(surfaceKeys: readonly ConstructionSurfaceKey[], color: number): RenderPreviewDescriptor | undefined`
+
+Exact geometry of picked structures, for a selection or editing preview.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
 
 World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
@@ -1066,7 +1070,7 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 
 Host `(u, v)` pairs back to world positions. Pure.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "none" | "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
 
@@ -1247,6 +1251,10 @@ before calling here.
 
 Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.previewSurfaces(surfaceKeys: readonly ConstructionSurfaceKey[], color: number): RenderPreviewDescriptor | undefined`
+
+Exact geometry of picked structures, for a selection or editing preview.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
 
 World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
@@ -1271,7 +1279,7 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 
 Host `(u, v)` pairs back to world positions. Pure.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "none" | "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
 
@@ -3309,7 +3317,7 @@ Whether a draft is under way -- presses then belong to drawing, though a handle 
 
 The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
 
-### `property vtt.spine-draft.SpineDraftTool.handlePresentation?: "spine-points"`
+### `property vtt.spine-draft.SpineDraftTool.handlePresentation?: "none" | "spine-points"`
 
 Presentation and sampling policy while this tool is active.
 
@@ -3577,7 +3585,7 @@ How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
 
 The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
 
-### `property vtt.tool-context.ConstructionTool.handlePresentation?: "spine-points"`
+### `property vtt.tool-context.ConstructionTool.handlePresentation?: "none" | "spine-points"`
 
 Presentation and sampling policy while this tool is active.
 
@@ -3841,12 +3849,7 @@ Something a commit survived but should not have had to.
 
 ### `variable vtt.demolish-tool.demolishTool: ConstructionTool<"demolish">`
 
-Generic demolish/delete tool.
-
-Resolves surface deletion scope ("cloud" or "surface") through each picked
-type's declared `StructureTypeDefinition` and policy, without hardcoding
-specific type names. Commits deletion atomically via `commitSurfaceRemoval`,
-triggering registered type reactions (e.g. ground/path lattice regeneration).
+Direct structure selection, with type-declared scope and one transaction per gesture.
 
 ### `variable vtt.opening-stands.openingStands: readonly OpeningStand[]`
 
@@ -9732,18 +9735,6 @@ Rotation around world Y; ignored by circles.
 Convex footprint shared by terrain and path brushes.
 
 ### `interface vtt.tool-types.DemolishParams`
-
-### `property vtt.tool-types.DemolishParams.radius: number`
-
-Circle/hexagon radius, or square half-size, in world units.
-
-### `property vtt.tool-types.DemolishParams.rotationDegrees: number`
-
-Rotation around world Y; ignored by circles.
-
-### `property vtt.tool-types.DemolishParams.shape: BrushShapeKind`
-
-Convex footprint shared by terrain and path brushes.
 
 ### `interface vtt.tool-types.OpeningParams`
 

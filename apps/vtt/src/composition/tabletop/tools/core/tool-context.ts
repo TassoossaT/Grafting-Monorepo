@@ -135,7 +135,7 @@ export interface ToolContext {
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   /** Presentation and sampling policy while this tool is active. */
-  readonly handlePresentation?: "spine-points";
+  readonly handlePresentation?: "spine-points" | "none";
   /** The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active. */
   readonly editsType?: (surfaceType: string) => boolean;
   /**

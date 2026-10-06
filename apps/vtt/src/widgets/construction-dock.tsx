@@ -190,7 +190,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "demolish",
       label: "Demolir",
       icon: "🔨",
-      tooltip: "Demolir elemento (clique ou arraste para remover)",
+      tooltip: "Demolir: destaque com o cursor, clique ou arraste sobre estruturas e solte para apagar",
       active: activeTool === "demolish",
       disabled: !ready,
       onClick: () => onToolChange("demolish"),

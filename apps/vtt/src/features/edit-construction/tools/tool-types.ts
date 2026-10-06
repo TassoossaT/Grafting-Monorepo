@@ -34,7 +34,7 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
 }
 
-export interface DemolishParams extends BrushShapeParams {}
+export interface DemolishParams extends NoToolParams {}
 
 export interface PathBrushParams extends BrushShapeParams {
   /** Product recipe; every variant still creates the single `path` surface type. */
@@ -293,11 +293,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     targetSurface: "terrain",
     seed: 1,
   }),
-  demolish: Object.freeze({
-    shape: "circle",
-    radius: 1.5,
-    rotationDegrees: 0,
-  }),
+  demolish: Object.freeze({}),
 });
 
 /**

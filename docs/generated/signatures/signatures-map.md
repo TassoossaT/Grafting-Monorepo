@@ -4829,7 +4829,7 @@ export interface ToolContext {
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   /** Presentation and sampling policy while this tool is active. */
-  readonly handlePresentation?: "spine-points";
+  readonly handlePresentation?: "spine-points" | "none";
   /** The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active. */
   readonly editsType?: (surfaceType: string) => boolean;
   /**
@@ -4872,11 +4872,11 @@ export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool
 export const demolishTool: ConstructionTool<"demolish"> = {
   id: "demolish",
   usesRuler: false,
+  handlePresentation: "none",
   defaultParams: () => DEFAULT_TOOL_PARAMS.demolish,
   previewOnHover: true,
-
-  previewFor(gesture: ToolGesture, params: DemolishParams, ctx: ToolContext) {
-  const shape = { kind: "circle" as const, radius: params.radius };
+  previewFor(gesture: ToolGesture, _params, ctx: ToolContext) {
+  const keys = targetsFor(ctx, gesture);
 
 // src/composition/tabletop/tools/opening-stands.ts
 export const openingStands: readonly OpeningStand[] = [roofOpeningStand];
@@ -7772,7 +7772,7 @@ export interface BrushShapeParams {
   /** Rotation around world Y; ignored by circles. */
   readonly rotationDegrees: number;
   }
-export interface DemolishParams extends BrushShapeParams {}
+export interface DemolishParams extends NoToolParams {}
 
 export interface PathBrushParams extends BrushShapeParams {
   /** Product recipe; every variant still creates the single `path` surface type. */

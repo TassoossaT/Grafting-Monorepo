@@ -20,9 +20,9 @@ test("click deletion removes a wall and a single undo restores it",()=>{
  const f=capturePreviews(sessionFixture());
  try { wall(f,0); const before=f.session.snapshot_json(); click(f,f.runtime.getAllRegionTopologies()[0]); assert.equal(f.runtime.getAllRegionTopologies().length,0); const entry=f.ctx.history.undo(); assert.equal(entry.kind,"transaction"); f.session.undo_region_overlay(entry.transactionId); assert.equal(f.session.snapshot_json(),before); } finally {f.session.free();}
 });
-test("brush deletion deduplicates covered surfaces and undoes the whole gesture",()=>{
+test("drag deletion deduplicates picked surfaces and undoes the whole gesture",()=>{
  const f=capturePreviews(sessionFixture());
- try { wall(f,0);wall(f,8); const faces=f.runtime.getAllRegionTopologies(); const before=f.session.snapshot_json(); f.runtime.getFootprintCoverage=()=>[...faces,...faces]; const start=at(0,0),current=at(12,0); tool.onPointerUp(f.ctx,{start,current,samples:[start,current],moved:true},params); assert.equal(f.runtime.getAllRegionTopologies().length,0); const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId); assert.equal(f.session.snapshot_json(),before); } finally {f.session.free();}
+ try { wall(f,0);wall(f,8); const faces=f.runtime.getAllRegionTopologies(); const before=f.session.snapshot_json(); f.runtime.getFootprintCoverage=()=>[...faces,...faces]; const start={...at(0,0),surfaceRef:surfaceRefFromNodeSet(faces[0].surfaceKey)},current={...at(12,0),surfaceRef:surfaceRefFromNodeSet(faces[1].surfaceKey)}; tool.onPointerUp(f.ctx,{start,current,samples:[start,current],moved:true},params); assert.equal(f.runtime.getAllRegionTopologies().length,0); const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId); assert.equal(f.session.snapshot_json(),before); } finally {f.session.free();}
 });
 test("ground is deletable through the same registered type contract",()=>{
  const f=capturePreviews(sessionFixture());
@@ -44,4 +44,9 @@ test("deleting a wall removes its hosted openings in the same undo transaction",
  const {click:createOpening}=await import("./support/opening-harness.mjs");
  const f=capturePreviews(sessionFixture());
  try {wall(f,0);openingTool.onCancel(f.ctx);createOpening(f.ctx,{point:{x:1.5,y:1,z:0}},{openingKind:"window",width:0.8,height:1});assert.ok(f.runtime.getAllRegionTopologies().some(t=>t.surfaceType==="opening"));const before=f.session.snapshot_json();click(f,f.runtime.getAllRegionTopologies().find(t=>t.surfaceType==="wall-white"));assert.equal(f.runtime.getAllRegionTopologies().length,0,JSON.stringify(f.calls.feedback));const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId);assert.equal(f.session.snapshot_json(),before);}finally{openingTool.onCancel(f.ctx);f.session.free();}
+});
+
+test("hover and drag preview exactly their picked scope; empty space never deletes nearby faces",()=>{
+ const f=capturePreviews(sessionFixture());
+ try {wall(f,0);wall(f,8);const faces=f.runtime.getAllRegionTopologies(),sample={...at(1,0),surfaceRef:surfaceRefFromNodeSet(faces[0].surfaceKey)};let previewed;f.runtime.previewSurfaces=keys=>{previewed=keys;return {kind:"mesh",color:0xff0000,positions:new Float32Array(),indices:new Uint32Array()};};const gesture={start:sample,current:sample,samples:[sample]};assert.equal(tool.previewFor(gesture,params,f.ctx).kind,"mesh");assert.deepEqual(previewed,[faces[0].surfaceKey]);const before=f.session.snapshot_json();const blank=at(1,0);f.runtime.getFootprintCoverage=()=>{throw Error("direct selection must not use a footprint");};assert.equal(tool.previewFor({start:blank,current:blank,samples:[blank]},params,f.ctx),undefined);tool.onPointerUp(f.ctx,{start:blank,current:blank,samples:[blank],moved:false},params);assert.equal(f.session.snapshot_json(),before);}finally{f.session.free();}
 });
