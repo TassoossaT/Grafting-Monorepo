@@ -91,3 +91,17 @@ impl Neg for Vec3 {
         Self::new(-self.x, -self.y, -self.z)
     }
 }
+
+impl grafting_procgen_irregular_grid::GridPoint for Vec3 {
+    fn mean(points: &[Self]) -> Self {
+        let mut sum = Vec3::default();
+        for point in points {
+            sum = sum + *point;
+        }
+        sum * (1.0 / points.len() as f64)
+    }
+
+    fn weld_key(&self, epsilon: f64) -> [i64; 3] {
+        [(self.x / epsilon).round() as i64, (self.y / epsilon).round() as i64, (self.z / epsilon).round() as i64]
+    }
+}

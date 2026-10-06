@@ -679,22 +679,13 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// Solid ground that can hold caves, tunnels and bridges: a height grid
-    /// plus shapes that carve or fill it, split into pieces and each laid by
-    /// the irregular quad grid. Pure -- reads nothing from this session and
-    /// mutates nothing in it. See `solid_ground::solid_ground`.
-    pub fn solid_ground_json(&self, request_json: &str) -> Result<String, JsValue> {
+    /// Carves into the ground or fills it in, as an edit of the ground's own
+    /// mesh: the faces handed in laid again, the ring of nodes round them
+    /// kept. Pure -- reads nothing from this session and mutates nothing in
+    /// it; the caller registers the result. See `terrain_volume`.
+    pub fn edit_terrain_volume_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = crate::solid_ground::solid_ground(request).map_err(to_js_error)?;
-        serialize(&response)
-    }
-
-    /// Only the surface the shapes made, and a collar of open ground round
-    /// it, as one quad mesh. Pure, like `solid_ground_json`. See
-    /// `solid_ground::solid_surface`.
-    pub fn solid_surface_json(&self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = crate::solid_ground::solid_surface(request).map_err(to_js_error)?;
+        let response = crate::terrain_volume::edit_terrain_volume(request).map_err(to_js_error)?;
         serialize(&response)
     }
 

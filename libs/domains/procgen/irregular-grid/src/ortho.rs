@@ -2,8 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::geometry::centroid_of;
-use crate::mesh::{Face, FaceMesh, QuadMesh, Vec2};
+use crate::mesh::{Face, FaceMesh, GridPoint, QuadMesh};
 
 /// Step 3 -- Conway's ortho operator: every face becomes quads.
 ///
@@ -43,8 +42,8 @@ pub fn ortho(mesh: &FaceMesh) -> QuadMesh {
 /// node of its own: the cells at both of its corners merge into one polygon,
 /// which is why this returns faces rather than quads. Either direction may be
 /// named; the other is read reversed.
-pub fn ortho_along(mesh: &FaceMesh, seams: &HashMap<(usize, usize), Vec<usize>>) -> FaceMesh {
-    let mut vertices: Vec<Vec2> = mesh.vertices.clone();
+pub fn ortho_along<P: GridPoint>(mesh: &FaceMesh<P>, seams: &HashMap<(usize, usize), Vec<usize>>) -> FaceMesh<P> {
+    let mut vertices: Vec<P> = mesh.vertices.clone();
     let mut faces: Vec<Face> = Vec::new();
 
     for face in &mesh.faces {
@@ -52,10 +51,10 @@ pub fn ortho_along(mesh: &FaceMesh, seams: &HashMap<(usize, usize), Vec<usize>>)
             continue;
         }
         let count = face.len();
-        let points: Vec<Vec2> = face.iter().map(|&vertex| mesh.vertices[vertex]).collect();
+        let points: Vec<P> = face.iter().map(|&vertex| mesh.vertices[vertex]).collect();
 
         let centre = vertices.len();
-        vertices.push(centroid_of(&points));
+        vertices.push(P::mean(&points));
 
         // Midpoints are emitted per face and deduplicated later by `weld`;
         // computing them once globally would need an edge table that the weld
@@ -73,9 +72,7 @@ pub fn ortho_along(mesh: &FaceMesh, seams: &HashMap<(usize, usize), Vec<usize>>)
                     (Some(chain), _) => chain.clone(),
                     (None, Some(chain)) => chain.iter().rev().copied().collect(),
                     (None, None) => {
-                        let from = mesh.vertices[vertex];
-                        let to = mesh.vertices[next];
-                        vertices.push(Vec2::new((from.x + to.x) / 2.0, (from.y + to.y) / 2.0));
+                        vertices.push(P::mean(&[mesh.vertices[vertex], mesh.vertices[next]]));
                         vec![vertices.len() - 1]
                     }
                 };
@@ -157,7 +154,7 @@ pub fn weld_tracked(mesh: &QuadMesh, epsilon: f64) -> (QuadMesh, Vec<usize>) {
 
 /// [`weld_tracked`] for cells of any number of sides -- what
 /// [`ortho_along`] produces.
-pub fn weld_faces_tracked(mesh: &FaceMesh, epsilon: f64) -> (FaceMesh, Vec<usize>) {
+pub fn weld_faces_tracked<P: GridPoint>(mesh: &FaceMesh<P>, epsilon: f64) -> (FaceMesh<P>, Vec<usize>) {
     let (vertices, remap) = weld_vertices(&mesh.vertices, epsilon);
     let faces = mesh
         .faces
@@ -169,13 +166,13 @@ pub fn weld_faces_tracked(mesh: &FaceMesh, epsilon: f64) -> (FaceMesh, Vec<usize
     (FaceMesh { vertices, faces }, remap)
 }
 
-fn weld_vertices(input: &[Vec2], epsilon: f64) -> (Vec<Vec2>, Vec<usize>) {
-    let mut vertices: Vec<Vec2> = Vec::new();
-    let mut lookup: HashMap<(i64, i64), usize> = HashMap::new();
+fn weld_vertices<P: GridPoint>(input: &[P], epsilon: f64) -> (Vec<P>, Vec<usize>) {
+    let mut vertices: Vec<P> = Vec::new();
+    let mut lookup: HashMap<[i64; 3], usize> = HashMap::new();
     let mut remap: Vec<usize> = Vec::with_capacity(input.len());
 
     for vertex in input {
-        let key = ((vertex.x / epsilon).round() as i64, (vertex.y / epsilon).round() as i64);
+        let key = vertex.weld_key(epsilon);
         let resolved = *lookup.entry(key).or_insert_with(|| {
             vertices.push(*vertex);
             vertices.len() - 1

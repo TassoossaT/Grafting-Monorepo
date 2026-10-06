@@ -1,12 +1,13 @@
 import type { AtomicEditOp, ResolvedCoverage, TerrainSculptMode } from "@/features/edit-construction";
-import type { ConstructionCoveredRegion, ConstructionNodeId, ConstructionPosition } from "@/ports";
+import type { ConstructionCoveredRegion, ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. The type-only
 // `@/` imports above are fine -- those are erased.
-import { resolveCoverage } from "../../../features/edit-construction/index.ts";
+import { hasTrait, resolveCoverage } from "../../../features/edit-construction/index.ts";
 
 import type { ToolContext } from "../tools/core/tool-context.ts";
+import { overhangingGround } from "./terrain-overhang.ts";
 
 /**
  * Painting terrain over terrain **adds ground to it** -- by moving the vertices
@@ -164,7 +165,18 @@ export function restackTerrain(
   mode: TerrainSculptMode = "elevate",
   step = ELEVATION_STEP,
 ): RestackOutcome {
-  const resolved = resolveCoverage(paintedType, covered);
+  // Ground a carve or fill in three dimensions made is no height to raise or
+  // level: left as it stands (`terrain-overhang.ts`).
+  const keys = covered.map((region) => region.surfaceKey);
+  const faces = keys.flatMap((key) => ctx.runtime.getRegionTopology(key as ConstructionSurfaceKey) ?? []);
+  const around = faces.length === 0 ? [] : ctx.runtime.getRegionTopologiesInBounds({
+    minX: Math.min(...faces.flatMap((f) => f.nodes.map((n) => n.position.x))) - 4,
+    minZ: Math.min(...faces.flatMap((f) => f.nodes.map((n) => n.position.z))) - 4,
+    maxX: Math.max(...faces.flatMap((f) => f.nodes.map((n) => n.position.x))) + 4,
+    maxZ: Math.max(...faces.flatMap((f) => f.nodes.map((n) => n.position.z))) + 4,
+  }).filter((topology) => hasTrait(topology.surfaceType, "ground"));
+  const overhanging = overhangingGround(around);
+  const resolved = resolveCoverage(paintedType, covered.filter((region) => !overhanging.has(region.surfaceKey.join(" "))));
   // Only a face the brush actually covers can be refused; one it merely
   // clips is none of this stroke's business either way.
   const skipped = [

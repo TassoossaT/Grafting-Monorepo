@@ -18,6 +18,30 @@ impl Vec2 {
     }
 }
 
+/// What the pipeline needs of a point to quadrangulate and weld a mesh of
+/// them: nothing about which space it lives in. The plane's [`Vec2`] is one;
+/// a surface's own 3D point is another, so the same pairing and ortho steps
+/// lay irregular cells over ground that is no height over any plane.
+pub trait GridPoint: Copy {
+    /// The average of `points`, summed in order -- for the plane, exactly the
+    /// arithmetic the pipeline always did, so ground already laid comes out
+    /// bit for bit the same.
+    fn mean(points: &[Self]) -> Self;
+    /// The cell `epsilon` wide this point falls in, for welding coincident
+    /// points into one.
+    fn weld_key(&self, epsilon: f64) -> [i64; 3];
+}
+
+impl GridPoint for Vec2 {
+    fn mean(points: &[Self]) -> Self {
+        crate::geometry::centroid_of(points)
+    }
+
+    fn weld_key(&self, epsilon: f64) -> [i64; 3] {
+        [(self.x / epsilon).round() as i64, (self.y / epsilon).round() as i64, 0]
+    }
+}
+
 /// A face as indices into a vertex list, in cyclic order.
 pub type Face = Vec<usize>;
 
@@ -26,8 +50,8 @@ pub type Quad = [usize; 4];
 
 /// A mesh of arbitrary faces -- the intermediate form before quadrangulation.
 #[derive(Debug, Clone)]
-pub struct FaceMesh {
-    pub vertices: Vec<Vec2>,
+pub struct FaceMesh<P = Vec2> {
+    pub vertices: Vec<P>,
     pub faces: Vec<Face>,
 }
 

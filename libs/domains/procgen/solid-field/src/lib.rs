@@ -1,31 +1,27 @@
-//! Solid ground that can hold caves, tunnels and bridges, laid by a planar
-//! mesher.
+//! Carving into the ground and filling it in, in three dimensions, as an
+//! edit of the ground's own mesh.
 //!
-//! ```text
-//! field (height + shapes) -> split into pieces -> shared borders -> lay each piece
-//! ```
+//! The ground is its mesh. An edit hands in the faces it reaches and the
+//! ground round them; [`edit_surface`] asks that mesh where solid is, carves
+//! or fills the edit's shapes, reads the new surface, stitches it to the ring
+//! of ground left standing and lays it with the irregular quad grid's own
+//! steps -- pairing, ortho, relaxation -- over the surface instead of the
+//! plane. What comes back is ground like any other: the ring's very nodes,
+//! new nodes inside it, irregular cells.
 //!
-//! - [`field`]: where there is solid. A height over the plane plus shapes that
-//!   carve or fill it, combined on demand -- no voxel grid is the truth.
-//! - [`pieces`]: the surface cut into stretches that are each a height over a
-//!   plane of their own.
-//! - [`seams`]: the borders between them, laid once and shared.
-//! - [`lay`]: each piece laid by the irregular quad grid in its own plane and
-//!   lifted back onto the surface.
-//!
-//! With no shape anywhere the surface is one piece facing up -- the ground as
-//! it was always laid.
+//! - [`field`]: the shapes, and how they combine with solid.
+//! - [`mesh_distance`]: signed distance to the ground's faces.
+//! - [`volume`]: solid after the edit; reading its surface off a grid.
+//! - [`trimesh`]: borders, the stitch to the ring, the isotropic remesh.
+//! - [`edit`]: the edit end to end.
 
+pub mod edit;
 pub mod field;
-pub mod lay;
-pub mod pieces;
-pub mod seams;
-pub mod surface;
+pub mod mesh_distance;
+pub mod trimesh;
 pub mod vector;
+pub mod volume;
 
-pub use field::{Effect, HeightGrid, HeightSource, Shape, SolidField, smooth_min};
-pub use lay::{BorderSplit, LaidGround, LaidPiece, lay_ground, lay_piece};
-pub use pieces::{Facing, Piece, PieceKey, Region, Split, SplitOptions, split};
-pub use seams::{Seams, seams};
-pub use surface::{ShapedSurface, shaped_surface};
+pub use edit::{EditedSurface, Faces, SurfaceEdit, edit_surface};
+pub use field::{Effect, Shape, smooth_min};
 pub use vector::Vec3;

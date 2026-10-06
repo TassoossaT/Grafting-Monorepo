@@ -39,6 +39,7 @@ import {
 } from "./terrain-neighborhood.ts";
 import { planarUnion, planarDifference } from "../../../features/edit-construction/index.ts";
 import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
+import { overhangingGround } from "./terrain-overhang.ts";
 
 function centroidOf(nodes: readonly { readonly position: ConstructionPosition }[]): { x: number; y: number; z: number } {
   if (nodes.length === 0) return { x: 0, y: 0, z: 0 };
@@ -428,10 +429,14 @@ export function executeTerrainCut(
   const stale = new Set((request.staleRegions ?? []).map((key) => key.join(" ")));
   // The target is ground by construction above, so every ground face matches it.
   const terrainStanding = standing.filter((topology) => hasTrait(topology.surfaceType, "ground") && !stale.has(topology.surfaceKey.join(" ")));
+  // Ground a carve or fill in three dimensions made stands as a neighbour,
+  // never laid again as a height over the plane (`terrain-overhang.ts`).
+  const overhanging = overhangingGround(terrainStanding);
   let affected = terrainStanding.filter(
     (topology) =>
-      coveredKeys.has(topology.surfaceKey.join(" ")) ||
-      faceIntersectsArea(topology, request.area, coveredOutline),
+      !overhanging.has(topology.surfaceKey.join(" ")) &&
+      (coveredKeys.has(topology.surfaceKey.join(" ")) ||
+      faceIntersectsArea(topology, request.area, coveredOutline)),
   );
   let affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
   let retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
@@ -567,7 +572,7 @@ export function executeTerrainCut(
       // Ground standing under a structure is cut or passes under it; either
       // way it is no room to take in, and laying it again would disturb ground
       // the structure stands clear of.
-      const absorbed = timePhase("vizinhas", () => retained.filter((t) => hasTrait(t.surfaceType, "ground") && !structures.standsUnder(centroidOf(t.nodes)) && (narrow
+      const absorbed = timePhase("vizinhas", () => retained.filter((t) => hasTrait(t.surfaceType, "ground") && !overhanging.has(t.surfaceKey.join(" ")) && !structures.standsUnder(centroidOf(t.nodes)) && (narrow
         ? t.nodes.some((node) => touchedNodes.has(node.id))
         : [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touchedSides.has(sideKey(edge.startNodeId, edge.endNodeId)))) &&
           medianSideLength(t) < effectiveFaceSide * DENSER_THAN_LAID)))

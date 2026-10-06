@@ -40,9 +40,8 @@ import type {
   ConstructionGridContourNode,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
-  ConstructionSolidGround,
-  ConstructionSolidGroundRequest,
-  ConstructionSolidSurface,
+  ConstructionTerrainVolumeEdit,
+  ConstructionTerrainVolumeEditRequest,
   ConstructionPatch,
   ConstructionPatchOutcome,
   ConstructionPosition,
@@ -527,19 +526,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.#generateSingleGrid(request);
   }
 
-  solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined {
+  editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined {
     try {
-      return JSON.parse(this.#read().solid_ground_json(JSON.stringify(request))) as ConstructionSolidGround;
+      return JSON.parse(this.#read().edit_terrain_volume_json(JSON.stringify(request))) as ConstructionTerrainVolumeEdit;
     } catch {
-      // A refusal, like the grid's: the request describes nothing the engine can lay.
-      return undefined;
-    }
-  }
-
-  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined {
-    try {
-      return JSON.parse(this.#read().solid_surface_json(JSON.stringify(request))) as ConstructionSolidSurface;
-    } catch {
+      // A refusal, like the grid's: the edit describes nothing the engine can lay.
       return undefined;
     }
   }

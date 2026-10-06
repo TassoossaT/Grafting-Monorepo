@@ -42,9 +42,8 @@ import type {
   ConstructionGraphSnapshot,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
-  ConstructionSolidGround,
-  ConstructionSolidGroundRequest,
-  ConstructionSolidSurface,
+  ConstructionTerrainVolumeEdit,
+  ConstructionTerrainVolumeEditRequest,
   ConstructionNodeId,
   ConstructionHostPoint,
   ConstructionPatch,
@@ -187,10 +186,8 @@ export interface TabletopRuntime extends BezierPort {
   generateIrregularQuadGrid(
     request: ConstructionIrregularQuadGridRequest,
   ): ConstructionIrregularQuadGrid | undefined;
-  /** Solid ground split into pieces and laid. See `ConstructionSessionPort.solidGround`. */
-  solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined;
-  /** The shapes' surface as one mesh. See `ConstructionSessionPort.solidSurface`. */
-  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined;
+  /** One edit of the ground's own mesh. See `ConstructionSessionPort.editTerrainVolume`. */
+  editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Region boundaries near a local edit, resolved in one engine call. */
@@ -1017,14 +1014,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.generateIrregularQuadGrid(request);
   }
 
-  solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined {
-    this.#requireReady("laying solid ground");
-    return this.#construction.solidGround(request);
-  }
-
-  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined {
-    this.#requireReady("laying a shape's surface");
-    return this.#construction.solidSurface(request);
+  editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined {
+    this.#requireReady("editing the ground's volume");
+    return this.#construction.editTerrainVolume(request);
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {

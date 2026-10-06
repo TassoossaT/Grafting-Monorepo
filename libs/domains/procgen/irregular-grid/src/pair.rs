@@ -10,7 +10,7 @@ use crate::random::Random;
 /// anyway. The matching is greedy over a shuffled order, which leaves some
 /// triangles unpaired by construction -- that variation is the point, so no
 /// attempt is made to maximise the matching.
-pub fn pair_triangles(mesh: &FaceMesh, random: &mut Random) -> FaceMesh {
+pub fn pair_triangles<P: Clone>(mesh: &FaceMesh<P>, random: &mut Random) -> FaceMesh<P> {
     pair_triangles_keeping(mesh, random, &HashSet::new())
 }
 
@@ -21,11 +21,11 @@ pub fn pair_triangles(mesh: &FaceMesh, random: &mut Random) -> FaceMesh {
 /// which is where the nodes along it are put back (see
 /// [`crate::ortho::ortho_along`]). The shuffle draws the same numbers whatever
 /// is kept, so an empty set pairs exactly as `pair_triangles` always has.
-pub fn pair_triangles_keeping(
-    mesh: &FaceMesh,
+pub fn pair_triangles_keeping<P: Clone>(
+    mesh: &FaceMesh<P>,
     random: &mut Random,
     kept: &HashSet<(usize, usize)>,
-) -> FaceMesh {
+) -> FaceMesh<P> {
     let mut edge_owners: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
     for (face_index, face) in mesh.faces.iter().enumerate() {
         for (a, b) in edges_of(face) {

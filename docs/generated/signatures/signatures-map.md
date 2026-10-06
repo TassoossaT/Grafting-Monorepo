@@ -147,16 +147,6 @@ pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
-// src/solid_ground.rs
-pub struct HeightGridDto
-pub struct ShapeDto
-pub struct SolidGroundRequest
-pub struct LaidPieceDto
-pub struct SolidGroundResponse
-pub struct SolidSurfaceResponse
-pub fn solid_surface(mut request: SolidGroundRequest) -> Result<SolidSurfaceResponse, String>
-pub fn solid_ground(request: SolidGroundRequest) -> Result<SolidGroundResponse, String>
-
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
 pub struct RegionBounds
@@ -173,6 +163,13 @@ pub fn is_empty(&self) -> bool
 pub fn bounds_of(&self, region_id: &RegionId) -> Option<&RegionBounds>
 pub fn insert(&mut self, region_id: RegionId, bounds: RegionBounds)
 pub fn remove(&mut self, region_id: &RegionId) -> Option<RegionBounds>
+
+// src/terrain_volume.rs
+pub struct FacesDto
+pub struct ShapeDto
+pub struct TerrainVolumeEditRequest
+pub struct TerrainVolumeEditResponse
+pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainVolumeEditResponse, String>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -3966,37 +3963,6 @@ export function buildConstraintRings(
   * a place a cut gave way partway along it. Such a corner is exactly where
   * the ground must meet that side, so it takes a node only standing right
 
-// src/composition/tabletop/terrain/solid-ground.ts
-export interface SolidShapeStroke {
-  readonly shape: ConstructionSolidShape;
-  /** Face size of ground under open sky round it. */
-  readonly faceSide: number;
-  readonly seed: number;
-  }
-export function commitSolidShape(ctx: ToolContext, stroke: SolidShapeStroke): { readonly faces: number } {
-  const { shape, faceSide } = stroke;
-  const all = ctx.runtime.getAllRegionTopologies();
-export type ZoneHeightEdit = "raise" | "lower" | "flatten";
-export function reshapeZoneGround(
-  ctx: ToolContext,
-  path: readonly ConstructionPosition[],
-  radius: number,
-  edit: ZoneHeightEdit,
-  step: number,
-  ): { readonly faces: number } | undefined {
-  // No zone was ever laid: an ordinary stroke has nothing more to do here.
-export function tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined {
-  const path = thinned(points, radius * PATH_STEP);
-export function solidStrokePath(
-  mode: "tunnel" | "bridge",
-  points: readonly ConstructionPosition[],
-  radius: number,
-  rise: number,
-  ): readonly ConstructionPosition[] {
-  const shape = mode === "tunnel" ? tunnelShape(points, radius) : bridgeShape(points, radius, rise);
-export function bridgeShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionSolidShape | undefined {
-  const path = thinned(points, radius * PATH_STEP);
-
 // src/composition/tabletop/terrain/structure-contact.ts
 export interface StructureMeeting {
   /** Where the structures rest on the ground: the area the ground goes round. */
@@ -4245,6 +4211,10 @@ export interface HeightField {
 export function heightFieldOf(anchors: readonly ConstructionPosition[], reach: number): HeightField {
   const buckets = new Map<string, ConstructionPosition[]>();
 
+// src/composition/tabletop/terrain/terrain-overhang.ts
+export function overhangingGround(ground: readonly ConstructionRegionTopology[]): ReadonlySet<string> {
+  const normals = ground.map(newell);
+
 // src/composition/tabletop/terrain/terrain-regenerate.ts
 export type { HeightField } from "./terrain-neighborhood.ts";
 export type TerrainRegenerateRuntime = TerrainCutRuntime;
@@ -4287,6 +4257,16 @@ export function restackTerrain(
   /** How much of a full step lands on a given node. Defaults to all of it. */
   loadAt: (point: ConstructionPosition) => number = () => 1,
   mode: TerrainSculptMode = "elevate",
+
+// src/composition/tabletop/terrain/terrain-volume-edit.ts
+export function commitTerrainVolumeEdit(ctx: ToolContext, shape: ConstructionVolumeShape, options: { readonly faceSide?: number; readonly seed: number }): { readonly faces: number } {
+  const blend = blendOf(shape);
+export function carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {
+  const shape = mode === "carve" ? carveShape(points, radius) : fillShape(points, radius, rise);
 
 // src/composition/tabletop/tools/core/boundary-edges.ts
 export function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
@@ -5456,8 +5436,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  // A tunnel or bridge shows the volume it would make under the pointer before the stroke starts.
-  previewOnHover: (params: TerrainSculptParams) => params.mode === "tunnel" || params.mode === "bridge",
+  // A carve or fill shows the volume it would take or add under the pointer before the stroke starts.
+  previewOnHover: (params: TerrainSculptParams) => params.mode === "carve" || params.mode === "fill",
 
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
@@ -7564,17 +7544,6 @@ export const roofTransitionStructureType: StructureTypeDefinition = Object.freez
   validateMotion: undefined,
   recipe: roofRecipeGeneration,
 
-// src/features/edit-construction/structure-types/solid/solid-ground-structure.ts
-export const SOLID_GROUND_SURFACE_TYPE = "solid-ground";
-export const solidGroundStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: SOLID_GROUND_SURFACE_TYPE,
-  label: "Terreno escavado",
-  creation: "every piece of the surface a shape made, each a height over a plane of its own, laid by the irregular quad grid",
-  traits: Object.freeze([]),
-  rigid: true,
-  sealedOutline: true,
-  interactionOver: cutsGround,
-
 // src/features/edit-construction/structure-types/structural-cut.ts
 export type CutProfile =
 export interface StructuralCutArea {
@@ -7827,7 +7796,7 @@ export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
   /**
   * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "tunnel" | "bridge";
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "carve" | "fill";
 export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
   if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
   return faceSizeOverride;

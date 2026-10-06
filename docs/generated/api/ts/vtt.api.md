@@ -956,6 +956,10 @@ Hides the active tool preview, if any.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined`
+
+One edit of the ground's own mesh. See `ConstructionSessionPort.editTerrainVolume`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
@@ -1094,14 +1098,6 @@ Writes numbers on the map, on a channel of their own -- see `SceneRenderPort.sho
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined`
-
-Solid ground split into pieces and laid. See `ConstructionSessionPort.solidGround`.
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined`
-
-The shapes' surface as one mesh. See `ConstructionSessionPort.solidSurface`.
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.start(): Promise<void>`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.subscribe(listener: TabletopRuntimeListener): () => void`
@@ -1166,6 +1162,10 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.dispose(): Promise<void>`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined`
+
+One edit of the ground's own mesh. See `ConstructionSessionPort.editTerrainVolume`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
@@ -1305,14 +1305,6 @@ Writes numbers on the map, on a channel of their own -- see `SceneRenderPort.sho
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined`
-
-Solid ground split into pieces and laid. See `ConstructionSessionPort.solidGround`.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined`
-
-The shapes' surface as one mesh. See `ConstructionSessionPort.solidSurface`.
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.start(): Promise<void>`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.subscribe(listener: TabletopRuntimeListener): () => void`
@@ -1396,52 +1388,6 @@ three things it used to do were guesses:
 
 The search is bucketed rather than exhaustive, which is why the whole thing
 stays linear as the road network grows instead of squaring with it.
-
-### `interface vtt.solid-ground.SolidShapeStroke`
-
-What a stroke asks for.
-
-### `property vtt.solid-ground.SolidShapeStroke.faceSide: number`
-
-Face size of ground under open sky round it.
-
-### `property vtt.solid-ground.SolidShapeStroke.seed: number`
-
-### `property vtt.solid-ground.SolidShapeStroke.shape: ConstructionSolidShape`
-
-### `type vtt.solid-ground.ZoneHeightEdit = "raise" | "lower" | "flatten"`
-
-How a terrain brush stroke changes heights.
-
-### `function vtt.solid-ground.bridgeShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionSolidShape | undefined`
-
-An earth bridge from where the stroke starts to where it ends: its feet in
-the ground at both, arched `rise` over the straight line between them.
-
-### `function vtt.solid-ground.commitSolidShape(ctx: ToolContext, stroke: SolidShapeStroke): { faces: number }`
-
-Lays `stroke`'s shape into the ground, joining any zone it reaches, as one
-transaction the ground's regeneration answers.
-
-### `function vtt.solid-ground.reshapeZoneGround(ctx: ToolContext, path: readonly ConstructionPosition[], radius: number, edit: ZoneHeightEdit, step: number): { faces: number } | undefined`
-
-A terrain brush stroke over standing zones: inside a zone its heights are
-the truth, so the stroke edits those -- raising, lowering or levelling them
-under the brush with the falloff of a round brush -- and the zone is laid
-again over the hill as it now is, its tunnels following it. `undefined`
-when the stroke reaches no zone.
-
-### `function vtt.solid-ground.solidStrokePath(mode: "tunnel" | "bridge", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[]`
-
-Where the volume a tunnel or bridge stroke would make runs, for its ghost:
-the very path the commit lays, or -- before the stroke has gone anywhere --
-the one point it would start from.
-
-### `function vtt.solid-ground.tunnelShape(points: readonly ConstructionPosition[], radius: number): ConstructionSolidShape | undefined`
-
-A tunnel pushed into the hill from where the stroke starts: level at that
-height, its floor on the ground there so its mouth opens onto it, running
-wherever the stroke runs in plan.
 
 ### `interface vtt.structure-contact.StructureMeeting`
 
@@ -2220,6 +2166,10 @@ metres away comes back and is treated as ground to reconcile with. Seeded by
 the regions the area actually covers, the query answers the narrower and
 correct question -- the ground *connected to* what was touched.
 
+### `function vtt.terrain-overhang.overhangingGround(ground: readonly ConstructionRegionTopology[]): ReadonlySet<string>`
+
+The keys (`surfaceKey.join(" ")`) of the faces among `ground` that are no height over the plane.
+
 ### `type vtt.terrain-regenerate.TerrainRegenerateRuntime = TerrainCutRuntime`
 
 ### `function vtt.terrain-regenerate.repairTerrainCut(runtime: TerrainCutRuntime, fallout: CutFallout, causeId: string, tableId: string): number`
@@ -2291,6 +2241,27 @@ Raises every covered face the type table allows.
 A face the table forbids -- a wall the brush centred on -- is left alone
 and reported in `skipped`, not thrown. The stroke still does everything
 else it was asked to.
+
+### `function vtt.terrain-volume-edit.carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined`
+
+A carve pushed into the ground from where the stroke starts: level at that
+height, its floor on the ground there, running wherever the stroke runs in
+plan. A click without a drag is a ball sunk into the ground there.
+
+### `function vtt.terrain-volume-edit.commitTerrainVolumeEdit(ctx: ToolContext, shape: ConstructionVolumeShape, options: { faceSide?: number; seed: number }): { faces: number }`
+
+Carves `shape` into the ground or fills it in, as one transaction. Throws
+where nothing could be laid; the ground is then left as it was.
+
+### `function vtt.terrain-volume-edit.fillShape(points: readonly ConstructionPosition[], radius: number, rise: number): ConstructionVolumeShape | undefined`
+
+Earth filled in from where the stroke starts to where it ends: its feet in
+the ground at both, arched `rise` over the line between them -- a bridge.
+A click without a drag is a mound.
+
+### `function vtt.terrain-volume-edit.volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[]`
+
+Where the volume a stroke would carve or fill runs, for its ghost: the very path the commit uses.
 
 ### `function vtt.boundary-edges.boundaryUsage(ctx: ToolContext): ReadonlyMap<string, readonly boolean[]>`
 
@@ -8997,28 +8968,6 @@ its eaves reach and whether its leaves curve are the covering's business.
 
 Upright closures follow the roof recipe while joining wall-cloud editing.
 
-### `variable vtt.solid-ground-structure.SOLID_GROUND_SURFACE_TYPE: "solid-ground"`
-
-The surface type of ground a shape made: the inside of a tunnel or cave, the body of an earth bridge.
-
-### `variable vtt.solid-ground-structure.solidGroundStructureType: StructureTypeDefinition`
-
-Ground a shape made -- a tunnel's ceiling, walls and floor, the hill over
-it, an earth bridge's deck and belly -- laid from a height field plus the
-shapes that carve or fill it (`grafting-procgen-solid-field`).
-
-To everything planar it is a sealed structure standing in the ground, the
-way a floor is: the ground under open sky is cut round it by the ground's
-own regeneration and meets its outline at its height without splitting it.
-That is what lets terrain stay a height over the plane everywhere else --
-the brush, flattening and every cut keep working unchanged -- while this
-holds the stretches that are ground over ground.
-
-Not `"ground"` itself: the planar machinery would regenerate it as a height
-over the plane and flatten the cave it is. Its faces are re-laid from their
-shapes, never grabbed: the terrain brush's tunnel and bridge strokes add to
-them.
-
 ### `interface vtt.structural-cut.StructuralCutArea`
 
 ### `property vtt.structural-cut.StructuralCutArea.center?: { x: number; y: number; z: number }`
@@ -10065,11 +10014,11 @@ open polyline (a wall's centerline while dragging); `"quad"` draws a
 filled footprint (a terrain brush's reach, a room stamp's proposed
 outline) as two triangles over 4 corner points.
 
-### `type vtt.tool-types.TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "tunnel" | "bridge"`
+### `type vtt.tool-types.TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "carve" | "fill"`
 
 Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
-or makes ground over ground: a tunnel pushed into the hill from where it starts ("tunnel"), an earth bridge from where it
-starts to where it ends ("bridge").
+or carves into the ground and fills it in, in three dimensions, as an edit of the ground's own mesh: "carve" pushes in
+from where the stroke starts (a tunnel, a cave), "fill" runs from where it starts to where it ends (an earth bridge).
 
 ### `type vtt.tool-types.ToolParamsFor = ToolParamsByTool[Id]`
 
@@ -11606,6 +11555,14 @@ A point expressed in a host face's `(u, v)` frame; unclamped, `inside` when both
 
 ### `property vtt.construction-session-port.ConstructionHostPoint.v: number`
 
+### `interface vtt.construction-session-port.ConstructionIndexedFaces`
+
+Faces as indices into their own vertices, all wound the same way.
+
+### `property vtt.construction-session-port.ConstructionIndexedFaces.faces: readonly (readonly number[])[]`
+
+### `property vtt.construction-session-port.ConstructionIndexedFaces.vertices: readonly (readonly [number, number, number])[]`
+
 ### `interface vtt.construction-session-port.ConstructionIrregularQuadGrid`
 
 A generated grid, and what each of its corners already is.
@@ -12003,6 +11960,12 @@ Unregisters a region, leaving zero orphaned nodes or edges behind.
 
 Mints a parallel copy; the same `suffix` always reproduces the same copy.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined`
+
+Carves into the ground or fills it in, as an edit of the ground's own
+mesh: the patch laid again with irregular cells over the surface, the
+ring of nodes round it kept. Pure. `undefined` where the engine refuses.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
 One irregular quad grid, generated against the contours the request
@@ -12172,19 +12135,6 @@ Replaces the regions' property bag, or clears it with `null`. Undoable; moves no
 
 Session configuration, not undoable state: replaces the whole per-type capability table.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined`
-
-Solid ground -- a height field plus shapes carving or filling it -- split
-into pieces that are each a height over a plane of their own, every piece
-laid by the irregular quad grid. Pure, like the grid itself. `undefined`
-where the engine refuses the request.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined`
-
-Only the surface the shapes made, and a collar of open ground round it,
-as one quad mesh read at `shapeFaceSide` and relaxed onto the surface.
-Pure. `undefined` where the engine refuses the request.
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.start(): Promise<void>`
 
 Loads the underlying Wasm module and starts an empty session. Every
@@ -12210,100 +12160,6 @@ Intrinsic sheet curvature, with positions resolved from boundary graph nodes.
 ### `property vtt.construction-session-port.ConstructionSheetProfile.middle: number`
 
 ### `property vtt.construction-session-port.ConstructionSheetProfile.start: number`
-
-### `interface vtt.construction-session-port.ConstructionSolidGround`
-
-Every piece of the surface in the box, sharing their border points.
-
-### `property vtt.construction-session-port.ConstructionSolidGround.borderPoints: readonly (readonly [number, number, number])[]`
-
-### `property vtt.construction-session-port.ConstructionSolidGround.pieces: readonly ConstructionSolidGroundPiece[]`
-
-### `interface vtt.construction-session-port.ConstructionSolidGroundPiece`
-
-One piece of solid ground, laid and lifted into world space.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.behind: number`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.borderPoint: readonly (number | null)[]`
-
-Index-aligned with `vertices`: the shared border point a corner is, where it is one.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.error: string | null`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.faces: readonly (readonly number[])[]`
-
-Counter-clockwise seen from outside the solid.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.facing: string`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.inFront: number`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.openGround: boolean`
-
-Ground under open sky with nothing beneath it, away from any shape: what a height map alone already is.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundPiece.vertices: readonly (readonly [number, number, number])[]`
-
-### `interface vtt.construction-session-port.ConstructionSolidGroundRequest`
-
-Solid ground to lay: heights on a regular grid of the ground plane, shapes
-carving or filling it, and the box the surface is read in.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.blend?: number`
-
-How far a shape blends into the ground, rounding its lip.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.cell: number`
-
-Spacing of the grid the surface is split from.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.collar?: number`
-
-How far over open ground round the shapes a collar of it is laid with
-them, for ground laid as a height over the plane to meet. Omitted lays none.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.faceSide: number`
-
-Face size of ground under open sky.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.ground: { columns: number; heights: readonly number[]; originX: number; originZ: number; rows: number; spacing: number }`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.regionMax: readonly [number, number, number]`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.regionMin: readonly [number, number, number]`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.seed?: number`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.shapeFaceSide?: number`
-
-Face size of the pieces a shape made; omitted lays them at `faceSide`.
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.shapes: readonly ConstructionSolidShape[]`
-
-### `property vtt.construction-session-port.ConstructionSolidGroundRequest.steepestUp?: number`
-
-The steepest normal (its y component) still laid as ground facing up.
-
-### `interface vtt.construction-session-port.ConstructionSolidShape`
-
-A capsule swept along a path that takes solid away or adds it.
-
-### `property vtt.construction-session-port.ConstructionSolidShape.effect: "carve" | "fill"`
-
-### `property vtt.construction-session-port.ConstructionSolidShape.path: readonly (readonly [number, number, number])[]`
-
-### `property vtt.construction-session-port.ConstructionSolidShape.radius: number`
-
-### `interface vtt.construction-session-port.ConstructionSolidSurface`
-
-Only the surface the shapes made, and the collar round it, as one mesh.
-
-### `property vtt.construction-session-port.ConstructionSolidSurface.faces: readonly (readonly number[])[]`
-
-Counter-clockwise seen from outside the solid: quads, and a triangle where only half a grid quad is the shape's.
-
-### `property vtt.construction-session-port.ConstructionSolidSurface.vertices: readonly (readonly [number, number, number])[]`
 
 ### `interface vtt.construction-session-port.ConstructionSurfaceCapability`
 
@@ -12354,6 +12210,44 @@ The stations the formation actually used, carrying the height each one rides at.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.vertices: readonly ConstructionPosition[]`
 
+### `interface vtt.construction-session-port.ConstructionTerrainVolumeEdit`
+
+The faces laid in place of the patch: the ring round it kept, node for node.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEdit.faces: readonly (readonly number[])[]`
+
+In the winding the patch's faces had.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEdit.source: readonly (number | null)[]`
+
+Index-aligned with `vertices`: the patch vertex a corner of the ring is.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEdit.vertices: readonly (readonly [number, number, number])[]`
+
+### `interface vtt.construction-session-port.ConstructionTerrainVolumeEditRequest`
+
+One edit of the ground's own mesh: the faces it lays again, the ground round them, and what to carve or fill.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.blend?: number`
+
+How far a shape blends into the ground, rounding its lip.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.context?: ConstructionIndexedFaces`
+
+The ground round them -- never laid again, only asked where solid is.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.faceSide: number`
+
+How wide one finished face should be.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.patch: ConstructionIndexedFaces`
+
+The faces laid again.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.seed?: number`
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.shapes: readonly ConstructionVolumeShape[]`
+
 ### `interface vtt.construction-session-port.ConstructionTopologyBoundsQuery`
 
 Local topology query, optionally restricted to clouds reached from seeds.
@@ -12388,6 +12282,16 @@ be set to. Reported, never applied: the engine has no opinion on what a
 gap should be made of.
 
 ### `property vtt.construction-session-port.ConstructionUnfilledLoop.nodeIds: readonly string[]`
+
+### `interface vtt.construction-session-port.ConstructionVolumeShape`
+
+A capsule swept along a path that carves the ground or fills it in.
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.effect: "carve" | "fill"`
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.path: readonly (readonly [number, number, number])[]`
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.radius: number`
 
 ### `interface vtt.construction-session-port.RegionEditOutcome`
 

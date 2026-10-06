@@ -170,8 +170,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
         { key: "terrain-add", label: "Adicionar", icon: "⛰️", tooltip: "Adicionar terreno: arraste para erguer o chão", active: isTerrainSculptActive && terrainStroke === "add", disabled: !ready, onClick: () => onTerrainModeChange("add") },
         { key: "terrain-dig", label: "Remover", icon: "⛏️", tooltip: "Remover terreno: arraste para cavar", active: isTerrainSculptActive && terrainStroke === "dig", disabled: !ready, onClick: () => onTerrainModeChange("dig") },
         { key: "terrain-flatten", label: "Aplainar", icon: "▬", tooltip: "Aplainar: arraste para nivelar o chão", active: isTerrainSculptActive && terrainStroke === "flatten", disabled: !ready, onClick: () => onTerrainModeChange("flatten") },
-        { key: "terrain-tunnel", label: "Túnel", icon: "🕳️", tooltip: "Túnel: arraste da encosta para dentro do morro", active: isTerrainSculptActive && terrainStroke === "tunnel", disabled: !ready, onClick: () => onTerrainModeChange("tunnel") },
-        { key: "terrain-bridge", label: "Ponte de terra", icon: "🌉", tooltip: "Ponte de terra: arraste de uma margem até a outra", active: isTerrainSculptActive && terrainStroke === "bridge", disabled: !ready, onClick: () => onTerrainModeChange("bridge") },
+        { key: "terrain-carve", label: "Cavar 3D", icon: "🕳️", tooltip: "Cavar em 3D: arraste da encosta para dentro (túnel, caverna); clique para um buraco", active: isTerrainSculptActive && terrainStroke === "carve", disabled: !ready, onClick: () => onTerrainModeChange("carve") },
+        { key: "terrain-fill", label: "Erguer 3D", icon: "🌉", tooltip: "Erguer em 3D: arraste de uma margem até a outra (ponte de terra); clique para um monte", active: isTerrainSculptActive && terrainStroke === "fill", disabled: !ready, onClick: () => onTerrainModeChange("fill") },
       ],
     },
     {

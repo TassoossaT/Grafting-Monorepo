@@ -19,7 +19,7 @@ mod region_annotations;
 mod region_props;
 mod region_overlay;
 mod session;
-mod solid_ground;
+mod terrain_volume;
 #[cfg(test)]
 mod pin_tests;
 #[cfg(test)]

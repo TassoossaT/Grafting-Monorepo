@@ -71,16 +71,9 @@ export function sessionFixture() {
       }
       return { ...wire, vertices: wire.vertices.map((v) => (v.source === null ? { x: v.x, z: v.z } : { x: v.x, z: v.z, source: v.source })) };
     },
-    solidGround(request) {
+    editTerrainVolume(request) {
       try {
-        return JSON.parse(session.solid_ground_json(JSON.stringify(request)));
-      } catch {
-        return undefined;
-      }
-    },
-    solidSurface(request) {
-      try {
-        return JSON.parse(session.solid_surface_json(JSON.stringify(request)));
+        return JSON.parse(session.edit_terrain_volume_json(JSON.stringify(request)));
       } catch {
         return undefined;
       }

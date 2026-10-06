@@ -82,6 +82,13 @@ Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
 
 `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::edit_terrain_volume_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Carves into the ground or fills it in, as an edit of the ground's own
+mesh: the faces handed in laid again, the ring of nodes round them
+kept. Pure -- reads nothing from this session and mutates nothing in
+it; the caller registers the result. See `terrain_volume`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::field_query_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Where ground-plane points project onto the curves a surface was swept
@@ -223,19 +230,6 @@ not edit state: it is never undone and moves no geometry.
 
 The session's current nodes, edges, and surfaces, for a caller to
 render from without re-deriving state.
-
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::solid_ground_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Solid ground that can hold caves, tunnels and bridges: a height grid
-plus shapes that carve or fill it, split into pieces and each laid by
-the irregular quad grid. Pure -- reads nothing from this session and
-mutates nothing in it. See `solid_ground::solid_ground`.
-
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::solid_surface_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Only the surface the shapes made, and a collar of open ground round
-it, as one quad mesh. Pure, like `solid_ground_json`. See
-`solid_ground::solid_surface`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_mesh_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 

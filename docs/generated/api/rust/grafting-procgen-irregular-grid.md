@@ -8,6 +8,17 @@ Well below any distance the pipeline itself produces between two vertices
 that are meant to be distinct, and well above the float noise between two
 that are meant to be one.
 
+### `pub fn grafting_procgen_irregular_grid::GridPoint::mean(points: &[Self]) -> Self`
+
+The average of `points`, summed in order -- for the plane, exactly the
+arithmetic the pipeline always did, so ground already laid comes out
+bit for bit the same.
+
+### `pub fn grafting_procgen_irregular_grid::GridPoint::weld_key(&self, epsilon: f64) -> [i64; 3]`
+
+The cell `epsilon` wide this point falls in, for welding coincident
+points into one.
+
 ### `pub fn grafting_procgen_irregular_grid::boundary_vertices(mesh: &grafting_procgen_irregular_grid::mesh::QuadMesh) -> std::collections::hash::set::HashSet<usize>`
 
 Vertices on an edge belonging to exactly one quad.
@@ -149,7 +160,26 @@ as a function rather than left to the caller to work out, because getting
 it wrong is invisible until the ground is on screen next to ground made
 the other way.
 
+### `pub fn grafting_procgen_irregular_grid::mesh::FaceMesh<P>::clone(&self) -> grafting_procgen_irregular_grid::mesh::FaceMesh<P>`
+
+### `pub fn grafting_procgen_irregular_grid::mesh::FaceMesh<P>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
+
+### `pub fn grafting_procgen_irregular_grid::mesh::GridPoint::mean(points: &[Self]) -> Self`
+
+The average of `points`, summed in order -- for the plane, exactly the
+arithmetic the pipeline always did, so ground already laid comes out
+bit for bit the same.
+
+### `pub fn grafting_procgen_irregular_grid::mesh::GridPoint::weld_key(&self, epsilon: f64) -> [i64; 3]`
+
+The cell `epsilon` wide this point falls in, for welding coincident
+points into one.
+
+### `pub fn grafting_procgen_irregular_grid::mesh::Vec2::mean(points: &[Self]) -> Self`
+
 ### `pub fn grafting_procgen_irregular_grid::mesh::Vec2::new(x: f64, y: f64) -> Self`
+
+### `pub fn grafting_procgen_irregular_grid::mesh::Vec2::weld_key(&self, epsilon: f64) -> [i64; 3]`
 
 ### `pub fn grafting_procgen_irregular_grid::mesh::edge_key(a: usize, b: usize) -> (usize, usize)`
 
@@ -168,7 +198,7 @@ adjacent edge midpoints, and the face centre. A triangle becomes three
 quads and a rhombus four, so nothing has to be done about faces that never
 found a partner -- the mesh is all-quad regardless of how the pairing went.
 
-### `pub fn grafting_procgen_irregular_grid::ortho::ortho_along(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, seams: &std::collections::hash::map::HashMap<(usize, usize), alloc::vec::Vec<usize>>) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
+### `pub fn grafting_procgen_irregular_grid::ortho::ortho_along<P: grafting_procgen_irregular_grid::mesh::GridPoint>(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh<P>, seams: &std::collections::hash::map::HashMap<(usize, usize), alloc::vec::Vec<usize>>) -> grafting_procgen_irregular_grid::mesh::FaceMesh<P>`
 
 [`ortho`], except along the edges named in `seams`.
 
@@ -200,7 +230,7 @@ Required before relaxation rather than merely tidy: each face produced its
 own copy of every shared edge midpoint, and until those are one vertex,
 smoothing moves each copy independently and tears the mesh apart.
 
-### `pub fn grafting_procgen_irregular_grid::ortho::weld_faces_tracked(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, epsilon: f64) -> (grafting_procgen_irregular_grid::mesh::FaceMesh, alloc::vec::Vec<usize>)`
+### `pub fn grafting_procgen_irregular_grid::ortho::weld_faces_tracked<P: grafting_procgen_irregular_grid::mesh::GridPoint>(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh<P>, epsilon: f64) -> (grafting_procgen_irregular_grid::mesh::FaceMesh<P>, alloc::vec::Vec<usize>)`
 
 [`weld_tracked`] for cells of any number of sides -- what
 [`ortho_along`] produces.
@@ -214,7 +244,7 @@ itself does not hold -- which node of the graph a corner already is --
 needs this, and deriving it afterwards would mean matching positions,
 which is the one thing this whole approach exists to avoid.
 
-### `pub fn grafting_procgen_irregular_grid::pair::pair_triangles(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, random: &mut grafting_procgen_irregular_grid::random::Random) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
+### `pub fn grafting_procgen_irregular_grid::pair::pair_triangles<P: core::clone::Clone>(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh<P>, random: &mut grafting_procgen_irregular_grid::random::Random) -> grafting_procgen_irregular_grid::mesh::FaceMesh<P>`
 
 This is the step that makes the result irregular, and it is purely
 aesthetic: whatever stays unpaired is handled by [`crate::ortho::ortho`]
@@ -222,7 +252,7 @@ anyway. The matching is greedy over a shuffled order, which leaves some
 triangles unpaired by construction -- that variation is the point, so no
 attempt is made to maximise the matching.
 
-### `pub fn grafting_procgen_irregular_grid::pair::pair_triangles_keeping(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, random: &mut grafting_procgen_irregular_grid::random::Random, kept: &std::collections::hash::set::HashSet<(usize, usize)>) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
+### `pub fn grafting_procgen_irregular_grid::pair::pair_triangles_keeping<P: core::clone::Clone>(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh<P>, random: &mut grafting_procgen_irregular_grid::random::Random, kept: &std::collections::hash::set::HashSet<(usize, usize)>) -> grafting_procgen_irregular_grid::mesh::FaceMesh<P>`
 
 [`pair_triangles`], never merging across an edge in `kept`.
 
@@ -247,6 +277,14 @@ seed shuffles a given list identically.
 
 `0..length` shuffled.
 
+### `pub fn grafting_procgen_irregular_grid::regular_cell_targets(corners: &[grafting_procgen_irregular_grid::mesh::Vec2]) -> alloc::vec::Vec<grafting_procgen_irregular_grid::mesh::Vec2>`
+
+Where each corner of a cell sits on the regular polygon that cell is
+nearest: every corner rotated back by its own turn about the centre and
+averaged gives the polygon's one free corner, which turned forward again
+places each of the others. The rule every relaxation here pulls toward --
+on the plane, or on a surface with the cell laid flat in its own plane.
+
 ### `pub fn grafting_procgen_irregular_grid::relax(mesh: &grafting_procgen_irregular_grid::mesh::QuadMesh, options: &grafting_procgen_irregular_grid::relax::RelaxOptions) -> grafting_procgen_irregular_grid::mesh::QuadMesh`
 
 For each quad the best-fit square sharing its centre is found by rotating
@@ -268,6 +306,14 @@ The settings a free-standing chunk relaxes with.
 ### `pub fn grafting_procgen_irregular_grid::relax::boundary_vertices(mesh: &grafting_procgen_irregular_grid::mesh::QuadMesh) -> std::collections::hash::set::HashSet<usize>`
 
 Vertices on an edge belonging to exactly one quad.
+
+### `pub fn grafting_procgen_irregular_grid::relax::regular_cell_targets(corners: &[grafting_procgen_irregular_grid::mesh::Vec2]) -> alloc::vec::Vec<grafting_procgen_irregular_grid::mesh::Vec2>`
+
+Where each corner of a cell sits on the regular polygon that cell is
+nearest: every corner rotated back by its own turn about the centre and
+averaged gives the polygon's one free corner, which turned forward again
+places each of the others. The rule every relaxation here pulls toward --
+on the plane, or on a surface with the cell laid flat in its own plane.
 
 ### `pub fn grafting_procgen_irregular_grid::relax::relax(mesh: &grafting_procgen_irregular_grid::mesh::QuadMesh, options: &grafting_procgen_irregular_grid::relax::RelaxOptions) -> grafting_procgen_irregular_grid::mesh::QuadMesh`
 
@@ -350,7 +396,7 @@ Index into [`ConstrainedQuadGrid::mesh`]'s own vertices.
 
 ### `pub grafting_procgen_irregular_grid::FaceMesh::faces: alloc::vec::Vec<grafting_procgen_irregular_grid::mesh::Face>`
 
-### `pub grafting_procgen_irregular_grid::FaceMesh::vertices: alloc::vec::Vec<grafting_procgen_irregular_grid::mesh::Vec2>`
+### `pub grafting_procgen_irregular_grid::FaceMesh::vertices: alloc::vec::Vec<P>`
 
 ### `pub grafting_procgen_irregular_grid::IrregularQuadGridOptions::hex: grafting_procgen_irregular_grid::hex::TriangleHexOptions`
 
@@ -542,7 +588,7 @@ Triangles along one hexagon edge. Sylves' walkthrough uses `4`.
 
 ### `pub grafting_procgen_irregular_grid::mesh::FaceMesh::faces: alloc::vec::Vec<grafting_procgen_irregular_grid::mesh::Face>`
 
-### `pub grafting_procgen_irregular_grid::mesh::FaceMesh::vertices: alloc::vec::Vec<grafting_procgen_irregular_grid::mesh::Vec2>`
+### `pub grafting_procgen_irregular_grid::mesh::FaceMesh::vertices: alloc::vec::Vec<P>`
 
 ### `pub grafting_procgen_irregular_grid::mesh::QuadMesh::quads: alloc::vec::Vec<grafting_procgen_irregular_grid::mesh::Quad>`
 
@@ -718,7 +764,7 @@ A grid, and what each of its corners already is.
 
 One corner the grid put along a contour somebody else owns.
 
-### `pub struct grafting_procgen_irregular_grid::FaceMesh`
+### `pub struct grafting_procgen_irregular_grid::FaceMesh<P>`
 
 A mesh of arbitrary faces -- the intermediate form before quadrangulation.
 
@@ -795,7 +841,7 @@ A stretch of a supplied contour the triangulation saw as a single edge.
 
 Options for [`build_triangle_hex`].
 
-### `pub struct grafting_procgen_irregular_grid::mesh::FaceMesh`
+### `pub struct grafting_procgen_irregular_grid::mesh::FaceMesh<P>`
 
 A mesh of arbitrary faces -- the intermediate form before quadrangulation.
 
@@ -831,6 +877,20 @@ so `wrapping_add` agrees with it on every bit that survives.
 ### `pub struct grafting_procgen_irregular_grid::relax::RelaxOptions`
 
 Options for [`relax`].
+
+### `pub trait grafting_procgen_irregular_grid::GridPoint: core::marker::Copy`
+
+What the pipeline needs of a point to quadrangulate and weld a mesh of
+them: nothing about which space it lives in. The plane's [`Vec2`] is one;
+a surface's own 3D point is another, so the same pairing and ortho steps
+lay irregular cells over ground that is no height over any plane.
+
+### `pub trait grafting_procgen_irregular_grid::mesh::GridPoint: core::marker::Copy`
+
+What the pipeline needs of a point to quadrangulate and weld a mesh of
+them: nothing about which space it lives in. The plane's [`Vec2`] is one;
+a surface's own 3D point is another, so the same pairing and ortho steps
+lay irregular cells over ground that is no height over any plane.
 
 ### `pub type grafting_procgen_irregular_grid::Face = alloc::vec::Vec<usize>`
 

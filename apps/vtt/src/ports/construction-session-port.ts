@@ -546,74 +546,40 @@ export interface ConstructionIrregularQuadGridRequest {
   readonly refinement?: ConstructionGridRefinementOptions;
 }
 
-/** A capsule swept along a path that takes solid away or adds it. */
-export interface ConstructionSolidShape {
+/** A capsule swept along a path that carves the ground or fills it in. */
+export interface ConstructionVolumeShape {
   readonly effect: "carve" | "fill";
   readonly path: readonly (readonly [number, number, number])[];
   readonly radius: number;
 }
 
-/**
- * Solid ground to lay: heights on a regular grid of the ground plane, shapes
- * carving or filling it, and the box the surface is read in.
- */
-export interface ConstructionSolidGroundRequest {
-  readonly ground: {
-    readonly originX: number;
-    readonly originZ: number;
-    readonly spacing: number;
-    readonly columns: number;
-    readonly rows: number;
-    /** Row-major: z rows of x columns. */
-    readonly heights: readonly number[];
-  };
-  readonly shapes: readonly ConstructionSolidShape[];
+/** Faces as indices into their own vertices, all wound the same way. */
+export interface ConstructionIndexedFaces {
+  readonly vertices: readonly (readonly [number, number, number])[];
+  readonly faces: readonly (readonly number[])[];
+}
+
+/** One edit of the ground's own mesh: the faces it lays again, the ground round them, and what to carve or fill. */
+export interface ConstructionTerrainVolumeEditRequest {
+  /** The faces laid again. */
+  readonly patch: ConstructionIndexedFaces;
+  /** The ground round them -- never laid again, only asked where solid is. */
+  readonly context?: ConstructionIndexedFaces;
+  readonly shapes: readonly ConstructionVolumeShape[];
   /** How far a shape blends into the ground, rounding its lip. */
   readonly blend?: number;
-  readonly regionMin: readonly [number, number, number];
-  readonly regionMax: readonly [number, number, number];
-  /** Spacing of the grid the surface is split from. */
-  readonly cell: number;
-  /** Face size of ground under open sky. */
+  /** How wide one finished face should be. */
   readonly faceSide: number;
-  /** Face size of the pieces a shape made; omitted lays them at `faceSide`. */
-  readonly shapeFaceSide?: number;
-  /**
-   * How far over open ground round the shapes a collar of it is laid with
-   * them, for ground laid as a height over the plane to meet. Omitted lays none.
-   */
-  readonly collar?: number;
-  /** The steepest normal (its y component) still laid as ground facing up. */
-  readonly steepestUp?: number;
   readonly seed?: number;
 }
 
-/** One piece of solid ground, laid and lifted into world space. */
-export interface ConstructionSolidGroundPiece {
-  readonly facing: string;
-  readonly inFront: number;
-  readonly behind: number;
-  /** Ground under open sky with nothing beneath it, away from any shape: what a height map alone already is. */
-  readonly openGround: boolean;
+/** The faces laid in place of the patch: the ring round it kept, node for node. */
+export interface ConstructionTerrainVolumeEdit {
   readonly vertices: readonly (readonly [number, number, number])[];
-  /** Counter-clockwise seen from outside the solid. */
+  /** In the winding the patch's faces had. */
   readonly faces: readonly (readonly number[])[];
-  /** Index-aligned with `vertices`: the shared border point a corner is, where it is one. */
-  readonly borderPoint: readonly (number | null)[];
-  readonly error: string | null;
-}
-
-/** Only the surface the shapes made, and the collar round it, as one mesh. */
-export interface ConstructionSolidSurface {
-  readonly vertices: readonly (readonly [number, number, number])[];
-  /** Counter-clockwise seen from outside the solid: quads, and a triangle where only half a grid quad is the shape's. */
-  readonly faces: readonly (readonly number[])[];
-}
-
-/** Every piece of the surface in the box, sharing their border points. */
-export interface ConstructionSolidGround {
-  readonly borderPoints: readonly (readonly [number, number, number])[];
-  readonly pieces: readonly ConstructionSolidGroundPiece[];
+  /** Index-aligned with `vertices`: the patch vertex a corner of the ring is. */
+  readonly source: readonly (number | null)[];
 }
 
 /** One corner the generator put along a contour the caller supplied. */
@@ -833,18 +799,11 @@ export interface ConstructionSessionPort extends BezierPort {
     request: ConstructionIrregularQuadGridRequest,
   ): ConstructionIrregularQuadGrid | undefined;
   /**
-   * Solid ground -- a height field plus shapes carving or filling it -- split
-   * into pieces that are each a height over a plane of their own, every piece
-   * laid by the irregular quad grid. Pure, like the grid itself. `undefined`
-   * where the engine refuses the request.
+   * Carves into the ground or fills it in, as an edit of the ground's own
+   * mesh: the patch laid again with irregular cells over the surface, the
+   * ring of nodes round it kept. Pure. `undefined` where the engine refuses.
    */
-  solidGround(request: ConstructionSolidGroundRequest): ConstructionSolidGround | undefined;
-  /**
-   * Only the surface the shapes made, and a collar of open ground round it,
-   * as one quad mesh read at `shapeFaceSide` and relaxed onto the surface.
-   * Pure. `undefined` where the engine refuses the request.
-   */
-  solidSurface(request: ConstructionSolidGroundRequest): ConstructionSolidSurface | undefined;
+  editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined;
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;

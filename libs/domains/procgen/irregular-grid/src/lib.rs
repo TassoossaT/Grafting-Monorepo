@@ -46,9 +46,9 @@ pub mod relax;
 use std::collections::{HashMap, HashSet};
 
 pub use hex::{TriangleHexOptions, build_triangle_hex};
-pub use mesh::{Face, FaceMesh, Quad, QuadMesh, Vec2};
+pub use mesh::{Face, FaceMesh, GridPoint, Quad, QuadMesh, Vec2};
 pub use random::Random;
-pub use relax::{RelaxOptions, boundary_vertices, relax, relax_faces};
+pub use relax::{RelaxOptions, boundary_vertices, regular_cell_targets, relax, relax_faces};
 
 /// The epsilon [`ortho::weld`] merges coincident vertices at.
 ///

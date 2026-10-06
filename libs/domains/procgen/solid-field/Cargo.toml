@@ -3,7 +3,7 @@ name = "grafting-procgen-solid-field"
 version = "0.0.0"
 edition = "2024"
 publish = false
-description = "Where there is solid: a height field plus shapes that carve or fill it, evaluated on demand as a signed distance. Splits the surface it bounds into pieces that are each a height over a plane of their own, so a planar mesher can lay every piece -- caves, tunnels and overhangs included."
+description = "Carving into ground and filling it in, in three dimensions, as an edit of the ground mesh itself: signed distance to its faces, shapes carved or filled, the new surface stitched to the ring left standing and laid with the irregular quad grid steps over the surface."
 
 [lib]
 crate-type = ["rlib"]
@@ -11,4 +11,3 @@ crate-type = ["rlib"]
 [dependencies]
 grafting-procgen-irregular-grid = { path = "../irregular-grid" }
 fast-surface-nets = "0.2"
-earcut = "0.4"

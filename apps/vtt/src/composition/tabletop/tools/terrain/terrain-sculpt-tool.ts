@@ -9,7 +9,7 @@ import { dirtLoadOver, restackTerrain } from "../../terrain/terrain-restack.ts";
 import { OUTLINE_CHORD_PER_FACE } from "../../terrain/terrain-constraints.ts";
 import type { TerrainStrokeBounds } from "../../terrain/terrain-neighborhood.ts";
 import { executeTerrainCut } from "../../terrain/terrain-cut-executor.ts";
-import { bridgeShape, commitSolidShape, reshapeZoneGround, solidStrokePath, tunnelShape } from "../../terrain/solid-ground.ts";
+import { carveShape, commitTerrainVolumeEdit, fillShape, volumeStrokePath } from "../../terrain/terrain-volume-edit.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 import type { PlanarArea } from "@/features/edit-construction";
 
@@ -51,7 +51,7 @@ const TERRAIN_COLOR: Record<"terrain" | "terrain-grass", number> = {
   "terrain-grass": 0x4a7a4a,
 };
 
-/** The wire a tunnel's or bridge's volume is ghosted in: the light grey the walls already use, which reads over any ground. */
+/** The wire a carve's or fill's volume is ghosted in: the light grey the walls already use, which reads over any ground. */
 const VOLUME_GHOST_COLOR = 0xe2e8f0;
 
 /**
@@ -170,13 +170,13 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  // A tunnel or bridge shows the volume it would make under the pointer before the stroke starts.
-  previewOnHover: (params: TerrainSculptParams) => params.mode === "tunnel" || params.mode === "bridge",
+  // A carve or fill shows the volume it would take or add under the pointer before the stroke starts.
+  previewOnHover: (params: TerrainSculptParams) => params.mode === "carve" || params.mode === "fill",
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
-    if (params.mode === "tunnel" || params.mode === "bridge") {
-      // The volume itself, from the very path the commit lays.
-      const path = solidStrokePath(params.mode, gesture.samples.map((sample) => sample.point), params.brushRadius, params.elevationStep ?? 2);
+    if (params.mode === "carve" || params.mode === "fill") {
+      // The volume itself, from the very path the commit carves or fills.
+      const path = volumeStrokePath(params.mode, gesture.samples.map((sample) => sample.point), params.brushRadius, params.elevationStep ?? 2);
       return capsuleWireframe(path, params.brushRadius, VOLUME_GHOST_COLOR);
     }
     const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
@@ -197,8 +197,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerMove(): void {},
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
-    if (params.mode === "tunnel" || params.mode === "bridge") {
-      solidStroke(ctx, gesture, params);
+    if (params.mode === "carve" || params.mode === "fill") {
+      volumeStroke(ctx, gesture, params);
       return;
     }
     const causeId = `${ctx.tableId}:terrain-sculpt:${ctx.nextSequence()}`;
@@ -210,46 +210,25 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     } catch (error) {
       ctx.reportFeedback({ tone: "error", message: `Terreno preservado: ${error instanceof Error ? error.message : String(error)}` });
     }
-    zoneStroke(ctx, gesture, params);
   },
 };
 
 /**
- * The same stroke over a tunnel's or bridge's zone, where the heights the
- * zone keeps are the ground's: they are raised, lowered or levelled and the
- * zone laid again, the tunnel following the hill (`terrain/solid-ground.ts`).
+ * A carve or a fill in three dimensions -- a tunnel pushed into a hill, a
+ * cave, an earth bridge -- as an edit of the ground's own mesh
+ * (`terrain/terrain-volume-edit.ts`): the faces within reach laid again,
+ * irregular cells over the new surface, the ring round them kept.
  */
-function zoneStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
-  const mode = params.mode ?? "add";
-  const edit = mode === "flatten" ? "flatten" : mode === "dig" || mode === "lower" ? "lower" : "raise";
-  try {
-    const reshaped = reshapeZoneGround(ctx, gesture.samples.map((sample) => sample.point), params.brushRadius, edit, params.elevationStep ?? 2);
-    if (reshaped) ctx.reportFeedback({ tone: "success", message: `Terreno escavado refeito: ${reshaped.faces} faces.` });
-  } catch (error) {
-    ctx.reportFeedback({ tone: "error", message: `Túnel preservado: ${error instanceof Error ? error.message : String(error)}` });
-  }
-}
-
-/**
- * A tunnel or an earth bridge: ground over ground, laid as a shape into the
- * hill rather than as a height over the plane (`terrain/solid-ground.ts`).
- * Its own transaction, like a floor's, which the ground's regeneration answers.
- */
-function solidStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
+function volumeStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
   const points = gesture.samples.map((sample) => sample.point);
-  const shape = params.mode === "tunnel"
-    ? tunnelShape(points, params.brushRadius)
-    : bridgeShape(points, params.brushRadius, params.elevationStep ?? 2);
+  const shape = params.mode === "carve" ? carveShape(points, params.brushRadius) : fillShape(points, params.brushRadius, params.elevationStep ?? 2);
   if (!shape) {
-    ctx.reportFeedback({
-      tone: "info",
-      message: params.mode === "tunnel" ? "Arraste da encosta para dentro do morro." : "Arraste de uma margem até a outra.",
-    });
+    ctx.reportFeedback({ tone: "info", message: "Nada a cavar ou erguer aqui." });
     return;
   }
   try {
-    const { faces } = commitSolidShape(ctx, { shape, faceSide: strokeFaceSize(params), seed: Math.floor(params.seed ?? 1) || 1 });
-    ctx.reportFeedback({ tone: "success", message: `${params.mode === "tunnel" ? "Túnel" : "Ponte"}: ${faces} faces.` });
+    const { faces } = commitTerrainVolumeEdit(ctx, shape, { seed: Math.floor(params.seed ?? 1) || 1 });
+    ctx.reportFeedback({ tone: "success", message: `Terreno ${params.mode === "carve" ? "cavado" : "erguido"}: ${faces} faces refeitas.` });
   } catch (error) {
     ctx.reportFeedback({ tone: "error", message: `Terreno preservado: ${error instanceof Error ? error.message : String(error)}` });
   }
