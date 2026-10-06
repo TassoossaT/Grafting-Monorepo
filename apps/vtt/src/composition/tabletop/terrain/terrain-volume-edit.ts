@@ -87,6 +87,23 @@ function ringOf(topology: ConstructionRegionTopology): readonly ConstructionNode
   return topology.outerLoops[0]!.map((use) => use.startNodeId);
 }
 
+/** How far down a face may turn and still be ground a layer rests on, as the share of its area that faces down in plan. */
+const FACING_DOWN_SHARE = 0.2;
+
+/** Whether a face turns down, its underside up: the ground faces up counter-clockwise in plan. */
+function facesDown(topology: ConstructionRegionTopology): boolean {
+  const ring = ringOf(topology);
+  if (!ring) return false;
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  let planArea = 0, normal = { x: 0, y: 0, z: 0 };
+  ring.forEach((id, index) => {
+    const a = at.get(id)!, b = at.get(ring[(index + 1) % ring.length]!)!;
+    planArea += a.x * b.z - b.x * a.z;
+    normal = { x: normal.x + (a.y - b.y) * (a.z + b.z), y: normal.y + (a.z - b.z) * (a.x + b.x), z: normal.z + (a.x - b.x) * (a.y + b.y) };
+  });
+  return planArea < -FACING_DOWN_SHARE * Math.hypot(normal.x, normal.y, normal.z);
+}
+
 /** The face size of the ground being laid again: the median side of its faces. */
 function faceSideOf(faces: readonly ConstructionRegionTopology[]): number {
   const sides = faces.flatMap((face) => face.outerLoops.flat().map((use) => {
@@ -135,8 +152,11 @@ export function commitTerrainVolumeEdit(
   // further; a bore or an arch is given more room to blend.
   const reachOf = (shape: ConstructionVolumeShape) =>
     blend + (shape.effect === "raise" || shape.effect === "lower" ? LAYER_MARGIN_FACES : shape.column ? 1 : PATCH_MARGIN_FACES) * guess;
+  // A layer or a level rests on ground facing up, or a wall: never on the
+  // underside of an arch over it, which would fold the faces laid again.
+  const layer = shapes.every(movesSurface);
   const within = (topology: ConstructionRegionTopology, extra: (shape: ConstructionVolumeShape) => number) =>
-    topology.nodes.some((node) => shapes.some((shape) => shapeDistance(node.position, shape) < extra(shape)));
+    !(layer && facesDown(topology)) && topology.nodes.some((node) => shapes.some((shape) => shapeDistance(node.position, shape) < extra(shape)));
   // Grown from the ground under the stroke itself -- the face nearest each
   // point of every path -- never from whatever lies near in three dimensions:
   // through a thin roof, a tunnel's ceiling lies a metre under the hill a
@@ -158,7 +178,6 @@ export function commitTerrainVolumeEdit(
   const walked = walkSurface(nearby, core.length > 0 ? core : nearby.filter((topology) => within(topology, reachOf)), (topology) => within(topology, reachOf));
   if (walked.length === 0 && options.table === undefined) return { faces: 0 };
   const neighbours = indexedFaces(structures);
-  const layer = shapes.every(movesSurface);
   const attempt = (patchFaces: readonly ConstructionRegionTopology[]) => {
     const patchKeys = new Set(patchFaces.map((face) => face.surfaceKey.join("\u0000")));
     const contextFaces = nearby.filter((topology) => !patchKeys.has(topology.surfaceKey.join("\u0000")));

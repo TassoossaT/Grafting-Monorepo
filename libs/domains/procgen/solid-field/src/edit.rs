@@ -200,8 +200,16 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         let middle = (patch.vertices[a] + patch.vertices[b]) * 0.5;
         edit.shapes.iter().any(|shape| shape.distance(middle) < edit.blend + cell)
     };
+    // Nor does a free side resting on the table: the read runs out onto the
+    // table there and lays the ground's foot again. Held, the stitch between
+    // it and the read crossed the end of a pile and sank onto the table.
+    // Only for a pile: ground that rises off the table somewhere. Flat
+    // ground lying on the table at its height reads as the table itself, and
+    // its border stays.
+    let rises = table.as_ref().is_some_and(|t| patch.vertices.iter().any(|v| v.y - t.height > cell * 0.5));
+    let resting = |a: usize, b: usize| rises && table.as_ref().is_some_and(|t| [a, b].iter().all(|&v| (patch.vertices[v].y - t.height).abs() <= cell * 0.3));
     let held = |a: usize, b: usize| {
-        table.is_none() || context_sides.contains(&pair(key(patch.vertices[a]), key(patch.vertices[b]))) || !reached(a, b)
+        table.is_none() || context_sides.contains(&pair(key(patch.vertices[a]), key(patch.vertices[b]))) || (!reached(a, b) && !resting(a, b))
     };
     // Rings held all round, and chains: the runs of held sides of a ring
     // partly free.

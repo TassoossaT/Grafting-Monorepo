@@ -144,7 +144,17 @@ pub fn layer_surface(patch: &Faces, context: &Faces, neighbours: &Faces, edit: &
         let area = cross_2d(plan(patch.vertices[a]), plan(patch.vertices[b]), plan(patch.vertices[c])) * 0.5;
         if area > 0.0 { (p + area, n) } else { (p, n - area) }
     });
-    let flat = positive.min(negative) <= (positive + negative) * TURNED_SHARE_TOLERATED;
+    // Flat in plan: next to nothing turned over, and nothing lying over
+    // anything else -- a tunnel's floor under the hill over it both face up.
+    let flat = positive.min(negative) <= (positive + negative) * TURNED_SHARE_TOLERATED && {
+        let pieces = plan_polygons(&Faces { vertices: patch.vertices.clone(), faces: triangles.iter().map(|t| t.to_vec()).collect() });
+        let covered: f64 = pieces
+            .overlay(&Vec::<Vec<Contour>>::new(), OverlayRule::Subject, FillRule::NonZero)
+            .iter()
+            .flat_map(|piece| piece.iter().map(|c| ring_area(&c.iter().map(|p| Vec2::new(p[0], p[1])).collect::<Vec<_>>())))
+            .sum();
+        covered >= positive.max(negative) * (1.0 - TURNED_SHARE_TOLERATED)
+    };
     let laid = if triangles.is_empty() || flat {
         layer_in_plan(patch, &triangles, positive >= negative, context, neighbours, edit)?
     } else {
@@ -466,6 +476,7 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
         if counter_clockwise { area > 0.0 } else { area < 0.0 }
     };
 
+    let locator = PlanLocator::new(&patch.vertices, triangles, counter_clockwise, face_side.max(1.0));
     // Past the patch, a layer laid rests on the table wherever no ground or
     // structure already stands.
     let raised: Vec<&Shape> = edit.shapes.iter().filter(|s| s.effect == Effect::Raise).collect();
@@ -478,7 +489,17 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
         Some(_) if !raised.is_empty() => {
             let mut subject = own.clone();
             subject.extend(raised.iter().flat_map(|shape| reach_contours(shape)));
-            let others: Vec<Vec<Contour>> = [context, neighbours].into_iter().flat_map(plan_polygons).collect();
+            // Only what stands beside the patch: ground over or under it in
+            // plan -- a bridge's deck over the hill it rises from -- is another
+            // layer, and taken away it would cut the patch itself.
+            let beside = |faces: &Faces| -> Faces {
+                let over_patch = |face: &Vec<usize>| {
+                    let centre = face.iter().fold(Vec3::default(), |sum, &v| sum + faces.vertices[v]) * (1.0 / face.len() as f64);
+                    locator.height(plan(centre), 0.0).is_some()
+                };
+                Faces { vertices: faces.vertices.clone(), faces: faces.faces.iter().filter(|face| face.len() >= 3 && !over_patch(face)).cloned().collect() }
+            };
+            let others: Vec<Vec<Contour>> = [beside(context), beside(neighbours)].iter().flat_map(plan_polygons).collect();
             subject.overlay(&others, OverlayRule::Difference, FillRule::NonZero)
         }
         _ => Vec::new(),
@@ -510,7 +531,6 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
     let grid = ground_grid(boundary, holes, face_side, edit.seed, &GroundRefinement::default(), &relax)?;
 
     // Lifted: to the old surface, or the table where it is bare, and moved.
-    let locator = PlanLocator::new(&patch.vertices, triangles, counter_clockwise, face_side.max(1.0));
     let vertical = |shape: &Shape, at: Vec3| (Vec3::new(0.0, 1.0, 0.0), plan_to_path(plan(at), &shape.path).0);
     let rim: HashSet<(usize, usize)> = loops.iter().flat_map(|ring| (0..ring.len()).map(move |k| (ring[k].min(ring[(k + 1) % ring.len()]), ring[k].max(ring[(k + 1) % ring.len()])))).collect();
     let on_segment = |point: Vec2, from: Vec2, to: Vec2| {

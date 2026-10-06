@@ -134,3 +134,47 @@ test("strokes over the same ground lay it no finer each time", () => {
     assert.ok(counts.at(-1) < counts[0] * 1.5, `the ground keeps its face size: ${counts.join(" ")}`);
   } finally { fixture.session.free(); }
 });
+
+/** The highest ground over a point of the plane, by a ray down through every face; `undefined` where none is. */
+function topAt(runtime, x, z) {
+  let best;
+  for (const t of groundOf(runtime)) {
+    const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
+    for (let k = 1; k + 1 < ring.length; k++) {
+      const [a, b, c] = [ring[0], ring[k], ring[k + 1]];
+      const d = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
+      if (Math.abs(d) < 1e-12) continue;
+      const u = ((b.x - x) * (c.z - z) - (c.x - x) * (b.z - z)) / d, v = ((c.x - x) * (a.z - z) - (a.x - x) * (c.z - z)) / d, w = 1 - u - v;
+      if (u >= -1e-9 && v >= -1e-9 && w >= -1e-9) best = Math.max(best ?? -Infinity, u * a.y + v * b.y + w * c.y);
+    }
+  }
+  return best;
+}
+
+test("earth raised over a hill on the table leaves the hill standing past its reach, and layers go on over both", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    stroke(fixture, [[-10, 0], [10, 0]], {});
+    const ends = [-14, -12, 12, 14].map((x) => topAt(runtime, x, 0));
+    for (const [name, points, params] of [
+      ["raised over its middle", [[-4, 0], [4, 0]], { mode: "fill" }],
+      ["a layer over the raise", [[0, -6], [0, 6]], {}],
+      ["raised over its side", [[6, -3], [10, 3]], { mode: "fill" }],
+      ["a hill beside it", [[-30, 0], [-20, 0]], {}],
+      ["raised on that one", [[-25, 0]], { mode: "fill" }],
+    ]) {
+      stroke(fixture, points, params);
+      const mesh = meshOf(runtime);
+      probe(name, JSON.stringify(mesh), [-14, -12, 12, 14].map((x) => topAt(runtime, x, 0)?.toFixed(2)).join(" "));
+      assert.equal(mesh.thrice, 0, `${name}: one mesh`);
+      assert.equal(mesh.borders, 1, `${name}: no hole`);
+      if (name === "raised over its middle") {
+        [-14, -12].forEach((x, i) => {
+          const now = topAt(runtime, x, 0);
+          assert.ok(now !== undefined && Math.abs(now - ends[i]) < 0.3, `${name}: the hill's end at x=${x} stands (${ends[i]?.toFixed(2)} -> ${now?.toFixed(2)})`);
+        });
+      }
+    }
+  } finally { fixture.session.free(); }
+});
