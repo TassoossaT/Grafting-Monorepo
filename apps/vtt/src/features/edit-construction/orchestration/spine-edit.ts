@@ -35,7 +35,7 @@ function editDraft(input: SpineEditInput) {
   // The owner's grade is a law of the spine: a moved anchor stops where its spans can climb to.
   const anchor = curvePick(input.targetId) === undefined;
   const position = anchor && generation.maxGrade !== undefined ? holdSpineGrade(snapshot, input.targetId, input.position, generation.maxGrade) : input.position;
-  const edit = planSpineEditPatch({ ...input, position, snapshot, weld: generation.planOnly !== true });
+  const edit = planSpineEditPatch({ ...input, position, snapshot, maxGrade: generation.maxGrade, weld: generation.planOnly !== true && Math.abs(position.y - input.position.y) <= 1e-4 });
   return edit && { snapshot, edit, generation };
 }
 

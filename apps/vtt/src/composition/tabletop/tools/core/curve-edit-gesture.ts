@@ -196,7 +196,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       if (planOnly && params?.mode !== "elevation" && !params?.spatialTarget) target = pointerAtHeight(gesture.current, sample.point.y);
       joined = [];
       if (!curvePick(targetId) && !planOnly && params?.snap) {
-        const snap = params.snap.find(ctx, { point: target }, targetId);
+        const snap = params.snap.find(ctx, { ...gesture.current, point: target }, targetId);
         if (snap) target = snap.point;
         params.snap.show(ctx, snap);
         // What it joined is named, like everything else the ruler catches: the road's node, or a place along its span.

@@ -3109,7 +3109,7 @@ The one answer for any line drawn or edited, from wherever it starts.
 
 A point a tool lays out itself -- a frame's corner -- ruled like every other, by the table as it stands now.
 
-### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean, projectElevation: boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
 ### `function vtt.spine-commit.commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[]): void`
 
@@ -4161,7 +4161,7 @@ The road network's anchor snap -- onto another road's node or span -- for a spin
 
 A deleted or reshaped target cannot be confirmed from a stale preview.
 
-### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined`
+### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, allowElevation: boolean): RoadSnapTarget | undefined`
 
 Keep the displayed position and edge parameter until the pointer exits the wider release zone.
 
@@ -6625,7 +6625,7 @@ Places an opening's handles on its whole box along the walls it crosses; absent,
 
 ### `property vtt.scene-handles.SceneHandleInput.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind`
+### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "tangent" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind`
 
 Every edit handle the scene shows, in one list: what each one is for --
 its kind, which is also what its look is chosen by -- and where it stands.
@@ -7209,6 +7209,8 @@ Explicit point deletion may change the adjacent curve shape.
 ### `property vtt.spine-edit-plan.SpineEditInput.endWidth?: number`
 
 ### `property vtt.spine-edit-plan.SpineEditInput.insert?: boolean`
+
+### `property vtt.spine-edit-plan.SpineEditInput.maxGrade?: number`
 
 ### `property vtt.spine-edit-plan.SpineEditInput.mode?: CurveHandleMode`
 
@@ -10418,7 +10420,7 @@ Every curve on the table: spine spans resolved from their stored handles, and cu
 
 ### `function vtt.curve-handles.curveEndWidthPick(id: string): string | undefined`
 
-### `function vtt.curve-handles.curveHandles(frames: readonly CurveMidframe[]): readonly { id: string; position: ConstructionPosition }[]`
+### `function vtt.curve-handles.curveHandles(frames: readonly CurveMidframe[], selectedId?: string): readonly { id: string; position: ConstructionPosition }[]`
 
 Each curve's midpoint handle, placed from its midframe.
 

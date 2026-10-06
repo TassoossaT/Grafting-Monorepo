@@ -8,6 +8,8 @@ Contrato consolidado em 2026-10-06, após os refinamentos filhos de #303 e as de
 - Criação mostra preview; confirmação produz uma transação que inclui geometria, vínculos e reações. Desfazer opera sobre essa transação.
 - Editar estruturas existentes exige alças. Os pontos do grafo e o corpo não são atalhos de edição.
 - Espinhas têm uma faixa contínua selecionável acompanhando a curva, independente do debug, e alças com identidade separada dos nós. A faixa é uma malha de alça confirmada, não um preview: usa a identidade de edição do trecho, ganha destaque ao selecionar e permite arrastar a curvatura. Âncoras e controles de largura permanecem disponíveis.
+- Selecionar um trecho ou uma âncora expõe os controles de tangente das curvas correspondentes. Os losangos dos vértices e do meio dos trechos coexistem com a faixa.
+- Na edição de ruas, arrastar uma ponta até outra ponta ou até o meio de um trecho permite conectar cotas diferentes: o encaixe usa a posição do cursor na altura da rua de destino. A junção só ocorre quando os trechos incidentes conseguem vencer esse desnível dentro do limite de inclinação declarado pelo tipo. Cruzamentos sem esse gesto continuam separados em alturas diferentes.
 - Desconectar, apagar trecho e fechar são alças contextuais da espinha selecionada. Remover ponto usa Delete; largura tem alças de trecho e de extremidade.
 - O painel lateral contém parâmetros do tipo. O painel genérico “Editar estrutura existente” foi removido.
 

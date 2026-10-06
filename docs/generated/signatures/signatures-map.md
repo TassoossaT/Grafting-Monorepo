@@ -3857,9 +3857,9 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>>
   anchor: "midpoint",
   /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
+  tangent: "point",
   /** On the edge of a span's band: push it out or in. */
   width: "side",
-  disconnect: "unlink",
 export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
   radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
@@ -4639,7 +4639,7 @@ export function rulerOf(ctx: ToolContext): Ruler {
   const roundReachOf = (step: number): number => roundReach(step, reachFor(ctx, ROUND_REACH_PIXELS, 0.34));
 
 // src/composition/tabletop/tools/core/spine-body-target.ts
-export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
+export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true, projectElevation = false): { sample: PointerSample; options: CurveGestureOptions } | undefined {
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
   structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
   ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
@@ -5009,7 +5009,7 @@ export const pathStroke: SpineDraftStroke<"path-brush"> = {
 export interface RoadSnapTarget extends AnchorTarget {
   readonly snapSignature?: string;
   readonly snapEdge?: { readonly edgeId: string; readonly parameter: number };
-export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, allowElevation = false): RoadSnapTarget | undefined {
   const previous = snapLocks.get(ctx.runtime);
 export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean {
   return target.snapSignature !== undefined && targetSignature(ctx, target) === target.snapSignature;
@@ -5017,7 +5017,9 @@ export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boo
 export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
   if (!target) { snapLocks.delete(ctx.runtime); ctx.runtime.clearPreview("road-snap"); return; }
   ctx.runtime.showPreview(createSnapMeshPreview(target.point), "road-snap");
-export const roadAnchorSnap: AnchorSnap = { find: roadSnapTarget, show: showRoadSnap };
+export const roadAnchorSnap: AnchorSnap = {
+  find: (ctx, sample, excludeNodeId) => {
+  const target = roadSnapTarget(ctx, sample, excludeNodeId, true);
 
 // src/composition/tabletop/tools/paths/road-lay.ts
 export const ROAD_SPINE_CHANNEL = "road-draft-spine";
@@ -6319,7 +6321,7 @@ export function joinedStructures(
   const members = new Map(seeds.map((topology) => [faceKey(topology), topology]));
 
 // src/features/edit-construction/orchestration/scene-handles.ts
-export type SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
+export type SceneHandleKind = "anchor" | "midpoint" | "tangent" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
 export interface SceneHandle {
   readonly id: string;
   readonly kind: SceneHandleKind;

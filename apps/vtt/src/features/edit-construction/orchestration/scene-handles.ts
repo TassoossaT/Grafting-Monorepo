@@ -3,7 +3,7 @@ import type { BezierPort, ConstructionCurvedEdge, ConstructionGraphSnapshot, Con
 import type { GlobalHandleKind } from "../global-handles/index.ts";
 import { spineWidthHandles } from "../spine/spine-handles.ts";
 import { spineDefaultOffsets } from "../structure-types/index.ts";
-import { curveEdgesOf, curveHandles, curveMidframes, curveAnchorId, curveActionId, curvePickId } from "../topology/curve-handles.ts";
+import { curveEdgesOf, curveHandles, curveMidframes, curveAnchorId, curveActionId, curvePickId, curvePick } from "../topology/curve-handles.ts";
 import { openSpineChain } from "../spine/spine-open-chain.ts";
 import { spineComponent } from "../spine/spine-owner.ts";
 import { openingHandles, type OpeningRunPort } from "../topology/opening-handles.ts";
@@ -24,7 +24,7 @@ import { shownGlobalHandles } from "./global-handles/index.ts";
  *   resize it (`topology/opening-handles.ts`);
  * - every whole-structure handle, by its own kind (`global-handles/`).
  */
-export type SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
+export type SceneHandleKind = "anchor" | "midpoint" | "tangent" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
 
 export interface SceneHandle {
   readonly id: string;
@@ -95,7 +95,7 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
         if (incident.length === 1 && chain && component.edges.length >= 2) handles.push({ id: curveActionId(node.id, "close"), kind: "closeCurve", position: { ...node.position, y: node.position.y + 0.6 } });
       }
     }
-    for (const handle of curveHandles(frames)) handles.push({ id: handle.id, kind: "midpoint", position: handle.position });
+    for (const handle of curveHandles(frames, input.selected)) handles.push({ id: handle.id, kind: curvePick(handle.id)?.index === "midpoint" ? "midpoint" : "tangent", position: handle.position });
   }
   if (!input.pointsOnly) {
     // With a focus, only the focused structure's own.

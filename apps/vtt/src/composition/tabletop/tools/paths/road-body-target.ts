@@ -1,4 +1,5 @@
-import { curvePick, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { pointerAtHeight } from "../core/pointer-ray.ts";
+import { curvePick, holdSpineGrade, spineOwnerAt, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import { spineBodyTarget } from "../core/spine-body-target.ts";
 import type { PointerSample, ToolContext } from "../core/tool-context.ts";
 import type { AnchorSnap, AnchorTarget } from "../core/curve-edit-gesture.ts";
@@ -24,17 +25,18 @@ function targetSignature(ctx: ToolContext, target: RoadSnapTarget): string | und
   return node && JSON.stringify(node);
 }
 /** Keep the displayed position and edge parameter until the pointer exits the wider release zone. */
-export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, allowElevation = false): RoadSnapTarget | undefined {
   const previous = snapLocks.get(ctx.runtime);
+  const heldPointer = previous && allowElevation ? pointerAtHeight(sample, previous.target.point.y) : sample.point;
   if (previous && targetSignature(ctx, previous.target) === previous.signature
-      && Math.abs(previous.target.point.y - sample.point.y) <= 1.5
-      && Math.hypot(previous.target.point.x - sample.point.x, previous.target.point.z - sample.point.z) <= previous.exitReach) {
+      && (allowElevation || Math.abs(previous.target.point.y - sample.point.y) <= 1.5)
+      && Math.hypot(previous.target.point.x - heldPointer.x, previous.target.point.z - heldPointer.z) <= previous.exitReach) {
     if (!excludeNodeId || previous.target.nodeId !== excludeNodeId) {
       return { ...sample, nodeId: previous.target.nodeId, point: previous.target.point, snapEdge: previous.target.snapEdge, snapSignature: previous.signature };
     }
   }
   snapLocks.delete(ctx.runtime);
-  let target = acquireRoadSnap(ctx, sample, excludeNodeId);
+  let target = acquireRoadSnap(ctx, sample, excludeNodeId, allowElevation);
   if (target) {
     const signature = targetSignature(ctx, target);
     if (signature) target = { ...target, snapSignature: signature };
@@ -52,19 +54,20 @@ export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boo
 }
 
 /** Product snap reach; projection and splitting remain canonical Rust operations. */
-function acquireRoadSnap(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
+function acquireRoadSnap(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, allowElevation = false): RoadSnapTarget | undefined {
   const graph = ctx.runtime.getGraphSnapshot();
   const ids = new Set(graph.edges.filter(e => e.curve?.surfaceType && structureTypeFor(e.curve.surfaceType)?.spine).flatMap(e => [e.startNodeId, e.endNodeId]));
   const reach = rulerOf(ctx).reach(ROAD_SNAP_PIXELS, ROAD_SNAP_FALLBACK);
   let best: { node: (typeof graph.nodes)[number]; distance: number } | undefined;
   for (const node of graph.nodes) {
     if (excludeNodeId && node.id === excludeNodeId) continue;
-    if (!ids.has(node.id) || Math.abs(node.position.y - sample.point.y) > 1.5) continue;
-    const distance = Math.hypot(node.position.x - sample.point.x, node.position.z - sample.point.z);
+    if (!ids.has(node.id) || (!allowElevation && Math.abs(node.position.y - sample.point.y) > 1.5)) continue;
+    const pointer = allowElevation ? pointerAtHeight(sample, node.position.y) : sample.point;
+    const distance = Math.hypot(node.position.x - pointer.x, node.position.z - pointer.z);
     if (distance <= reach && (!best || distance < best.distance)) best = { node, distance };
   }
   if (best) return { ...sample, nodeId: best.node.id, point: best.node.position };
-  const body = spineBodyTarget(ctx, sample, excludeNodeId);
+  const body = spineBodyTarget(ctx, sample, excludeNodeId, undefined, allowElevation);
   if (!body) return;
   const edge = curvePick(body.sample.nodeId!);
   return { ...body.sample, span: true, snapEdge: edge ? { edgeId: edge.edgeId, parameter: body.options.parameter! } : undefined };
@@ -77,4 +80,14 @@ export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
 }
 
 /** The road network's anchor snap -- onto another road's node or span -- for a spine gesture. */
-export const roadAnchorSnap: AnchorSnap = { find: roadSnapTarget, show: showRoadSnap };
+export const roadAnchorSnap: AnchorSnap = {
+  find: (ctx, sample, excludeNodeId) => {
+    const target = roadSnapTarget(ctx, sample, excludeNodeId, true);
+    if (!target || !excludeNodeId) return target;
+    const graph = ctx.runtime.getGraphSnapshot(), owner = spineOwnerAt(graph, excludeNodeId);
+    const maxGrade = owner ? structureTypeFor(owner)?.spine?.maxGrade : undefined;
+    if (maxGrade !== undefined && Math.abs(holdSpineGrade(graph, excludeNodeId, target.point, maxGrade).y - target.point.y) > 1e-4) return undefined;
+    return target;
+  },
+  show: showRoadSnap,
+};

@@ -82,9 +82,8 @@ function createSpineEditBehavior({ ownsSpine, snap }: SpineEditOptions): SpineEd
     const edges = graph.edges.filter((e) => owned(e.curve?.surfaceType));
     const pick = curvePick(sample.nodeId);
     if (pick) {
-      if (pick.index !== "midpoint") return;
       const edge = edges.find((e) => e.edgeId === pick.edgeId);
-      const handle = edge && curveHandles(curveMidframes(curveEdgesOf({ ...graph, edges: [edge] }, [], ctx.runtime), ctx.runtime))[0];
+      const handle = edge && curveHandles(curveMidframes(curveEdgesOf({ ...graph, edges: [edge] }, [], ctx.runtime), ctx.runtime), sample.nodeId).find((handle) => handle.id === sample.nodeId);
       return handle && { ...sample, point: handle.position };
     }
     const anchorId = curveAnchorPick(sample.nodeId);
@@ -133,8 +132,8 @@ function createSpineEditBehavior({ ownsSpine, snap }: SpineEditOptions): SpineEd
       }
       const target = handleTarget(ctx, sample);
       if (target) {
-        const midpoint = curvePick(target.nodeId!)?.index === "midpoint";
-        return { sample: target, options: midpoint ? dragOf(sample, { curveMode: "free" }) : dragOf(sample) };
+        const control = curvePick(target.nodeId!) !== undefined;
+        return { sample: target, options: control ? dragOf(sample, { curveMode: "free" }) : dragOf(sample) };
       }
       return undefined;
     },

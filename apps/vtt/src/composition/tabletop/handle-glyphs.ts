@@ -14,6 +14,7 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>>
   anchor: "midpoint",
   /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
+  tangent: "point",
   /** On the edge of a span's band: push it out or in. */
   width: "side",
   disconnect: "unlink",

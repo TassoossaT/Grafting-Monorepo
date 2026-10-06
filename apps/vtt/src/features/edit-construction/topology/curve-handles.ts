@@ -131,8 +131,15 @@ export function curveMidframes(edges: readonly CurveEdge[], port: Pick<BezierPor
 }
 
 /** Each curve's midpoint handle, placed from its midframe. */
-export function curveHandles(frames: readonly CurveMidframe[]): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
-  return frames.map((frame) => ({ id: curvePickId(frame.edge.edgeId, "midpoint"), position: frame.position }));
+export function curveHandles(frames: readonly CurveMidframe[], selectedId?: string): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
+  const handles = frames.map((frame) => ({ id: curvePickId(frame.edge.edgeId, "midpoint"), position: frame.position }));
+  const selected = selectedId ? curvePick(selectedId) : undefined;
+  const anchor = selectedId ? curveAnchorPick(selectedId) ?? selectedId : undefined;
+  for (const frame of frames) {
+    if (selected?.edgeId !== frame.edge.edgeId && anchor !== frame.edge.startNodeId && anchor !== frame.edge.endNodeId) continue;
+    for (const index of [1, 2] as const) handles.push({ id: curvePickId(frame.edge.edgeId, index), position: curvePosition(frame.edge.curve.points[index]) });
+  }
+  return handles;
 }
 
 /** `curve` with one handle dragged to `target`, or its midpoint pulled there. */
