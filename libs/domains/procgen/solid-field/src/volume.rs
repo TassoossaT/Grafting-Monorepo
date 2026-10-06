@@ -29,23 +29,31 @@ pub struct EditField<'a> {
 impl EditField<'_> {
     /// Signed distance, negative inside solid.
     pub fn distance(&self, point: Vec3) -> f64 {
+        self.distance_and_edge(point).0
+    }
+
+    /// [`Self::distance`], and whether its sign is the ground's open border's
+    /// -- nearest its edge, with no table to say -- where the sign jumps
+    /// from one side of the ground to the other, as it should.
+    fn distance_and_edge(&self, point: Vec3) -> (f64, bool) {
         // Where no ground stands over or under a point, it is in no ground's
         // solid -- whatever the sign past a ground's open border says -- and
         // the table is the floor there. So too where the nearest ground is its
         // open border: under the rim of a pile laid on the table, the sheet's
         // sign is no answer, and the table's is.
-        let base = match self.table {
+        let (base, edge) = match self.table {
             Some(table) => {
                 let (ground, at_border) = self.ground.signed_distance_at_border_within(point, self.reach);
-                match table.distance(point) {
+                let base = match table.distance(point) {
                     Some(floor) => ground.abs().min(floor),
                     None if at_border => ground.abs().min(point.y - table.height),
                     None => ground,
-                }
+                };
+                (base, false)
             }
-            None => self.ground.signed_distance_at_border_within(point, self.reach).0,
+            None => self.ground.signed_distance_at_border_within(point, self.reach),
         };
-        with_shapes(base, point, self.shapes, self.blend)
+        (with_shapes(base, point, self.shapes, self.blend), edge)
     }
 
     /// The direction out of the solid at `point`, unnormalised.
@@ -133,6 +141,8 @@ impl EditField<'_> {
         let size = [count(min.x, max.x), count(min.y, max.y), count(min.z, max.z)];
         let shape = RuntimeShape::<u32, 3>::new(size);
         let mut samples = vec![0f32; shape.size() as usize];
+        // Samples whose sign is the ground's open border's.
+        let mut edge = vec![false; shape.size() as usize];
         // Every other sample read first -- the last on each axis too -- and
         // the rest read only near the surface. The field rises at most one
         // per unit (squashed forms are scaled to keep it so), and it is exact
@@ -151,7 +161,9 @@ impl EditField<'_> {
         for index in 0..shape.size() {
             let [x, y, z] = shape.delinearize(index);
             if coarse(x, size[0]) && coarse(y, size[1]) && coarse(z, size[2]) {
-                samples[index as usize] = self.distance(at([x, y, z])) as f32;
+                let (value, at_edge) = self.distance_and_edge(at([x, y, z]));
+                samples[index as usize] = value as f32;
+                edge[index as usize] = at_edge;
             }
         }
         for index in 0..shape.size() {
@@ -168,24 +180,29 @@ impl EditField<'_> {
             let mut sign = 0.0;
             let mut nearest = f64::INFINITY;
             let mut agree = true;
+            let mut near_edge = false;
             for corner in 0..8u32 {
                 if (0..3).any(|axis| !odd[axis] && corner & (1 << axis) != 0) {
                     continue;
                 }
                 let pick = |axis: usize, i: u32| if odd[axis] { if corner & (1 << axis) != 0 { i + 1 } else { i - 1 } } else { i };
-                let value = samples[shape.linearize([pick(0, x), pick(1, y), pick(2, z)]) as usize] as f64;
+                let read = shape.linearize([pick(0, x), pick(1, y), pick(2, z)]) as usize;
+                let value = samples[read] as f64;
+                near_edge |= edge[read];
                 if sign == 0.0 {
                     sign = value.signum();
                 }
                 agree &= value.signum() == sign;
                 nearest = nearest.min(value.abs());
             }
-            samples[index as usize] = if agree && nearest.min(sure) - away > clear {
-                (sign * (nearest - away)) as f32
+            (samples[index as usize], edge[index as usize]) = if agree && nearest.min(sure) - away > clear {
+                ((sign * (nearest - away)) as f32, near_edge)
             } else {
-                self.distance(at([x, y, z])) as f32
+                let (value, at_edge) = self.distance_and_edge(at([x, y, z]));
+                (value as f32, at_edge)
             };
         }
+        signed_from_the_band(&mut samples, &edge, &shape, size, (cell * SURE_BAND_CELLS) as f32);
         let settled = self.untwist_faces(&mut samples, &shape, size, &at, cell);
         let mut buffer = SurfaceNetsBuffer::default();
         surface_nets(&samples, &shape, [0; 3], [size[0] - 1, size[1] - 1, size[2] - 1], &mut buffer);
@@ -217,6 +234,63 @@ impl EditField<'_> {
             }
         }
         (vertices, triangles, settled)
+    }
+}
+
+/// How near the surface, in cells, the field's sign is taken as it reads.
+const SURE_BAND_CELLS: f64 = 1.5;
+
+/// Every sample further than `band` from the surface signed as the samples
+/// within it round its pocket say: the ground's sign is sure near its mesh
+/// and nowhere else -- past a cell folded over, or through a hole, the
+/// nearest face points the wrong way, and the grid would read a surface in
+/// the open air metres off the ground. A pocket of far samples lies on one
+/// side of the surface, so the band round it, all on that side, signs it --
+/// by the most of them, a fold's few the other way outvoted. Past the
+/// ground's open border the sign jumps from its top to its underside as it
+/// should: a pocket never runs on across that jump.
+fn signed_from_the_band(samples: &mut [f32], edge: &[bool], shape: &RuntimeShape<u32, 3>, size: [u32; 3], band: f32) {
+    let far = |value: f32| value.abs() > band;
+    let mut pocket = vec![usize::MAX; samples.len()];
+    let mut members: Vec<usize> = Vec::new();
+    for seed in 0..samples.len() {
+        if pocket[seed] != usize::MAX || !far(samples[seed]) {
+            continue;
+        }
+        members.clear();
+        members.push(seed);
+        pocket[seed] = seed;
+        let (mut vote, mut own) = (0i64, 0i64);
+        let mut k = 0;
+        while k < members.len() {
+            let here = members[k];
+            k += 1;
+            own += if samples[here] < 0.0 { -1 } else { 1 };
+            let c = shape.delinearize(here as u32);
+            for axis in 0..3 {
+                for forward in [false, true] {
+                    if (!forward && c[axis] == 0) || (forward && c[axis] + 1 >= size[axis]) {
+                        continue;
+                    }
+                    let mut n = c;
+                    n[axis] = if forward { c[axis] + 1 } else { c[axis] - 1 };
+                    let next = shape.linearize(n) as usize;
+                    if far(samples[next]) {
+                        let jump = (samples[next] < 0.0) != (samples[here] < 0.0);
+                        if pocket[next] == usize::MAX && !(jump && (edge[here] || edge[next])) {
+                            pocket[next] = seed;
+                            members.push(next);
+                        }
+                    } else {
+                        vote += if samples[next] < 0.0 { -1 } else { 1 };
+                    }
+                }
+            }
+        }
+        let solid = if vote != 0 { vote < 0 } else { own < 0 };
+        for &m in &members {
+            samples[m] = if solid { -samples[m].abs() } else { samples[m].abs() };
+        }
     }
 }
 

@@ -594,7 +594,7 @@ fn mean_gap_to(ring: &[Vec3], border: &[usize], vertices: &[Vec3]) -> f64 {
 }
 
 /// Normal of a face by Newell's method, unnormalised.
-fn newell(vertices: &[Vec3], face: &[usize]) -> Vec3 {
+pub(crate) fn newell(vertices: &[Vec3], face: &[usize]) -> Vec3 {
     let mut n = Vec3::default();
     for i in 0..face.len() {
         let (a, b) = (vertices[face[i]], vertices[face[(i + 1) % face.len()]]);
@@ -667,6 +667,17 @@ fn joined_to_rings(triangles: &[[usize; 3]], rings: &[Vec<Vec3>], vertices: &[Ve
 /// every corner settled back onto the surface. Pinned corners never move.
 fn relax_on_surface(vertices: &[Vec3], faces: &[Vec<usize>], pinned: &[bool], settle: &dyn Fn(Vec3) -> Vec3) -> Vec<Vec3> {
     let mut current = vertices.to_vec();
+    // Each corner's cells, and the corners beside it along their sides.
+    let mut holding: Vec<Vec<usize>> = vec![Vec::new(); vertices.len()];
+    let mut around: Vec<Vec<usize>> = vec![Vec::new(); vertices.len()];
+    for (f, face) in faces.iter().enumerate() {
+        for k in 0..face.len() {
+            let (a, b) = (face[k], face[(k + 1) % face.len()]);
+            holding[a].push(f);
+            around[a].push(b);
+            around[b].push(a);
+        }
+    }
     for _ in 0..RELAX_ROUNDS {
         let mut sum = vec![Vec3::default(); current.len()];
         let mut count = vec![0u32; current.len()];
@@ -686,17 +697,26 @@ fn relax_on_surface(vertices: &[Vec3], faces: &[Vec<usize>], pinned: &[bool], se
                 count[index] += 1;
             }
         }
-        current = current
-            .iter()
-            .enumerate()
-            .map(|(i, &p)| {
-                if pinned[i] || count[i] == 0 {
-                    return p;
-                }
-                let target = sum[i] * (1.0 / f64::from(count[i]));
-                settle(p.lerp(target, 0.5))
-            })
-            .collect();
+        let before = current.clone();
+        for i in 0..current.len() {
+            if pinned[i] || count[i] == 0 {
+                continue;
+            }
+            let p = before[i];
+            let target = sum[i] * (1.0 / f64::from(count[i]));
+            // A step no longer than half its shortest side, turning none of
+            // its cells over: settled onto the surface, a corner drawn on too
+            // far lands on another sheet of it -- an arch's underside over
+            // the ground -- and its cells span the gap.
+            let shortest = around[i].iter().map(|&n| p.distance(before[n])).fold(f64::INFINITY, f64::min);
+            let step = (target - p) * 0.5;
+            let step = if step.length() > shortest * 0.5 { step * (shortest * 0.5 / step.length()) } else { step };
+            current[i] = settle(p + step);
+            let turned = holding[i].iter().any(|&f| newell(&current, &faces[f]).dot(newell(&before, &faces[f])) <= 0.0);
+            if turned {
+                current[i] = p;
+            }
+        }
     }
     current
 }

@@ -27,7 +27,7 @@ use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
 
-use crate::edit::Faces;
+use crate::edit::{Faces, newell};
 use crate::field::{Effect, Form, Shape};
 use crate::mesh_distance::MeshDistance;
 use crate::regenerate::{GivenPoint, Landing, Origin, RegeneratedSurface, Regeneration, regenerate_surface, triangles_of};
@@ -189,36 +189,106 @@ fn rim_unsplit(laid: RegeneratedSurface) -> RegeneratedSurface {
             });
             let Some((f, g, p)) = pair else { break };
             let (first, second) = (faces[f].take().unwrap(), faces[g].take().unwrap());
+            let facing = newell(&laid.vertices, &first) + newell(&laid.vertices, &second);
             // `first` from `p` round to `x`, then `second` on from `x` to just short of `p`.
             let from_p = first.iter().position(|&v| v == p).unwrap();
             let mut merged: Vec<usize> = (0..first.len()).map(|i| first[(from_p + i) % first.len()]).collect();
             let from_x = second.iter().position(|&v| v == x).unwrap();
             merged.extend((1..second.len() - 1).map(|i| second[(from_x + i) % second.len()]));
-            faces[f] = Some(without_slits(merged));
+            // Two cells touching at a corner besides their side walk round it
+            // twice: the one cell wraps the cells it closes round, which go
+            // into it -- a cell with a hole is no cell.
+            let (outer, inner): (Vec<Vec<usize>>, Vec<Vec<usize>>) =
+                lobes(without_slits(merged)).into_iter().partition(|lobe| newell(&laid.vertices, lobe).dot(facing) >= 0.0);
+            for lobe in &inner {
+                for enclosed in enclosed_by(&faces, lobe) {
+                    faces[enclosed] = None;
+                }
+            }
+            let mut outer = outer.into_iter();
+            faces[f] = outer.next();
+            faces.extend(outer.map(Some));
         }
         // One cell holds `x` now, lying straight on the side: it goes.
         for face in faces.iter_mut().flatten() {
             face.retain(|&v| v != x);
         }
     }
-    // Compacted: the corners left, renumbered.
+    // Compacted: the corners left, renumbered -- a new one no cell holds
+    // any more, inside a cell that closed round it, goes too.
+    let used: HashSet<usize> = faces.iter().flatten().flatten().copied().collect();
     let mut renumber = vec![usize::MAX; laid.vertices.len()];
     let mut vertices = Vec::new();
     let mut origin = Vec::new();
     for (v, &point) in laid.vertices.iter().enumerate() {
-        if !dropped.contains(&v) {
+        if !dropped.contains(&v) && (used.contains(&v) || laid.origin[v].is_some()) {
             renumber[v] = vertices.len();
             vertices.push(point);
             origin.push(laid.origin[v]);
         }
     }
     let faces = faces.into_iter().flatten().filter(|face| face.len() >= 3).map(|face| face.into_iter().map(|v| renumber[v]).collect()).collect();
-    let landed = laid.landed.into_iter().filter(|l| !dropped.contains(&l.vertex)).map(|l| Landing { vertex: renumber[l.vertex], ..l }).collect();
+    let landed = laid.landed.into_iter().filter(|l| renumber[l.vertex] != usize::MAX).map(|l| Landing { vertex: renumber[l.vertex], ..l }).collect();
     RegeneratedSurface { vertices, faces, origin, landed, refinement_complete: laid.refinement_complete }
 }
 
 /// `face` less every slit: a corner it runs out to and straight back from,
 /// where two cells merged along more than one side.
+/// `face` cut where it walks through one corner twice: the loops it walks,
+/// each a face of its own.
+fn lobes(face: Vec<usize>) -> Vec<Vec<usize>> {
+    let mut done = Vec::new();
+    let mut open = vec![face];
+    while let Some(face) = open.pop() {
+        let twice = (0..face.len()).find_map(|i| (i + 1..face.len()).find(|&j| face[j] == face[i]).map(|j| (i, j)));
+        match twice {
+            Some((i, j)) => {
+                open.push(face[i..j].to_vec());
+                open.push(face[j..].iter().chain(&face[..i]).copied().collect());
+            }
+            None if face.len() >= 3 => done.push(face),
+            None => {}
+        }
+    }
+    done
+}
+
+/// The faces inside `lobe`, a loop a cell walks round them the other way:
+/// those holding one of its sides from the inside, and every face reached
+/// from them without crossing it. None when that reaches the ground's open
+/// border -- then the loop closes round nothing.
+fn enclosed_by(faces: &[Option<Vec<usize>>], lobe: &[usize]) -> Vec<usize> {
+    let mut holding: HashMap<(usize, usize), usize> = HashMap::new();
+    for (f, face) in faces.iter().enumerate() {
+        if let Some(face) = face {
+            for i in 0..face.len() {
+                holding.insert((face[i], face[(i + 1) % face.len()]), f);
+            }
+        }
+    }
+    let walls: HashSet<(usize, usize)> = (0..lobe.len()).map(|i| (lobe[(i + 1) % lobe.len()], lobe[i])).collect();
+    let mut inside: Vec<usize> = walls.iter().filter_map(|side| holding.get(side).copied()).collect();
+    inside.sort_unstable();
+    inside.dedup();
+    let mut seen: HashSet<usize> = inside.iter().copied().collect();
+    let mut stack = inside.clone();
+    while let Some(f) = stack.pop() {
+        let face = faces[f].as_ref().unwrap();
+        for i in 0..face.len() {
+            let (a, b) = (face[i], face[(i + 1) % face.len()]);
+            if walls.contains(&(a, b)) {
+                continue;
+            }
+            let Some(&g) = holding.get(&(b, a)) else { return Vec::new() };
+            if seen.insert(g) {
+                inside.push(g);
+                stack.push(g);
+            }
+        }
+    }
+    inside
+}
+
 fn without_slits(mut face: Vec<usize>) -> Vec<usize> {
     loop {
         let n = face.len();

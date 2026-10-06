@@ -46,18 +46,28 @@ const quiet = (work) => {
   try { return work(); } finally { console.info = info; console.warn = warn; }
 };
 
-function stroke({ runtime, ctx, calls }, points, params = {}) {
+/**
+ * A stroke through `points`, each on the ground under it -- or, with `on`,
+ * the first on the ground's highest sheet over it or its lowest (`"top"`,
+ * `"low"`) and the rest on the last's: an arch's deck, or the ground under it.
+ */
+function stroke({ runtime, ctx, calls }, points, params = {}, on) {
+  const at = (x, z, sheet) => {
+    if (!sheet) return heightAt(runtime, x, z);
+    const ys = sheetsAt(runtime, x, z);
+    return ys.length === 0 ? 0 : sheet === "low" ? ys[0] : ys.at(-1);
+  };
   const samples = [];
   for (let k = 0; k + 1 < points.length; k++) {
     const [a, b] = [points[k], points[k + 1]];
     const n = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.5));
     for (let i = 0; i < n; i++) {
       const x = a[0] + ((b[0] - a[0]) * i) / n, z = a[1] + ((b[1] - a[1]) * i) / n;
-      samples.push({ point: { x, y: heightAt(runtime, x, z), z }, screenX: 0, screenY: 0 });
+      samples.push({ point: { x, y: at(x, z, on?.[k === 0 && i === 0 ? 0 : 1] ?? on?.[0]), z }, screenX: 0, screenY: 0 });
     }
   }
   const [x, z] = points.at(-1);
-  samples.push({ point: { x, y: heightAt(runtime, x, z), z }, screenX: 0, screenY: 0 });
+  samples.push({ point: { x, y: at(x, z, on?.at(-1)), z }, screenX: 0, screenY: 0 });
   quiet(() => terrainSculptTool.onPointerUp(ctx, { start: samples[0], current: samples.at(-1), samples }, { ...DEFAULT_TOOL_PARAMS["terrain-sculpt"], ...params }));
   const feedback = calls.feedback.at(-1);
   assert.equal(feedback?.tone, "success", JSON.stringify(feedback));
@@ -140,21 +150,28 @@ test("strokes over the same ground lay it no finer each time", () => {
   } finally { fixture.session.free(); }
 });
 
-/** The highest ground over a point of the plane, by a ray down through every face; `undefined` where none is. */
-function topAt(runtime, x, z) {
-  let best;
-  for (const t of groundOf(runtime)) {
+/** The ground's triangles, each face fanned from its first corner. */
+function groundTriangles(runtime) {
+  return groundOf(runtime).flatMap((t) => {
     const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
-    for (let k = 1; k + 1 < ring.length; k++) {
-      const [a, b, c] = [ring[0], ring[k], ring[k + 1]];
-      const d = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
-      if (Math.abs(d) < 1e-12) continue;
-      const u = ((b.x - x) * (c.z - z) - (c.x - x) * (b.z - z)) / d, v = ((c.x - x) * (a.z - z) - (a.x - x) * (c.z - z)) / d, w = 1 - u - v;
-      if (u >= -1e-9 && v >= -1e-9 && w >= -1e-9) best = Math.max(best ?? -Infinity, u * a.y + v * b.y + w * c.y);
-    }
-  }
-  return best;
+    return ring.slice(1, -1).map((_, k) => [ring[0], ring[k + 1], ring[k + 2]]);
+  });
 }
+
+/** Every sheet of ground over a point of the plane, lowest first, by a ray down through every triangle. */
+function sheetsAt(runtime, x, z, triangles = groundTriangles(runtime)) {
+  const ys = [];
+  for (const [a, b, c] of triangles) {
+    const d = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
+    if (Math.abs(d) < 1e-12) continue;
+    const u = ((b.x - x) * (c.z - z) - (c.x - x) * (b.z - z)) / d, v = ((c.x - x) * (a.z - z) - (a.x - x) * (c.z - z)) / d, w = 1 - u - v;
+    if (u >= -1e-9 && v >= -1e-9 && w >= -1e-9) ys.push(u * a.y + v * b.y + w * c.y);
+  }
+  return ys.sort((a, b) => a - b);
+}
+
+/** The highest ground over a point of the plane; `undefined` where none is. */
+const topAt = (runtime, x, z, triangles) => sheetsAt(runtime, x, z, triangles).at(-1);
 
 test("earth raised over a hill on the table leaves the hill standing past its reach, and layers go on over both", () => {
   const fixture = setup();
@@ -192,15 +209,17 @@ test("earth raised again and again from the bare table never takes ground away p
       [[-10, 0], [10, 0]], [[0, -10], [0, 10]], [[5, 0]], [[14, -6], [14, 6]], [[-12, 3], [-18, 8]],
     ];
     for (const points of steps) {
+      const standing = groundTriangles(runtime);
       const before = [];
       for (let x = -40; x <= 40; x += 1) for (let z = -40; z <= 40; z += 1) {
         // Past the brush's reach and its blend, in plan, from every point of the stroke.
         if (points.some(([px, pz]) => Math.hypot(px - x, pz - z) < 9) || (points.length > 1 && distanceToSegment(x, z, points[0], points[1]) < 9)) continue;
-        const y = topAt(runtime, x, z);
+        const y = topAt(runtime, x, z, standing);
         if (y !== undefined) before.push([x, z, y]);
       }
       stroke(fixture, points, { mode: "fill" });
-      const lost = before.filter(([x, z]) => topAt(runtime, x, z) === undefined).length;
+      const laid = groundTriangles(runtime);
+      const lost = before.filter(([x, z]) => topAt(runtime, x, z, laid) === undefined).length;
       probe(JSON.stringify(points), "lost", lost, "of", before.length);
       assert.ok(lost <= 3, `${JSON.stringify(points)}: ${lost} of ${before.length} points of ground past the reach gone`);
       assert.equal(meshOf(runtime).thrice, 0, "one mesh");
@@ -239,6 +258,36 @@ test("an earth bridge stands hollow over the ground, and layers laid over it and
       const ground = groundOf(runtime);
       const report = JSON.parse(session.surface_meshes_report_json(JSON.stringify({ surfaceKeys: ground.map((t) => t.surfaceKey) })));
       assert.equal(report.failed.length, 0, `every face drawable: ${JSON.stringify(report.failed[0])}`);
+      assert.equal(meshOf(runtime).thrice, 0, "one mesh");
+    }
+  } finally { fixture.session.free(); }
+});
+
+test("a tall layer laid on a hill leaves no hole at its foot", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    stroke(fixture, [[-20, 0], [20, 0]], { brushRadius: 10 });
+    stroke(fixture, [[8, 0]], { brushRadius: 3, elevationStep: 8 });
+    const mesh = meshOf(runtime);
+    probe("tall layer", JSON.stringify(mesh));
+    assert.equal(mesh.thrice, 0, "one mesh");
+    assert.equal(mesh.borders, 1, "no hole");
+  } finally { fixture.session.free(); }
+});
+
+test("an arch of earth closed back down onto the ground lays, over ground a stroke folded", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    stroke(fixture, [[-20, 0], [20, 0]], { brushRadius: 10 });
+    stroke(fixture, [[8, 0]], { brushRadius: 3, elevationStep: 8 });
+    // A half arch from the ground onto the tall layer's top -- a C on its side --
+    // its landing dug away, then closed back down onto the ground: an O.
+    stroke(fixture, [[-6, 0], [8, 0]], { mode: "fill", brushRadius: 2, elevationStep: 6 }, ["low", "top"]);
+    stroke(fixture, [[8, 0]], { mode: "dig", brushRadius: 4, elevationStep: 6 }, ["top"]);
+    for (const [points, params] of [[[[4, 0], [8, 0]], { mode: "fill", brushRadius: 2, elevationStep: 2 }], [[[2, 0], [9, 0]], { mode: "fill", brushRadius: 2.5, elevationStep: 1 }]]) {
+      stroke(fixture, points, params, ["top", "low"]);
       assert.equal(meshOf(runtime).thrice, 0, "one mesh");
     }
   } finally { fixture.session.free(); }

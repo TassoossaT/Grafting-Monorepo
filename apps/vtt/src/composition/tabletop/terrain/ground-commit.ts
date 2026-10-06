@@ -176,8 +176,15 @@ export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit)
   const regions: ConstructionPatchRegion[] = laid.faces.flatMap((face, f) => {
     // A corner snapped onto its neighbour's node folds the two into one.
     const ring = face.map(nodeIdOf).filter((id, k, all) => id !== all[(k + 1) % all.length]);
-    if (new Set(ring).size < 3 || new Set(ring).size !== ring.length) return [];
-    return [{ regionId: `${operationId}:f${f}`, boundary: ring.map((id, k) => useOf(id, ring[(k + 1) % ring.length]!)), holes: [], surfaceType: commit.surfaceType, physical: true }];
+    // A ring through one node twice is the loops it walks, each a face --
+    // dropped, it would leave a hole in the ground.
+    return loopsOf(ring).map((loop, k) => ({
+      regionId: `${operationId}:f${f}${k > 0 ? `.${k}` : ""}`,
+      boundary: loop.map((id, i) => useOf(id, loop[(i + 1) % loop.length]!)),
+      holes: [],
+      surfaceType: commit.surfaceType,
+      physical: true,
+    }));
   });
 
   const outcome = runtime.applyPatchReplacement({
@@ -187,6 +194,23 @@ export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit)
   }, "local", operationId);
   if (outcome.skippedRegionIds.length > 0) throw new Error(`${outcome.skippedRegionIds.length} faces recusadas pelo motor: ${outcome.skippedRegionReasons?.slice(0, 3).join("; ")}`);
   return { built: regions.length, refused: outcome.skippedRegionIds.length, unadopted: adoption.refused.length };
+}
+
+/** `ring` cut where it walks through one node twice: the loops it walks, three nodes or more each. */
+function loopsOf(ring: readonly ConstructionNodeId[]): ConstructionNodeId[][] {
+  const done: ConstructionNodeId[][] = [];
+  const open = [[...ring]];
+  while (open.length > 0) {
+    const loop = open.pop()!;
+    const i = loop.findIndex((id, k) => loop.indexOf(id, k + 1) >= 0);
+    if (i < 0) {
+      if (loop.length >= 3) done.push(loop);
+      continue;
+    }
+    const j = loop.indexOf(loop[i]!, i + 1);
+    open.push(loop.slice(i, j), [...loop.slice(j), ...loop.slice(0, i)]);
+  }
+  return done;
 }
 
 /** Faces as indexed rings, each list with its own vertices, and the node each vertex is. */
