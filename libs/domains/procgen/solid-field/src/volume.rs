@@ -9,6 +9,7 @@ use fast_surface_nets::{SurfaceNetsBuffer, surface_nets};
 
 use crate::field::{Shape, with_shapes};
 use crate::mesh_distance::MeshDistance;
+use crate::table::TableFloor;
 use crate::vector::Vec3;
 
 /// The ground after the edit, as a signed distance.
@@ -16,12 +17,22 @@ pub struct EditField<'a> {
     pub ground: &'a MeshDistance,
     pub shapes: &'a [Shape],
     pub blend: f64,
+    /// The table under the ground, solid where no ground stands.
+    pub table: Option<&'a TableFloor>,
 }
 
 impl EditField<'_> {
     /// Signed distance, negative inside solid.
     pub fn distance(&self, point: Vec3) -> f64 {
-        with_shapes(self.ground.signed_distance(point), point, self.shapes, self.blend)
+        let ground = self.ground.signed_distance(point);
+        // Where no ground stands over or under a point, it is in no ground's
+        // solid -- whatever the sign past a ground's open border says -- and
+        // the table is the floor there.
+        let base = match self.table.and_then(|table| table.distance(point)) {
+            Some(table) => ground.abs().min(table),
+            None => ground,
+        };
+        with_shapes(base, point, self.shapes, self.blend)
     }
 
     /// The direction out of the solid at `point`, unnormalised.

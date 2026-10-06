@@ -23,8 +23,9 @@ use grafting_procgen_irregular_grid::{FaceMesh, Random, Vec2, regular_cell_targe
 
 use crate::field::Shape;
 use crate::mesh_distance::MeshDistance;
-use crate::trimesh::{Remesh, border_loops, zipper};
+use crate::trimesh::{Remesh, border_loops, zipper, zipper_open};
 use crate::vector::Vec3;
+use crate::table::TableFloor;
 use crate::volume::EditField;
 
 /// Faces, as indices into their own vertices, in whatever winding the
@@ -45,6 +46,9 @@ pub struct SurfaceEdit {
     /// finer where a shape is narrower than ten faces round.
     pub face_side: f64,
     pub seed: u32,
+    /// The table's height, where the edit may rest new ground on it: solid
+    /// below it wherever no ground stands. `None` never reads the table.
+    pub table: Option<f64>,
 }
 
 /// The faces laid in place of the ones handed in.
@@ -73,12 +77,12 @@ const REMESH_ROUNDS: usize = 6;
 /// Lays `patch` again with `edit` carved into or filled onto it. `context`
 /// is the ground round it -- never laid again, only asked where solid is.
 pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Result<EditedSurface, String> {
-    if patch.faces.is_empty() {
+    if patch.faces.is_empty() && edit.table.is_none() {
         return Err("no ground to edit".to_string());
     }
     // The ground's own face size, but never coarser than the shapes allow: a
     // tunnel narrower than two faces read on a grid of them is no tunnel.
-    let narrowest = edit.shapes.iter().map(|shape| shape.radius).fold(f64::INFINITY, f64::min);
+    let narrowest = edit.shapes.iter().map(Shape::thickness).fold(f64::INFINITY, f64::min);
     let ground_side = edit.face_side.max(0.25);
     let side = ground_side.min(narrowest * SHAPE_FACE_SHARE).max(0.25);
     let cell = side;
@@ -101,7 +105,8 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         .iter()
         .flat_map(|faces| faces.faces.iter().map(|face| newell(&faces.vertices, face).y))
         .sum();
-    let flip = rising < 0.0;
+    // With no ground at all, the tabletop's own: normals by the right hand point down.
+    let flip = if patch.faces.is_empty() && context.faces.is_empty() { true } else { rising < 0.0 };
     let outward = |face: &Vec<usize>| -> Vec<usize> { if flip { face.iter().rev().copied().collect() } else { face.clone() } };
 
     // Where solid is: the patch and the ground round it, as one mesh.
@@ -110,9 +115,15 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
     let offset = all_vertices.len();
     all_vertices.extend(context.vertices.iter().copied());
     all_faces.extend(context.faces.iter().map(|face| outward(face).into_iter().map(|v| v + offset).collect()));
+    let table = edit.table.map(|height| {
+        let triangles = all_faces.iter().filter(|face| face.len() >= 3).flat_map(|face| (1..face.len() - 1).map(move |k| [face[0], face[k], face[k + 1]])).collect();
+        TableFloor::new(height, all_vertices.clone(), triangles, length)
+    });
     let ground = MeshDistance::new(all_vertices, &all_faces, length);
     let patch_only = MeshDistance::new(patch.vertices.clone(), &patch.faces.iter().map(outward).collect::<Vec<_>>(), length);
-    let field = EditField { ground: &ground, shapes: &edit.shapes, blend: edit.blend };
+    let field = EditField { ground: &ground, shapes: &edit.shapes, blend: edit.blend, table: table.as_ref() };
+    // A point of the new surface lying on the table where the table is the floor.
+    let on_table = |point: Vec3| table.as_ref().is_some_and(|t| t.holds(point, cell * 0.3));
     let step = cell * 0.25;
     let settle = |point: Vec3| field.project(point, step, cell);
 
@@ -125,12 +136,57 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         .flat_map(|face| (1..face.len() - 1).map(move |k| [face[0], face[k], face[k + 1]]).collect::<Vec<_>>())
         .collect();
     let rings = border_loops(&patch_triangles);
-    if rings.is_empty() {
+    if rings.is_empty() && table.is_none() {
         return Err("the ground to edit has no border".to_string());
     }
-    let ring_segments: Vec<(Vec3, Vec3)> = rings
+    // Which of the ring's sides the ground beyond still holds. With a table to
+    // rest on, a side nobody holds -- the map's own border -- is no ring: the
+    // new ground may run on past it, out over the table.
+    let key = |p: Vec3| ((p.x * 1e6).round() as i64, (p.y * 1e6).round() as i64, (p.z * 1e6).round() as i64);
+    let pair = |a: (i64, i64, i64), b: (i64, i64, i64)| if a < b { (a, b) } else { (b, a) };
+    let context_sides: HashSet<_> = context
+        .faces
+        .iter()
+        .flat_map(|face| (0..face.len()).map(move |i| (face[i], face[(i + 1) % face.len()])))
+        .map(|(a, b)| pair(key(context.vertices[a]), key(context.vertices[b])))
+        .collect();
+    let held = |a: usize, b: usize| table.is_none() || context_sides.contains(&pair(key(patch.vertices[a]), key(patch.vertices[b])));
+    // Rings held all round, and chains: the runs of held sides of a ring
+    // partly free.
+    let mut closed: Vec<Vec<usize>> = Vec::new();
+    let mut chains: Vec<Vec<usize>> = Vec::new();
+    let mut partly_held = 0;
+    for ring in &rings {
+        let n = ring.len();
+        let held_side: Vec<bool> = (0..n).map(|i| held(ring[i], ring[(i + 1) % n])).collect();
+        if held_side.iter().all(|&h| h) {
+            closed.push(ring.clone());
+            continue;
+        }
+        if held_side.iter().any(|&h| h) {
+            partly_held += 1;
+        }
+        let start = (0..n).find(|&i| !held_side[i]).unwrap_or(0);
+        let mut chain: Vec<usize> = Vec::new();
+        for step in 1..=n {
+            let i = (start + step) % n;
+            if held_side[i] {
+                if chain.is_empty() {
+                    chain.push(ring[i]);
+                }
+                chain.push(ring[(i + 1) % n]);
+            } else if !chain.is_empty() {
+                chains.push(std::mem::take(&mut chain));
+            }
+        }
+        if !chain.is_empty() {
+            chains.push(chain);
+        }
+    }
+    let ring_segments: Vec<(Vec3, Vec3)> = closed
         .iter()
         .flat_map(|ring| (0..ring.len()).map(move |i| (ring[i], ring[(i + 1) % ring.len()])))
+        .chain(chains.iter().flat_map(|chain| chain.windows(2).map(|w| (w[0], w[1]))))
         .map(|(a, b)| (patch.vertices[a], patch.vertices[b]))
         .collect();
     let to_ring = |point: Vec3| ring_segments.iter().map(|&(a, b)| point.distance_to_segment(a, b)).fold(f64::INFINITY, f64::min);
@@ -147,7 +203,8 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         min = min.min(low);
         max = max.max(high);
     }
-    let ring_points: Vec<Vec<Vec3>> = rings.iter().map(|ring| ring.iter().map(|&v| patch.vertices[v]).collect()).collect();
+    let ring_points: Vec<Vec<Vec3>> = closed.iter().chain(&chains).map(|ring| ring.iter().map(|&v| patch.vertices[v]).collect()).collect();
+    let expected_borders = closed.len() + partly_held;
     // Read at the face size first, finer where that reads the surface
     // wrong: solid thinner than a cell -- a shallow roof -- comes back with
     // edges three faces hold, or two faces walking one edge the same way.
@@ -163,19 +220,22 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
             .filter(|&[a, b, c]| {
                 let centre = (extracted[a] + extracted[b] + extracted[c]) * (1.0 / 3.0);
                 let near = patch_only.distance(centre) < cell * 1.5 || edit.shapes.iter().any(|s| s.distance(centre) < reach);
-                near && [a, b, c].iter().all(|&v| to_ring(extracted[v]) > clearance)
+                near && [a, b, c].iter().all(|&v| to_ring(extracted[v]) > clearance) && ![a, b, c].iter().all(|&v| on_table(extracted[v]))
             })
             .collect();
         let whole = pruned(kept.clone()).len() == kept.len();
         if !whole && !mend {
             return None;
         }
-        let kept = joined_to_rings(&pruned(kept), &ring_points, &extracted, cell * 3.0);
+        let kept = joined_to_rings(&pruned(kept), &ring_points, &extracted, cell * 3.0, &on_table);
         // Every ring has a border of the new surface running along it, and a
-        // clean read has no other.
-        let borders = border_loops(&kept);
+        // clean read has no other -- but where it rests on the table.
+        let borders: Vec<Vec<usize>> = border_loops(&kept).into_iter().filter(|border| !border.iter().all(|&v| on_table(extracted[v]))).collect();
+        if kept.is_empty() {
+            return None;
+        }
         let follows = |ring: &Vec<Vec3>| borders.iter().any(|border| mean_gap_to(ring, border, &extracted) < cell * 3.0);
-        let clean = mend || borders.len() == rings.len();
+        let clean = mend || borders.len() == expected_borders;
         (clean && ring_points.iter().all(follows)).then_some((extracted, kept))
     };
     // A clean read at either size first; mended only where neither is.
@@ -188,7 +248,7 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
     let mut ring_index: HashMap<usize, usize> = HashMap::new();
     let mut vertices: Vec<Vec3> = Vec::new();
     let mut source: Vec<Option<usize>> = Vec::new();
-    for ring in &rings {
+    for ring in closed.iter().chain(&chains) {
         for &v in ring {
             ring_index.entry(v).or_insert_with(|| {
                 vertices.push(patch.vertices[v]);
@@ -212,10 +272,13 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
         })
         .collect();
 
-    // Stitch every ring to the border of the new surface nearest it.
-    let inner_loops: Vec<Vec<usize>> = border_loops(&triangles);
+    // Stitch every ring to the border of the new surface nearest it, and every
+    // chain to the stretch of the border running beside it. A border resting
+    // wholly on the table is the new ground's own edge there: left open.
+    let (_, inner_loops): (Vec<Vec<usize>>, Vec<Vec<usize>>) =
+        border_loops(&triangles).into_iter().partition(|border| border.iter().all(|&v| on_table(vertices[v])));
     let mut used_inner: HashSet<usize> = HashSet::new();
-    for ring in &rings {
+    for ring in &closed {
         let outer: Vec<usize> = ring.iter().map(|v| ring_index[v]).collect();
         let nearest = (0..inner_loops.len()).filter(|i| !used_inner.contains(i)).min_by(|&a, &b| {
             mean_gap(&outer, &inner_loops[a], &vertices).total_cmp(&mean_gap(&outer, &inner_loops[b], &vertices))
@@ -231,6 +294,27 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
                 return Err("a borda do terreno em volta não encontra a superfície nova".to_string());
             }
         }
+    }
+    for chain in &chains {
+        let outer: Vec<usize> = chain.iter().map(|v| ring_index[v]).collect();
+        let Some(i) = (0..inner_loops.len()).min_by(|&a, &b| {
+            mean_gap(&outer, &inner_loops[a], &vertices).total_cmp(&mean_gap(&outer, &inner_loops[b], &vertices))
+        }) else {
+            return Err("a borda do terreno em volta não encontra a superfície nova".to_string());
+        };
+        used_inner.insert(i);
+        let border = &inner_loops[i];
+        let closest = |p: Vec3| (0..border.len()).min_by(|&a, &b| vertices[border[a]].distance(p).total_cmp(&vertices[border[b]].distance(p))).unwrap_or(0);
+        let (from, to) = (closest(vertices[outer[0]]), closest(vertices[outer[outer.len() - 1]]));
+        // The stretch from beside the chain's start to beside its end, walked
+        // the way the border runs -- the way the chain runs too.
+        let mut stretch = vec![border[from]];
+        let mut k = from;
+        while k != to {
+            k = (k + 1) % border.len();
+            stretch.push(border[k]);
+        }
+        triangles.extend(zipper_open(&outer, &stretch, &vertices));
     }
     // What is left open is a hole the read left where it could not make the
     // surface out -- a cell the grid read two ways: closed by a fan round a
@@ -254,16 +338,42 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
 
     // Even triangles, the ring locked.
     let mut locked_edges: HashSet<(usize, usize)> = HashSet::new();
-    for ring in &rings {
+    for ring in &closed {
         for i in 0..ring.len() {
             let (a, b) = (ring_index[&ring[i]], ring_index[&ring[(i + 1) % ring.len()]]);
             locked_edges.insert((a.min(b), a.max(b)));
         }
     }
+    for chain in &chains {
+        for w in chain.windows(2) {
+            let (a, b) = (ring_index[&w[0]], ring_index[&w[1]]);
+            locked_edges.insert((a.min(b), a.max(b)));
+        }
+    }
+    // What is left open now rests on the table: the new ground's foot, set
+    // down on the table itself and locked where it stands.
+    let mut directed: HashSet<(usize, usize)> = HashSet::new();
+    for &[a, b, c] in &triangles {
+        directed.extend([(a, b), (b, c), (c, a)]);
+    }
+    let foot: Vec<(usize, usize)> = directed
+        .iter()
+        .copied()
+        .filter(|&(a, b)| !directed.contains(&(b, a)) && a >= ring_count && b >= ring_count && on_table(vertices[a]) && on_table(vertices[b]))
+        .collect();
+    let on_table_border: HashSet<usize> = foot.iter().flat_map(|&(a, b)| [a, b]).collect();
+    if let Some(table) = table.as_ref() {
+        for &v in &on_table_border {
+            vertices[v].y = table.height;
+        }
+    }
+    for &(a, b) in &foot {
+        locked_edges.insert((a.min(b), a.max(b)));
+    }
     let mut remesh = Remesh {
         vertices,
         triangles,
-        locked: (0..source.len()).map(|v| v < ring_count).collect(),
+        locked: (0..source.len()).map(|v| v < ring_count || on_table_border.contains(&v)).collect(),
         locked_edges: locked_edges.clone(),
         settle: &settle,
     };
@@ -285,7 +395,16 @@ pub fn edit_surface(patch: &Faces, context: &Faces, edit: &SurfaceEdit) -> Resul
             welded_source[*after] = Some(s);
         }
     }
-    let pinned: Vec<bool> = welded_source.iter().map(Option::is_some).collect();
+    // The ring's corners and the foot resting on the table stay where they are.
+    let mut uses: HashMap<(usize, usize), u32> = HashMap::new();
+    for face in &welded.faces {
+        for i in 0..face.len() {
+            let (a, b) = (face[i], face[(i + 1) % face.len()]);
+            *uses.entry((a.min(b), a.max(b))).or_default() += 1;
+        }
+    }
+    let open: HashSet<usize> = uses.iter().filter(|&(_, &n)| n == 1).flat_map(|(&(a, b), _)| [a, b]).collect();
+    let pinned: Vec<bool> = welded_source.iter().enumerate().map(|(v, s)| s.is_some() || (open.contains(&v) && on_table(welded.vertices[v]))).collect();
     let vertices = relax_on_surface(&welded.vertices, &welded.faces, &pinned, &settle);
 
     let faces = welded.faces.iter().map(|face| if flip { face.iter().rev().copied().collect() } else { face.clone() }).collect();
@@ -342,7 +461,7 @@ fn mean_gap(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> f64 {
 /// sealed inside solid has no border, and stray surface the grid read where
 /// the patch says nothing runs along no ring: no ground would ever join
 /// either.
-fn joined_to_rings(triangles: &[[usize; 3]], rings: &[Vec<Vec3>], vertices: &[Vec3], near: f64) -> Vec<[usize; 3]> {
+fn joined_to_rings(triangles: &[[usize; 3]], rings: &[Vec<Vec3>], vertices: &[Vec3], near: f64, on_table: &dyn Fn(Vec3) -> bool) -> Vec<[usize; 3]> {
     let mut by_vertex: HashMap<usize, Vec<usize>> = HashMap::new();
     for (t, tri) in triangles.iter().enumerate() {
         for &v in tri {
@@ -376,7 +495,9 @@ fn joined_to_rings(triangles: &[[usize; 3]], rings: &[Vec<Vec3>], vertices: &[Ve
                 gap < near
             })
         });
-        if follows_a_ring {
+        // Ground laid on the bare table joins nothing standing: its foot on the table is its border.
+        let rests_on_table = borders.iter().any(|border| border.iter().all(|&v| on_table(vertices[v])));
+        if follows_a_ring || rests_on_table {
             kept.extend(component);
         }
     }

@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use grafting_procgen_solid_field::{Effect, Faces, Shape, SurfaceEdit, Vec3, edit_surface};
+use grafting_procgen_solid_field::{Effect, Faces, Form, Shape, SurfaceEdit, Vec3, edit_surface};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +23,19 @@ pub struct ShapeDto {
     pub effect: String,
     pub path: Vec<[f64; 3]>,
     pub radius: f64,
+    /// How tall a swept shape is against how wide: `1` round. Omitted is round.
+    #[serde(default)]
+    pub squash: Option<f64>,
+    /// A column over the path's plan between these heights, instead of a swept shape.
+    #[serde(default)]
+    pub column: Option<ColumnDto>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnDto {
+    pub low: f64,
+    pub high: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +52,9 @@ pub struct TerrainVolumeEditRequest {
     pub face_side: f64,
     #[serde(default)]
     pub seed: u32,
+    /// The table's height, where new ground may rest on the bare table.
+    #[serde(default)]
+    pub table: Option<f64>,
 }
 
 fn no_faces() -> FacesDto {
@@ -76,13 +92,17 @@ pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainV
                 "fill" => Effect::Fill,
                 other => return Err(format!("unknown shape effect {other:?}")),
             };
-            Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius })
+            let form = match shape.column {
+                Some(column) => Form::Column { low: column.low, high: column.high },
+                None => Form::Swept { squash: shape.squash.unwrap_or(1.0) },
+            };
+            Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form })
         })
         .collect::<Result<Vec<_>, String>>()?;
     let edited = edit_surface(
         &faces(request.patch),
         &faces(request.context),
-        &SurfaceEdit { shapes, blend: request.blend, face_side: request.face_side, seed: request.seed },
+        &SurfaceEdit { shapes, blend: request.blend, face_side: request.face_side, seed: request.seed, table: request.table },
     )?;
     Ok(TerrainVolumeEditResponse {
         vertices: edited.vertices.into_iter().map(|v| [v.x, v.y, v.z]).collect(),

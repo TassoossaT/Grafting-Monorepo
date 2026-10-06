@@ -93,6 +93,34 @@ pub fn zipper(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[usize
     triangles
 }
 
+/// Triangles stitching the open chain `outer` to the stretch `inner` of a
+/// border running beside it, both walked the same way; the strip advances
+/// along whichever side keeps its new diagonal shorter, end to end.
+pub fn zipper_open(outer: &[usize], inner: &[usize], vertices: &[Vec3]) -> Vec<[usize; 3]> {
+    if outer.len() < 2 && inner.len() < 2 {
+        return Vec::new();
+    }
+    let (mut i, mut j) = (0, 0);
+    let mut triangles = Vec::with_capacity(outer.len() + inner.len());
+    while i + 1 < outer.len() || j + 1 < inner.len() {
+        let advance_outer = if i + 1 >= outer.len() {
+            false
+        } else if j + 1 >= inner.len() {
+            true
+        } else {
+            vertices[outer[i + 1]].distance(vertices[inner[j]]) <= vertices[outer[i]].distance(vertices[inner[j + 1]])
+        };
+        if advance_outer {
+            triangles.push([outer[i], outer[i + 1], inner[j]]);
+            i += 1;
+        } else {
+            triangles.push([outer[i], inner[j + 1], inner[j]]);
+            j += 1;
+        }
+    }
+    triangles
+}
+
 /// A triangle mesh with locked vertices and edges, being remeshed.
 pub struct Remesh<'a> {
     pub vertices: Vec<Vec3>,

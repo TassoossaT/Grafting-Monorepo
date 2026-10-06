@@ -4,7 +4,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
-use grafting_procgen_solid_field::{Effect, EditedSurface, Faces, Shape, SurfaceEdit, Vec3, edit_surface};
+use grafting_procgen_solid_field::{Effect, EditedSurface, Faces, Form, Shape, SurfaceEdit, Vec3, edit_surface};
 
 fn probe() -> bool {
     std::env::var("PROBE").is_ok_and(|v| v == "1")
@@ -144,11 +144,11 @@ fn assert_edit(name: &str, patch: &Faces, out: &EditedSurface, face_side: f64) -
 #[test]
 fn a_sphere_carved_into_the_hillside_lays_back_irregular_ground_on_the_same_ring() {
     let all = ground(2.0, 20, hill);
-    let shapes = vec![Shape { effect: Effect::Carve, path: vec![Vec3::new(-6.0, hill(-6.0, 0.0), 0.0)], radius: 2.5 }];
+    let shapes = vec![Shape::capsule(Effect::Carve, vec![Vec3::new(-6.0, hill(-6.0, 0.0), 0.0)], 2.5)];
     let blend = 0.8;
     let (patch, context, _) = split(&all, &shapes, 2.5 + blend + 2.0 * 2.0);
     let started = Instant::now();
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 2.0, seed: 7 }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 2.0, seed: 7, table: None }).expect("the edit lays");
     if probe() {
         println!("sphere: {} ms", started.elapsed().as_millis());
     }
@@ -162,11 +162,11 @@ fn a_sphere_carved_into_the_hillside_lays_back_irregular_ground_on_the_same_ring
 fn a_tunnel_carved_through_the_hill_opens_both_sides_and_keeps_its_roof() {
     let all = ground(2.0, 20, hill);
     let y = 1.9;
-    let shapes = vec![Shape { effect: Effect::Carve, path: vec![Vec3::new(-14.0, y, 0.0), Vec3::new(14.0, y, 0.0)], radius: 1.8 }];
+    let shapes = vec![Shape::capsule(Effect::Carve, vec![Vec3::new(-14.0, y, 0.0), Vec3::new(14.0, y, 0.0)], 1.8)];
     let blend = 0.6;
     let (patch, context, _) = split(&all, &shapes, 1.8 + blend + 2.0 * 2.0);
     let started = Instant::now();
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.5, seed: 7 }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.5, seed: 7, table: None }).expect("the edit lays");
     if probe() {
         println!("tunnel: {} ms", started.elapsed().as_millis());
     }
@@ -186,10 +186,11 @@ fn an_earth_bridge_filled_over_flat_ground_rises_from_it_on_the_same_ring() {
         effect: Effect::Fill,
         path: vec![Vec3::new(-9.0, -0.5, 0.0), Vec3::new(-4.0, 3.0, 0.0), Vec3::new(4.0, 3.0, 0.0), Vec3::new(9.0, -0.5, 0.0)],
         radius: 1.2,
+        form: Form::Swept { squash: 1.0 },
     }];
     let blend = 0.5;
     let (patch, context, _) = split(&all, &shapes, 1.2 + blend + 2.0 * 2.0);
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.2, seed: 7 }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes: shapes.clone(), blend, face_side: 1.2, seed: 7, table: None }).expect("the edit lays");
     assert_edit("bridge", &patch, &out, 1.2);
     let top = out.vertices.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
     assert!(top > 3.5, "the deck stands over the ground: {top:.2}");
@@ -201,9 +202,97 @@ fn a_tunnel_whose_patch_reaches_only_past_its_axis_still_lays() {
     // its surface; the roof over the tunnel is thinner than the grid there.
     let all = ground(2.0, 20, hill);
     let y = hill(-14.0, 0.0) + 1.8 * 1.05;
-    let shapes = vec![Shape { effect: Effect::Carve, path: vec![Vec3::new(-14.0, y, 0.0), Vec3::new(14.0, y, 0.0)], radius: 1.8 }];
+    let shapes = vec![Shape::capsule(Effect::Carve, vec![Vec3::new(-14.0, y, 0.0), Vec3::new(14.0, y, 0.0)], 1.8)];
     let blend = 1.8 * 0.35;
     let (patch, context, _) = split(&all, &shapes, blend + 2.0 * 2.0);
-    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend, face_side: 1.08, seed: 1 }).expect("the edit lays");
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend, face_side: 1.08, seed: 1, table: None }).expect("the edit lays");
     assert_edit("axis reach", &patch, &out, 1.08);
+}
+
+/// A pile of earth laid along a stroke: a capsule squashed to `height` over `radius`.
+fn mound(effect: Effect, path: Vec<Vec3>, radius: f64, height: f64) -> Shape {
+    Shape { effect, path, radius, form: Form::Swept { squash: height / radius } }
+}
+
+fn no_folds(name: &str, out: &EditedSurface) {
+    let uses = edge_uses(&out.faces);
+    assert!(uses.values().all(|&n| n <= 2), "{name}: no edge held by three faces");
+}
+
+#[test]
+fn a_pile_of_earth_on_the_bare_table_rests_on_it() {
+    let shapes = vec![mound(Effect::Fill, vec![Vec3::new(-5.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 4.0, 2.0)];
+    let empty = Faces::default();
+    let out = edit_surface(&empty, &empty, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: Some(0.0) }).expect("laid on the table");
+    no_folds("pile on the table", &out);
+    let top = out.vertices.iter().map(|v| v.y).fold(f64::MIN, f64::max);
+    let bottom = out.vertices.iter().map(|v| v.y).fold(f64::MAX, f64::min);
+    let uses = edge_uses(&out.faces);
+    let foot: HashSet<usize> = uses.iter().filter(|&(_, &n)| n == 1).flat_map(|(&(a, b), _)| [a, b]).collect();
+    if probe() {
+        println!("pile on the table: {} faces, {bottom:.2}..{top:.2}, foot {}", out.faces.len(), foot.len());
+    }
+    assert!(out.faces.len() > 10);
+    assert!((1.7..2.6).contains(&top), "about the pile's height: {top}");
+    assert!(bottom > -0.05, "nothing under the table: {bottom}");
+    let high_foot: Vec<f64> = foot.iter().map(|&v| out.vertices[v].y).filter(|y| y.abs() >= 0.3).collect();
+    assert!(!foot.is_empty() && high_foot.is_empty(), "its foot rests on the table: {high_foot:?}");
+    // Wound as the tabletop winds ground: normals by the right hand point down.
+    let down = out.faces.iter().filter(|f| {
+        let mut n = 0.0;
+        for i in 0..f.len() {
+            let (a, b) = (out.vertices[f[i]], out.vertices[f[(i + 1) % f.len()]]);
+            n += (a.z - b.z) * (a.x + b.x);
+        }
+        n < 0.0
+    }).count();
+    assert!(down * 10 >= out.faces.len() * 9, "wound as tabletop ground: {down} of {}", out.faces.len());
+}
+
+#[test]
+fn a_pile_laid_off_the_edge_of_the_ground_runs_on_onto_the_table() {
+    // Ground over x < 0 only, wide enough that some stands beyond the pile's
+    // reach; the pile runs from it out over the bare table.
+    let all = ground(2.0, 16, |_, _| 0.0);
+    let half = Faces { vertices: all.vertices.clone(), faces: all.faces.iter().filter(|f| f.iter().all(|&v| all.vertices[v].x <= 0.0)).cloned().collect() };
+    let shapes = vec![mound(Effect::Fill, vec![Vec3::new(-4.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 3.0, 2.0)];
+    let (patch, context, _) = split(&half, &shapes, 3.0 + 0.8 + 4.0);
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: Some(0.0) }).expect("laid");
+    no_folds("pile off the edge", &out);
+    let reach = out.vertices.iter().map(|v| v.x).fold(f64::MIN, f64::max);
+    if probe() {
+        println!("pile off the edge: {} faces, reaches x {reach:.2}", out.faces.len());
+    }
+    assert!(reach > 5.0, "runs on over the table: {reach}");
+    assert!(out.source.iter().any(Option::is_some), "and meets the ground's ring");
+}
+
+#[test]
+fn a_trench_dug_along_flat_ground_goes_down_as_deep_as_asked() {
+    let all = ground(2.0, 12, |_, _| 0.0);
+    let shapes = vec![mound(Effect::Carve, vec![Vec3::new(-5.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 3.0, 2.0)];
+    let (patch, context, _) = split(&all, &shapes, 3.0 + 0.8 + 4.0);
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.8, face_side: 2.0, seed: 3, table: None }).expect("dug");
+    assert_edit("trench", &patch, &out, 2.0);
+    let bottom = out.vertices.iter().map(|v| v.y).fold(f64::MAX, f64::min);
+    assert!((-2.6..-1.6).contains(&bottom), "about the trench's depth: {bottom}");
+}
+
+#[test]
+fn a_hillside_levelled_comes_out_flat_where_it_was_levelled() {
+    let all = ground(2.0, 12, hill);
+    let level = 3.0;
+    let path = vec![Vec3::new(-2.0, level, -2.0), Vec3::new(2.0, level, 2.0)];
+    let shapes = vec![
+        Shape { effect: Effect::Fill, path: path.clone(), radius: 3.0, form: Form::Column { low: level - 4.0, high: level } },
+        Shape { effect: Effect::Carve, path, radius: 3.0, form: Form::Column { low: level, high: level + 4.0 } },
+    ];
+    let (patch, context, _) = split(&all, &shapes, 3.0 + 0.6 + 4.0);
+    let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.6, face_side: 2.0, seed: 3, table: None }).expect("levelled");
+    assert_edit("level", &patch, &out, 2.0);
+    let inside: Vec<f64> = out.vertices.iter().filter(|v| v.x.abs() < 1.0 && v.z.abs() < 1.0).map(|v| v.y).collect();
+    if probe() {
+        println!("level: {} faces, {} corners inside, {:?}", out.faces.len(), inside.len(), inside.iter().map(|y| (y * 100.0).round() / 100.0).collect::<Vec<_>>());
+    }
+    assert!(!inside.is_empty() && inside.iter().all(|y| (y - level).abs() < 0.3), "flat at the level inside: {inside:?}");
 }
