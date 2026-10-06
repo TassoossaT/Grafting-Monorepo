@@ -112,6 +112,12 @@ impl MeshDistance {
         self.nearest(point).map_or(f64::INFINITY, |(closest, _, _)| point.distance(closest))
     }
 
+    /// The nearest point of the surface to `point`, and the corners of the
+    /// triangle it lies on, as indices into the vertices handed in.
+    pub fn closest(&self, point: Vec3) -> Option<(Vec3, [usize; 3])> {
+        self.nearest(point).map(|(closest, t, _)| (closest, self.triangles[t]))
+    }
+
     fn nearest(&self, point: Vec3) -> Option<(Vec3, usize, Feature)> {
         if self.triangles.is_empty() {
             return None;

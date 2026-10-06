@@ -14,10 +14,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use grafting_procgen_irregular_grid::constrained::{ConstrainedOptions, ConstraintPoint};
-use grafting_procgen_irregular_grid::hex::{lattice_covering, lattice_triangle_area};
+use grafting_procgen_irregular_grid::RelaxOptions;
+use grafting_procgen_irregular_grid::constrained::ConstraintPoint;
+use grafting_procgen_irregular_grid::ground::{GroundRefinement, ground_grid};
 use grafting_procgen_irregular_grid::mesh::Vec2;
-use grafting_procgen_irregular_grid::{RelaxOptions, build_constrained_quad_grid};
 
 /// One point of a contour, on the ground plane.
 #[derive(Debug, Deserialize)]
@@ -52,10 +52,11 @@ pub struct RefinementDto {
 
 impl Default for RefinementDto {
     fn default() -> Self {
+        let ground = GroundRefinement::default();
         Self {
-            min_angle_degrees: 20.5,
-            max_additional_vertices: 2_500,
-            min_area_ratio: 0.25,
+            min_angle_degrees: ground.min_angle_degrees,
+            max_additional_vertices: ground.max_additional_vertices,
+            min_area_ratio: ground.min_area_ratio,
         }
     }
 }
@@ -161,23 +162,6 @@ fn rings_of(rings: &[Vec<ConstraintPointDto>]) -> Vec<Vec<ConstraintPoint>> {
         .collect()
 }
 
-/// The box every supplied ring fits inside, which is what the seed lattice
-/// has to cover. `None` where no ring holds a usable point.
-fn bounds_of(rings: &[Vec<ConstraintPoint>]) -> Option<(Vec2, Vec2)> {
-    let mut min = Vec2::new(f64::MAX, f64::MAX);
-    let mut max = Vec2::new(f64::MIN, f64::MIN);
-    let mut any = false;
-    for point in rings.iter().flatten().map(|entry| entry.position) {
-        if !point.x.is_finite() || !point.y.is_finite() {
-            continue;
-        }
-        min = Vec2::new(min.x.min(point.x), min.y.min(point.y));
-        max = Vec2::new(max.x.max(point.x), max.y.max(point.y));
-        any = true;
-    }
-    if any { Some((min, max)) } else { None }
-}
-
 /// Generates one grid. Pure: nothing here touches the session graph.
 ///
 /// Kept pure on purpose. Applying the result needs node ids minted for the
@@ -187,47 +171,10 @@ fn bounds_of(rings: &[Vec<ConstraintPoint>]) -> Option<(Vec2, Vec2)> {
 /// the way `generate_and_apply_*` does, would mean reproducing that
 /// id-and-height decision down here where the type that makes it does not
 /// exist.
-/// How much wider the lattice triangle is than the face that descends from it.
-///
-/// Two stages sit in between. Pairing turns two triangles into one rhombus,
-/// and the Conway ortho step cuts every cell into four, so four faces come out
-/// of every two triangles: geometrically a face is `sqrt(sqrt(3) / 8)` of a
-/// triangle side, about `0.47`. The refinement then adds its own points on top
-/// of the seeded lattice, which makes the real result finer again -- measured
-/// across four scales it settles at about a third rather than a half, and
-/// stays there, which is why this is one measured constant rather than the
-/// clean derivation.
-///
-/// `tests::a_face_comes_back_the_size_it_was_asked_for` is what holds it
-/// honest; if the pipeline's stages ever change, that test moves this number.
-const FACE_SIDE_TO_LATTICE_SIDE: f64 = 3.0;
 
 pub fn irregular_quad_grid(
     request: IrregularQuadGridRequest,
 ) -> Result<IrregularQuadGridResponse, String> {
-    if !(request.face_side > 0.0) {
-        return Err("faceSide must be a positive number".to_string());
-    }
-    let triangle_side = request.face_side * FACE_SIDE_TO_LATTICE_SIDE;
-    let boundary = rings_of(&request.boundary);
-    if boundary.iter().all(|ring| ring.len() < 3) {
-        return Err("boundary needs at least one ring of three or more points".to_string());
-    }
-    let holes = rings_of(&request.holes);
-
-    let (min, max) = bounds_of(&boundary).ok_or("boundary holds no usable point")?;
-
-    let options = ConstrainedOptions {
-        seeds: lattice_covering(min, max, triangle_side),
-        boundary,
-        holes,
-        seed_clearance: triangle_side * 0.25,
-        max_area: lattice_triangle_area(triangle_side),
-        min_area: lattice_triangle_area(triangle_side) * request.refinement.min_area_ratio,
-        min_angle_degrees: request.refinement.min_angle_degrees,
-        max_additional_vertices: request.refinement.max_additional_vertices,
-    };
-
     let relax = RelaxOptions {
         iterations: request.relax.iterations,
         strength: request.relax.strength,
@@ -237,9 +184,12 @@ pub fn irregular_quad_grid(
         pin_boundary: false,
         pinned_targets: Default::default(),
     };
-
-    let grid = build_constrained_quad_grid(&options, request.seed, &relax)
-        .ok_or("the supplied contours describe no ground that can be triangulated")?;
+    let refinement = GroundRefinement {
+        min_angle_degrees: request.refinement.min_angle_degrees,
+        max_additional_vertices: request.refinement.max_additional_vertices,
+        min_area_ratio: request.refinement.min_area_ratio,
+    };
+    let grid = ground_grid(rings_of(&request.boundary), rings_of(&request.holes), request.face_side, request.seed, &refinement, &relax)?;
 
     Ok(IrregularQuadGridResponse {
         vertices: grid

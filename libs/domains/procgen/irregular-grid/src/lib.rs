@@ -36,6 +36,7 @@
 
 pub mod constrained;
 pub mod geometry;
+pub mod ground;
 pub mod hex;
 pub mod mesh;
 pub mod ortho;

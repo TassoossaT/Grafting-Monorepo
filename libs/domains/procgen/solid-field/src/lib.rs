@@ -14,14 +14,17 @@
 //! - [`volume`]: solid after the edit; reading its surface off a grid.
 //! - [`trimesh`]: borders, the stitch to the ring, the isotropic remesh.
 //! - [`edit`]: the edit end to end.
+//! - [`regenerate`]: a patch laid again on its own surface, round structures.
 
 pub mod edit;
 pub mod field;
 pub mod mesh_distance;
+pub mod regenerate;
 pub mod trimesh;
 pub mod vector;
 pub mod volume;
 
 pub use edit::{EditedSurface, Faces, SurfaceEdit, edit_surface};
 pub use field::{Effect, Shape, smooth_min};
+pub use regenerate::{GivenPoint, Landing, Origin, RegeneratedSurface, Regeneration, regenerate_surface};
 pub use vector::Vec3;
