@@ -102,13 +102,15 @@ function polygonOf(topology: ConstructionRegionTopology, positionOf: ReadonlyMap
 /**
  * The structures standing in the ground within `bounds`, and how the ground
  * about to be laid there meets them. `terrainStanding` is the ground around,
- * read for the ground's own height.
+ * read for the ground's own height; `restingOn` the ground being laid, the
+ * only ground whose structures count -- by default all of it.
  */
 export function meetStructures(
   runtime: StructureContactRuntime,
   bounds: ConstructionTopologyBoundsQuery,
   groundType: string,
   terrainStanding: readonly ConstructionRegionTopology[],
+  restingOn: readonly ConstructionRegionTopology[] = terrainStanding,
 ): StructureMeeting {
   const standingHere = timePhase("estruturas no lugar", () => runtime.getRegionTopologiesInBounds(bounds));
   const structures = standingHere.filter((topology) => !isGroundType(topology.surfaceType));
@@ -119,7 +121,7 @@ export function meetStructures(
   // under its deck -- sunk in it -- and the deck laid again round it would
   // go round a hole whose corners are down on the road.
   const cuttingNodes = new Set(cuttingAnywhere.flatMap((topology) => topology.nodes.map((node) => node.id)));
-  const thisGround = groundSurfaceOf(terrainStanding, cuttingNodes);
+  const thisGround = groundSurfaceOf(restingOn, cuttingNodes);
   const allGround = groundSurfaceOf(standingHere.filter((topology) => isGroundType(topology.surfaceType)), cuttingNodes);
   // Where all the ground says nothing -- the structure stands in the hole it
   // cut -- this ground still meets it only if it lies no higher than the

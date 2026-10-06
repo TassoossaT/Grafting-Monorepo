@@ -88,6 +88,9 @@ pub struct RegeneratedSurface {
 /// How much of the surface may turn over in its projection, as a share of
 /// its area, for the projection still to be its chart.
 const TURNED_SHARE_TOLERATED: f64 = 0.01;
+/// How far off a side, as a share of a face, a corner the generator put on
+/// it in the chart may lie on the surface and still be on that side.
+const LANDING_REACH: f64 = 0.25;
 /// Rounds of the membrane laid over a hole before the chart is made.
 const MEMBRANE_ROUNDS: usize = 400;
 /// Sweeps the mean-value embedding may take to settle, at most.
@@ -319,20 +322,227 @@ fn chart(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize]) -> Vec<Ve
     if one_to_one {
         return projected;
     }
-    embedding(vertices, triangles, outer)
+    if rim_winding > 0.0
+        && let Some(mended) = mended_projection(vertices, triangles, outer, &projected)
+    {
+        return mended;
+    }
+    embedding(vertices, triangles, outer, &rim)
 }
 
-/// Floater's mean-value embedding: the ring on a circle by arc length, every
+/// Rounds the rim's crossings are smoothed out in, and the interior's folds.
+const MENDING_ROUNDS: usize = 60;
+/// Sweeps the corners round a fold are settled in, each round.
+const MENDING_SWEEPS: usize = 200;
+/// How much of the projection's extent a mended chart keeps, at least.
+const MENDED_EXTENT_KEPT: f64 = 0.5;
+/// The most a chart is scaled to match the surface it maps.
+const CHART_SCALE_MOST: f64 = 20.0;
+
+/// The projection with its folds mended where they are, and nowhere else:
+/// a rim corner crossing its own rim drawn to the middle of its neighbours
+/// on it, then every corner near a face turned over settled where its
+/// mean-value weights put it, the rest left where the projection put them --
+/// ring after ring outward until no more is turned than the projection
+/// itself may leave ([`TURNED_SHARE_TOLERATED`]). The ground round a
+/// road on a hillside is a projection but for the step at the road's edge,
+/// which folds over in plan; the whole patch laid again on an embedding for
+/// that one step comes back with faces metres long. `None` where it cannot
+/// be mended.
+fn mended_projection(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize], projected: &[Vec2]) -> Option<Vec<Vec2>> {
+    let mut chart = projected.to_vec();
+    let n = outer.len();
+    let crossing = |chart: &[Vec2]| -> Vec<usize> {
+        let mut found = Vec::new();
+        for i in 0..n {
+            let (a, b) = (chart[outer[i]], chart[outer[(i + 1) % n]]);
+            for j in i + 2..n {
+                if (j + 1) % n == i {
+                    continue;
+                }
+                let (c, d) = (chart[outer[j]], chart[outer[(j + 1) % n]]);
+                let (d1, d2, d3, d4) = (signed_area_2d(a, b, c), signed_area_2d(a, b, d), signed_area_2d(c, d, a), signed_area_2d(c, d, b));
+                if (d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0) {
+                    found.extend([i, (i + 1) % n, j, (j + 1) % n]);
+                }
+            }
+        }
+        found
+    };
+    let mut rounds = 0;
+    loop {
+        let found = crossing(&chart);
+        if found.is_empty() {
+            break;
+        }
+        rounds += 1;
+        if rounds > MENDING_ROUNDS {
+            return None;
+        }
+        for k in found {
+            let (before, after) = (chart[outer[(k + n - 1) % n]], chart[outer[(k + 1) % n]]);
+            chart[outer[k]] = Vec2::new((before.x + after.x) * 0.5, (before.y + after.y) * 0.5);
+        }
+    }
+    // Mean-value weights, as the embedding takes them.
+    let mut weights: HashMap<(usize, usize), f64> = HashMap::new();
+    for &[a, b, c] in triangles {
+        for (i, j, k) in [(a, b, c), (b, c, a), (c, a, b)] {
+            let (to_j, to_k) = (vertices[j] - vertices[i], vertices[k] - vertices[i]);
+            let angle = to_j.normalized().dot(to_k.normalized()).clamp(-1.0, 1.0).acos();
+            let half = (angle * 0.5).tan();
+            *weights.entry((i, j)).or_default() += half / to_j.length().max(1e-12);
+            *weights.entry((i, k)).or_default() += half / to_k.length().max(1e-12);
+        }
+    }
+    let mut around: Vec<Vec<(usize, f64)>> = vec![Vec::new(); vertices.len()];
+    let mut keys: Vec<(usize, usize)> = weights.keys().copied().collect();
+    keys.sort_unstable();
+    for (i, j) in keys {
+        around[i].push((j, weights[&(i, j)]));
+    }
+    let on_rim: HashSet<usize> = outer.iter().copied().collect();
+    let rim_index: HashMap<usize, usize> = outer.iter().enumerate().map(|(k, &v)| (v, k)).collect();
+    let turned = |chart: &[Vec2]| -> Vec<usize> {
+        (0..triangles.len()).filter(|&t| { let [a, b, c] = triangles[t]; signed_area_2d(chart[a], chart[b], chart[c]) <= 0.0 }).collect()
+    };
+    // As the projection itself is taken: a sliver of the surface may stay
+    // turned over -- a face standing on edge at a step -- and only lifting
+    // near it reads it.
+    let surface: f64 = triangles.iter().map(|&t| area_normal(vertices, t).length()).sum();
+    // Mended, the chart keeps the patch's extent: drawn together into a
+    // sliver, it would be scaled up past any grid's reach.
+    let extent = |chart: &[Vec2]| triangles.iter().map(|&[a, b, c]| signed_area_2d(chart[a], chart[b], chart[c])).sum::<f64>();
+    let projected_extent = extent(projected).max(1e-12);
+    let settled = |folds: &[usize]| folds.iter().map(|&t| area_normal(vertices, triangles[t]).length()).sum::<f64>() <= surface * TURNED_SHARE_TOLERATED;
+    // The corners free to move: round what is turned, a ring wider each round.
+    let mut free: HashSet<usize> = HashSet::new();
+    for round in 0..MENDING_ROUNDS {
+        let folds = turned(&chart);
+        if folds.is_empty() || (round > 0 && settled(&folds)) {
+            return (extent(&chart) >= projected_extent * MENDED_EXTENT_KEPT).then_some(chart);
+        }
+        // A turned face the rim holds is the rim folded there: its corners on
+        // the rim drawn along it, to the middle of their neighbours -- so long
+        // as that leaves the rim crossing itself nowhere.
+        for &t in &folds {
+            for v in triangles[t] {
+                if let Some(&k) = rim_index.get(&v) {
+                    let (before, after) = (chart[outer[(k + n - 1) % n]], chart[outer[(k + 1) % n]]);
+                    let was = chart[v];
+                    chart[v] = Vec2::new((before.x + after.x) * 0.5, (before.y + after.y) * 0.5);
+                    if !crossing(&chart).is_empty() {
+                        chart[v] = was;
+                    }
+                }
+            }
+        }
+        // Each ring outward once: a corner reached twice is one corner.
+        let mut grown: HashSet<usize> = folds.iter().flat_map(|&t| triangles[t]).filter(|v| !on_rim.contains(v)).collect();
+        let mut front: Vec<usize> = grown.iter().copied().collect();
+        for _ in 0..=round.min(8) {
+            let next: Vec<usize> = front.iter().flat_map(|&v| around[v].iter().map(|&(j, _)| j)).filter(|v| !on_rim.contains(v) && !grown.contains(v)).collect();
+            front = next.into_iter().filter(|&v| grown.insert(v)).collect();
+        }
+        free.extend(grown);
+        let mut order: Vec<usize> = free.iter().copied().collect();
+        order.sort_unstable();
+        for _ in 0..MENDING_SWEEPS {
+            for &v in &order {
+                let total: f64 = around[v].iter().map(|&(_, w)| w).sum();
+                if total <= 0.0 {
+                    continue;
+                }
+                let (x, y) = around[v].iter().fold((0.0, 0.0), |(x, y), &(j, w)| (x + chart[j].x * w, y + chart[j].y * w));
+                chart[v] = Vec2::new(x / total, y / total);
+            }
+        }
+    }
+    None
+}
+
+/// How far apart two points of the plane are.
+fn gap(a: Vec2, b: Vec2) -> f64 {
+    (a.x - b.x).hypot(a.y - b.y)
+}
+
+/// The convex hull of `points`, counter-clockwise.
+fn convex_hull(points: &[Vec2]) -> Vec<Vec2> {
+    let mut sorted: Vec<Vec2> = points.to_vec();
+    sorted.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    sorted.dedup_by(|a, b| (a.x - b.x).abs() < 1e-12 && (a.y - b.y).abs() < 1e-12);
+    if sorted.len() < 3 {
+        return sorted;
+    }
+    let mut hull: Vec<Vec2> = Vec::with_capacity(sorted.len() * 2);
+    for pass in 0..2 {
+        let start = hull.len();
+        let walk: Box<dyn Iterator<Item = &Vec2>> = if pass == 0 { Box::new(sorted.iter()) } else { Box::new(sorted.iter().rev()) };
+        for &p in walk {
+            while hull.len() >= start + 2 && signed_area_2d(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0 {
+                hull.pop();
+            }
+            hull.push(p);
+        }
+        hull.pop();
+    }
+    hull
+}
+
+/// Where the rim goes in an embedding: round the convex hull of its own
+/// projection, each corner as far round it as it is round the rim. A circle
+/// takes a patch's shape away -- the long strip a road is laid again in,
+/// mapped onto one, comes back with faces ten metres long and turned over at
+/// its ends -- and the hull keeps it, convex as Floater's embedding needs.
+/// The circle only where the projection has no extent.
+fn rim_on_hull(vertices: &[Vec3], outer: &[usize], rim: &[Vec2]) -> Option<Vec<Vec2>> {
+    let hull = convex_hull(rim);
+    if hull.len() < 3 {
+        return None;
+    }
+    let hull_length: f64 = (0..hull.len()).map(|k| gap(hull[k], hull[(k + 1) % hull.len()])).sum();
+    if hull_length <= 1e-9 {
+        return None;
+    }
+    // The rim's corner nearest the hull's first corner starts both walks.
+    let first = (0..rim.len()).min_by(|&a, &b| gap(rim[a], hull[0]).total_cmp(&gap(rim[b], hull[0])))?;
+    let rim_length = perimeter(outer, vertices).max(1e-12);
+    let at_share = |share: f64| -> Vec2 {
+        let mut left = share * hull_length;
+        for k in 0..hull.len() {
+            let (p, q) = (hull[k], hull[(k + 1) % hull.len()]);
+            let side = gap(p, q);
+            if left <= side || k == hull.len() - 1 {
+                let t = if side > 0.0 { (left / side).clamp(0.0, 1.0) } else { 0.0 };
+                return Vec2::new(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t);
+            }
+            left -= side;
+        }
+        hull[0]
+    };
+    let mut placed = vec![Vec2::new(0.0, 0.0); outer.len()];
+    let mut walked = 0.0;
+    for step in 0..outer.len() {
+        let k = (first + step) % outer.len();
+        placed[k] = at_share(walked / rim_length);
+        walked += vertices[outer[k]].distance(vertices[outer[(k + 1) % outer.len()]]);
+    }
+    Some(placed)
+}
+
+/// Floater's mean-value embedding: the ring round the hull of its own
+/// projection by arc length ([`rim_on_hull`]) -- else a circle -- every
 /// other vertex where its mean-value weights put it. One to one for any disk.
-fn embedding(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize]) -> Vec<Vec2> {
+fn embedding(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize], rim: &[Vec2]) -> Vec<Vec2> {
     let length = perimeter(outer, vertices);
     let radius = length / std::f64::consts::TAU;
     let mut chart = vec![Vec2::new(0.0, 0.0); vertices.len()];
     let mut fixed = vec![false; vertices.len()];
+    let on_hull = rim_on_hull(vertices, outer, rim);
     let mut walked = 0.0;
     for (i, &v) in outer.iter().enumerate() {
         let angle = std::f64::consts::TAU * walked / length;
-        chart[v] = Vec2::new(radius * angle.cos(), radius * angle.sin());
+        chart[v] = on_hull.as_ref().map_or(Vec2::new(radius * angle.cos(), radius * angle.sin()), |placed| placed[i]);
         fixed[v] = true;
         walked += vertices[v].distance(vertices[outer[(i + 1) % outer.len()]]);
     }
@@ -409,6 +619,10 @@ impl<'a> Locator<'a> {
         };
         let consider = |best: &mut Option<(f64, usize, [f64; 3])>, t: usize| {
             let w = weigh(t);
+            // A triangle with no area in the chart -- a face standing on edge -- weighs nothing.
+            if w.iter().any(|x| !x.is_finite()) {
+                return;
+            }
             let outside = -w.iter().copied().fold(0.0_f64, f64::min);
             if best.is_none_or(|(o, ..)| outside < o) {
                 *best = Some((outside, t, w));
@@ -423,9 +637,12 @@ impl<'a> Locator<'a> {
                 consider(&mut best, t);
             }
         }
-        let (_, t, w) = best.expect("a chart has triangles");
+        let Some((_, t, w)) = best else { return (self.triangles[0], [1.0, 0.0, 0.0]) };
         let clamped = w.map(|x| x.max(0.0));
         let sum: f64 = clamped.iter().sum();
+        if sum <= 0.0 {
+            return (self.triangles[t], [1.0, 0.0, 0.0]);
+        }
         (self.triangles[t], clamped.map(|x| x / sum))
     }
 }
@@ -554,6 +771,9 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
         return Err("o mapa da terra a refazer saiu do avesso".to_string());
     }
     let scale = (surface_area / chart_area).sqrt();
+    if !scale.is_finite() || scale > CHART_SCALE_MOST {
+        return Err("o mapa da terra a refazer saiu desproporcional".to_string());
+    }
     for point in flat.iter_mut() {
         *point = Vec2::new(point.x * scale, point.y * scale);
     }
@@ -683,8 +903,11 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
         let on_side = a.lerp(b, t);
         // A side met only past the surface's rim lies elsewhere on the ground
         // than the chart says: the corner stays where the chart put it, the
-        // ground's own, rather than be dragged across to it.
-        if on_side.distance(lifted) > face_side {
+        // ground's own, rather than be dragged across to it. So too a side
+        // standing over the corner: in plan the foot of a step lies on the
+        // side along its top, a metre over it, and taken for a corner on that
+        // side the ground there would split it under a face running the whole of it.
+        if on_side.distance(lifted) > face_side * LANDING_REACH {
             continue;
         }
         vertices[node.vertex] = on_side;

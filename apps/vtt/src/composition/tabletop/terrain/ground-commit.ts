@@ -77,13 +77,18 @@ export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit)
   const standing = new Map<string, { readonly edgeId: string; readonly start: ConstructionNodeId }>();
   const replacedKeys = new Set(commit.replaced.map((face) => face.surfaceKey.join("\u0000")));
   const heldBeyond = new Set<string>();
+  // How many faces beyond the ones laid again hold each standing edge.
+  const usesBeyond = new Map<string, number>();
   const sealedEdges = new Set<string>();
   for (const face of [...commit.replaced, ...commit.around]) {
     const beyond = !replacedKeys.has(face.surfaceKey.join("\u0000"));
     const sealed = structureTypeFor(face.surfaceType)?.sealedOutline === true;
     for (const use of [...face.outerLoops, ...face.holes].flat()) {
       standing.set(pairKey(use.startNodeId, use.endNodeId), { edgeId: use.edgeId, start: use.reversed ? use.endNodeId : use.startNodeId });
-      if (beyond) heldBeyond.add(use.edgeId);
+      if (beyond) {
+        heldBeyond.add(use.edgeId);
+        usesBeyond.set(use.edgeId, (usesBeyond.get(use.edgeId) ?? 0) + 1);
+      }
       if (sealed) sealedEdges.add(use.edgeId);
     }
   }
@@ -107,6 +112,10 @@ export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit)
     const from = positionOfNode(landing.from), to = positionOfNode(landing.to);
     const edge = standing.get(pairKey(landing.from, landing.to));
     if (from === undefined || to === undefined || edge === undefined) continue;
+    // A side two faces beyond already hold is ground beyond, not the rim: a
+    // chord across a notch of the rim runs between the same two corners.
+    // Split for the new corner, it would be held three times.
+    if ((usesBeyond.get(edge.edgeId) ?? 0) > 1) continue;
     const [x, y, z] = laid.vertices[landing.vertex]!;
     const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
     const length = Math.hypot(dx, dy, dz);
@@ -140,8 +149,11 @@ export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit)
     if (!adoption.adopted.has(candidate.vertex)) continue;
     perEdge.set(candidate.edge.edgeId, [...(perEdge.get(candidate.edge.edgeId) ?? []), candidate]);
   }
+  // The corners each split side now runs through, from its stored start to its end.
+  const splitThrough = new Map<string, { readonly start: ConstructionNodeId; readonly corners: readonly ConstructionNodeId[] }>();
   for (const [edgeId, group] of perEdge) {
     const { startNodeId: start, endNodeId: end } = group[0]!.edge;
+    splitThrough.set(pairKey(start, end), { start, corners: [...group].sort((a, b) => a.along - b.along).map((candidate) => minted(candidate.vertex)) });
     const beyond = heldBeyond.has(edgeId);
     let from = start;
     for (const candidate of [...group].sort((a, b) => a.along - b.along)) {
@@ -173,9 +185,45 @@ export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit)
     }
     return { edgeId: existing.edgeId, reversed: existing.start !== a };
   };
-  const regions: ConstructionPatchRegion[] = laid.faces.flatMap((face, f) => {
-    // A corner snapped onto its neighbour's node folds the two into one.
-    const ring = face.map(nodeIdOf).filter((id, k, all) => id !== all[(k + 1) % all.length]);
+  // A corner snapped onto its neighbour's node folds the two into one. A face
+  // running a whole side that corners laid beside it split runs through those
+  // corners too: the side itself is gone once split.
+  const rings = laid.faces.map((face) => face.map(nodeIdOf).filter((id, k, all) => id !== all[(k + 1) % all.length]).flatMap((id, k, all) => {
+    const next = all[(k + 1) % all.length]!;
+    const through = splitThrough.get(pairKey(id, next));
+    if (through === undefined) return [id];
+    const corners = through.start === id ? through.corners : [...through.corners].reverse();
+    return [id, ...corners.filter((corner) => corner !== id && corner !== next && !all.includes(corner))];
+  }));
+  // A side the new ground runs between two standing nodes that the ground
+  // beyond already joins -- a chord across a notch of the rim, with the
+  // ground outside the notch holding its own side between the same two --
+  // is one edge to the graph, held three times. It is split at its middle.
+  const newUses = new Map<string, number>();
+  for (const ring of rings) ring.forEach((id, k) => {
+    const key = pairKey(id, ring[(k + 1) % ring.length]!);
+    newUses.set(key, (newUses.get(key) ?? 0) + 1);
+  });
+  const middles = new Map<string, ConstructionNodeId>();
+  const middleNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
+  const middleOf = (a: ConstructionNodeId, b: ConstructionNodeId): ConstructionNodeId | undefined => {
+    const key = pairKey(a, b);
+    const edge = standing.get(key);
+    if (edge === undefined || (usesBeyond.get(edge.edgeId) ?? 0) + (newUses.get(key) ?? 0) <= 2) return undefined;
+    const known = middles.get(key);
+    if (known !== undefined) return known;
+    const p = positionOfNode(a), q = positionOfNode(b);
+    if (p === undefined || q === undefined) return undefined;
+    const id = `${operationId}:m${middles.size}`;
+    middles.set(key, id);
+    middleNodes.push({ id, position: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, z: (p.z + q.z) / 2 } });
+    return id;
+  };
+  const split = rings.map((ring) => ring.flatMap((id, k) => {
+    const middle = middleOf(id, ring[(k + 1) % ring.length]!);
+    return middle === undefined ? [id] : [id, middle];
+  }));
+  const regions: ConstructionPatchRegion[] = split.flatMap((ring, f) => {
     // A ring through one node twice is the loops it walks, each a face --
     // dropped, it would leave a hole in the ground.
     return loopsOf(ring).map((loop, k) => ({
@@ -190,7 +238,7 @@ export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit)
   const outcome = runtime.applyPatchReplacement({
     operationId,
     sourceSurfaceKeys: commit.replaced.map((face) => face.surfaceKey),
-    patch: { nodes, edges: [...builder.all(), ...redeclared.values()], regions },
+    patch: { nodes: [...nodes, ...middleNodes], edges: [...builder.all(), ...redeclared.values()], regions },
   }, "local", operationId);
   if (outcome.skippedRegionIds.length > 0) throw new Error(`${outcome.skippedRegionIds.length} faces recusadas pelo motor: ${outcome.skippedRegionReasons?.slice(0, 3).join("; ")}`);
   return { built: regions.length, refused: outcome.skippedRegionIds.length, unadopted: adoption.refused.length };

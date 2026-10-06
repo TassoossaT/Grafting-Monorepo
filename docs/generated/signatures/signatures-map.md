@@ -4063,6 +4063,7 @@ export function meetStructures(
   bounds: ConstructionTopologyBoundsQuery,
   groundType: string,
   terrainStanding: readonly ConstructionRegionTopology[],
+  restingOn: readonly ConstructionRegionTopology[] = terrainStanding,
   ): StructureMeeting {
   const standingHere = timePhase("estruturas no lugar", () => runtime.getRegionTopologiesInBounds(bounds));
 

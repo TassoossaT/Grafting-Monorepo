@@ -1550,11 +1550,12 @@ repair widening itself for room never takes it in.
 
 No structure in the ground: nothing to go round, nothing to meet.
 
-### `function vtt.structure-contact.meetStructures(runtime: StructureContactRuntime, bounds: ConstructionTopologyBoundsQuery, groundType: string, terrainStanding: readonly ConstructionRegionTopology[]): StructureMeeting`
+### `function vtt.structure-contact.meetStructures(runtime: StructureContactRuntime, bounds: ConstructionTopologyBoundsQuery, groundType: string, terrainStanding: readonly ConstructionRegionTopology[], restingOn: readonly ConstructionRegionTopology[]): StructureMeeting`
 
 The structures standing in the ground within `bounds`, and how the ground
 about to be laid there meets them. `terrainStanding` is the ground around,
-read for the ground's own height.
+read for the ground's own height; `restingOn` the ground being laid, the
+only ground whose structures count -- by default all of it.
 
 ### `interface vtt.terrain-constraints.AdoptionRuntime`
 

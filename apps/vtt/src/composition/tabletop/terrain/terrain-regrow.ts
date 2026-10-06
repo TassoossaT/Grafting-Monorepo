@@ -209,9 +209,13 @@ export function regrowGround(runtime: TerrainRegrowRuntime, fallout: CutFallout,
   const groundType = groundTypeOf(consumed, patch);
 
   let built = 0;
+  const bounds = { minX: stroke.minX - STROKE_MARGIN, minZ: stroke.minZ - STROKE_MARGIN, maxX: stroke.maxX + STROKE_MARGIN, maxZ: stroke.maxZ + STROKE_MARGIN };
   surfaceComponents(patch).forEach((piece, pieceIndex) => {
+    // Read again after the first piece: the faces a piece before it laid are
+    // the ground round this one now, holding the sides they share with it.
+    const aroundNow = pieceIndex === 0 ? around : runtime.getRegionTopologiesInBounds(bounds).filter((face) => !patchKeys.has(face.surfaceKey.join("\u0000")));
     built += regrowPiece(runtime, {
-      piece, around, layer, groundType, faceSide, stale,
+      piece, around: aroundNow, layer, groundType, faceSide, stale,
       operationId: `${causeId}:regrow-${pieceIndex}`, tableId,
       seed: hashOf(fallout.consumedSurfaceKeys),
     });
@@ -241,6 +245,31 @@ function groundRoundContact(
   return closable.filter((face) => face.nodes.some((node) => reaches.some((r) => node.position.x >= r.minX && node.position.x <= r.maxX && node.position.z >= r.minZ && node.position.z <= r.maxZ)));
 }
 
+/**
+ * `ring` with every structure corner lying on one of its sides put back in
+ * there, in order along it. The plane's boolean drops a corner lying straight
+ * between its neighbours, and in plan a road's side over a hill is one
+ * straight line: its contact came back as one side from foot to foot, and
+ * the ground laid along it ran on that side's chord, straight through the hill.
+ */
+function withCornersOnSides(ring: readonly (readonly [number, number])[], corners: readonly { readonly at: ConstructionPosition }[]): (readonly [number, number])[] {
+  const out: (readonly [number, number])[] = [];
+  ring.forEach((a, index) => {
+    const b = ring[(index + 1) % ring.length]!;
+    out.push(a);
+    const dx = b[0] - a[0], dz = b[1] - a[1], length = dx * dx + dz * dz;
+    if (length <= 0) return;
+    const between = corners.flatMap(({ at }) => {
+      const t = ((at.x - a[0]) * dx + (at.z - a[1]) * dz) / length;
+      const off = Math.hypot(at.x - a[0] - dx * t, at.z - a[1] - dz * t);
+      return t > 1e-9 && t < 1 - 1e-9 && off < 1e-6 ? [{ t, point: [at.x, at.z] as const }] : [];
+    });
+    between.sort((p, q) => p.t - q.t);
+    for (const { point } of between) if (!out.some((p) => p[0] === point[0] && p[1] === point[1])) out.push(point);
+  });
+  return out;
+}
+
 interface PieceRequest {
   readonly piece: readonly ConstructionRegionTopology[];
   readonly around: readonly ConstructionRegionTopology[];
@@ -260,8 +289,10 @@ function regrowPiece(runtime: TerrainRegrowRuntime, request: PieceRequest): numb
   const points = piece.flatMap((face) => face.nodes.map((node) => [node.position.x, node.position.z] as const));
   const box = boxOf(points, faceSide)!;
 
-  // Where the structures rest on this layer: the holes the ground goes round.
-  const meeting = meetStructures(runtime, box, request.groundType, request.layer);
+  // Where the structures rest on this piece: the holes the ground goes round.
+  // One painter's cloud may stand on two layers -- a floor on an earth
+  // bridge's deck, another under it -- and the deck goes round its own only.
+  const meeting = meetStructures(runtime, box, request.groundType, request.layer, piece);
   const table = meeting.constraints([]);
   const groundAt = groundSurfaceOf(request.layer, new Set(table.sources));
   const live = runtime.getSnapshot().map.nodePositions;
@@ -283,7 +314,7 @@ function regrowPiece(runtime: TerrainRegrowRuntime, request: PieceRequest): numb
   const segmentSide = new Map<string, ConstructionRegionEdge>();
   const holes = meeting.area.flatMap((piece) => {
     const closed = piece[0] ?? [];
-    const ring = closed.length > 1 && closed[0]![0] === closed.at(-1)![0] && closed[0]![1] === closed.at(-1)![1] ? closed.slice(0, -1) : closed;
+    const ring = withCornersOnSides(closed.length > 1 && closed[0]![0] === closed.at(-1)![0] && closed[0]![1] === closed.at(-1)![1] ? closed.slice(0, -1) : closed, corners);
     if (ring.length < 3) return [];
     const ids = ring.map(([x, z]) => {
       const point = { x, z };
