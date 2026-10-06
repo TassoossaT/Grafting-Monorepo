@@ -162,7 +162,7 @@ Read this before the plan sections above; where they disagree, this wins.
   - A level reaches one face.
   - A bore or an arch reaches two faces.
 - **E1 cost.** A stroke over existing ground takes 0.01–0.3 s native. The fourth crossing stroke of a recorded session took 4.7 s and was refused at 3.9–6.5 s before that.
-  - `MeshDistance` is a dense bucket grid searched shell by shell. It is exact only within `EditField.reach`; a grid read uses 4 cells + blend + layer height. Past the reach, the nearest triangle middle stands in: the sign is right, the size is not.
+  - `MeshDistance` is a dense bucket grid searched shell by shell. Buckets, and then triangles, whose box lies farther than the nearest point found so far are skipped. A field read went from about 7 µs to 1.7 µs natively, with the same results. Erguer 3D strokes in wasm went from 0.27–2.5 s to 0.12–0.85 s. It is exact only within `EditField.reach`; a grid read uses 4 cells + blend + layer height. Past the reach, the nearest triangle middle stands in: the sign is right, the size is not.
   - A grid read samples every other point first. The rest are read only where the read corners round them disagree in sign or lie within a cell's diagonal + 1.75 cells of the surface. The field is 1-Lipschitz (squash is scaled to keep it so), so the surface comes out the same wherever the field is continuous.
   - Each grid is read once per edit, whatever mending is asked of it. The winding vote reads at most about 256 triangles.
   - `untangle` and `unfold` ask the field which way a triangle faces once, then again only for triangles a flip or a move touched. Corners move one after another, each to where its neighbours stand now. Moving them all from the old positions changed the tunnel results.

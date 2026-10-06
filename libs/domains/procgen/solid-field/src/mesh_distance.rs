@@ -36,6 +36,9 @@ pub struct MeshDistance {
     reach: ([i64; 3], [i64; 3]),
     /// Each triangle's middle, for the cheap search past a measuring reach.
     centres: Vec<Vec3>,
+    /// Each triangle's box, low and high: a triangle whose box lies farther
+    /// than the nearest point found so far is never measured.
+    boxes: Vec<(Vec3, Vec3)>,
     /// The open border: edges one triangle holds, and their vertices.
     border_edges: std::collections::HashSet<(usize, usize)>,
     border_vertices: std::collections::HashSet<usize>,
@@ -107,6 +110,7 @@ impl MeshDistance {
             }
         }
         let centres = triangles.iter().map(|&[a, b, c]| (vertices[a] + vertices[b] + vertices[c]) * (1.0 / 3.0)).collect();
+        let boxes = triangles.iter().map(|&[a, b, c]| (vertices[a].min(vertices[b]).min(vertices[c]), vertices[a].max(vertices[b]).max(vertices[c]))).collect();
         let mut uses: HashMap<(usize, usize), u32> = HashMap::new();
         for &[a, b, c] in &triangles {
             for (p, q) in [(a, b), (b, c), (c, a)] {
@@ -115,7 +119,7 @@ impl MeshDistance {
         }
         let border_edges: std::collections::HashSet<(usize, usize)> = uses.into_iter().filter(|&(_, n)| n == 1).map(|(e, _)| e).collect();
         let border_vertices = border_edges.iter().flat_map(|&(a, b)| [a, b]).collect();
-        Self { vertices, triangles, face_normals, vertex_normals, edge_normals, cell, buckets, reach: (low, high), centres, border_edges, border_vertices }
+        Self { vertices, triangles, face_normals, vertex_normals, edge_normals, cell, buckets, reach: (low, high), centres, boxes, border_edges, border_vertices }
     }
 
     /// Signed distance from `point` to the surface: negative inside solid.
@@ -182,9 +186,9 @@ impl MeshDistance {
     }
 
     /// The buckets of ring `ring` round `centre`: the shell of the cube, never its inside.
-    fn for_shell(&self, centre: [i64; 3], ring: i64, mut visit: impl FnMut(&[usize])) {
+    fn for_shell(&self, centre: [i64; 3], ring: i64, mut visit: impl FnMut([i64; 3], &[usize])) {
         if ring == 0 {
-            visit(self.bucket(centre));
+            visit(centre, self.bucket(centre));
             return;
         }
         for x in centre[0] - ring..=centre[0] + ring {
@@ -192,14 +196,20 @@ impl MeshDistance {
                 let on_side = (x - centre[0]).abs() == ring || (y - centre[1]).abs() == ring;
                 if on_side {
                     for z in centre[2] - ring..=centre[2] + ring {
-                        visit(self.bucket([x, y, z]));
+                        visit([x, y, z], self.bucket([x, y, z]));
                     }
                 } else {
-                    visit(self.bucket([x, y, centre[2] - ring]));
-                    visit(self.bucket([x, y, centre[2] + ring]));
+                    visit([x, y, centre[2] - ring], self.bucket([x, y, centre[2] - ring]));
+                    visit([x, y, centre[2] + ring], self.bucket([x, y, centre[2] + ring]));
                 }
             }
         }
+    }
+
+    /// How far `point` lies from bucket `[x, y, z]`'s box.
+    fn to_bucket(&self, point: Vec3, [x, y, z]: [i64; 3]) -> f64 {
+        let low = Vec3::new(x as f64, y as f64, z as f64) * self.cell;
+        to_box(point, low, low + Vec3::splat(self.cell))
     }
 
     /// The nearest point exactly where it lies within `reach`; past it, the
@@ -219,8 +229,16 @@ impl MeshDistance {
         let measured = if reach.is_finite() { ((reach / self.cell).ceil() as i64 + 1).min(farthest) } else { farthest };
         let mut best: Option<(f64, Vec3, usize, Feature)> = None;
         for ring in 0..=measured {
-            self.for_shell(centre, ring, |list| {
+            self.for_shell(centre, ring, |at, list| {
+                let nearest = best.map_or(f64::INFINITY, |(d, ..)| d);
+                if list.is_empty() || self.to_bucket(point, at) >= nearest {
+                    return;
+                }
                 for &t in list {
+                    let (low, high) = self.boxes[t];
+                    if best.is_some_and(|(current, ..)| to_box(point, low, high) >= current) {
+                        continue;
+                    }
                     let [a, b, c] = self.triangles[t];
                     let (closest, feature) = closest_on_triangle(point, a, b, c, &self.vertices);
                     let d = point.distance(closest);
@@ -242,7 +260,7 @@ impl MeshDistance {
         // Past the reach: the nearest middle, measured exactly on its own triangle.
         let mut nearest_middle: Option<(f64, usize)> = None;
         for ring in measured + 1..=farthest {
-            self.for_shell(centre, ring, |list| {
+            self.for_shell(centre, ring, |_, list| {
                 for &t in list {
                     let d = point.distance(self.centres[t]);
                     if nearest_middle.is_none_or(|(current, _)| d < current) {
@@ -260,6 +278,12 @@ impl MeshDistance {
             (closest, t, feature)
         })
     }
+}
+
+/// How far `point` lies from the box `low`..`high`; nothing inside it.
+fn to_box(point: Vec3, low: Vec3, high: Vec3) -> f64 {
+    let gap = |p: f64, l: f64, h: f64| (l - p).max(0.0).max(p - h);
+    Vec3::new(gap(point.x, low.x, high.x), gap(point.y, low.y, high.y), gap(point.z, low.z, high.z)).length()
 }
 
 fn bucket_of(point: Vec3, cell: f64) -> [i64; 3] {
