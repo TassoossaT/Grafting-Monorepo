@@ -156,6 +156,8 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
    * between clicks is ruled like one dragged. Absent while nothing is begun.
    */
   readonly rulerAnchor?: (ctx: ToolContext, params: ToolParamsFor<Id>) => ConstructionPosition | undefined;
+  /** Begins this tool's existing construction flow from a selected scene handle. */
+  startFrom?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);

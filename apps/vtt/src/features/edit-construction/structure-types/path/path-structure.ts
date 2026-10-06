@@ -241,6 +241,7 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
 
 /** A road on the shared spine: legacy spans get automatic handles, and an edit regenerates the unioned contour. */
 const PATH_SPINE: SpineGeneration = Object.freeze<SpineGeneration>({
+  branchCreation: true,
   defaultOffsets: [-2, 2],
   maxGrade: PATH_MAX_GRADE,
   prepare: (snapshot, port) => explicitSpineSnapshot(snapshot, port, [-2, 2]),

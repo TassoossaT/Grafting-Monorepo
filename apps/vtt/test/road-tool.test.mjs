@@ -775,12 +775,15 @@ for(const destinationHeight of [0,4])test(`editing joins an endpoint to a road a
  }finally{f.close();}
 });
 
-test("selecting a finished road exposes its two tangent controls, which edit and undo",()=>{
+for(const height of [0,4])test(`selected street at height ${height} offers a creation handle that starts a connected branch`,()=>{
  const f=fixture();try{
-  lay(f,[[-10,0,0],[10,0,0]]);const span=edges(f)[0],id=curvePickId(span.edgeId,"midpoint");
-  const handles=editHandles(f,id);for(const index of [1,2])assert.ok(handles.some(h=>h.id===curvePickId(span.edgeId,index)&&h.kind==="tangent"));
-  const handle=handles.find(h=>h.id===curvePickId(span.edgeId,1)),before=state(f);
-  f.drag({nodeId:handle.id,point:handle.position},{point:{...handle.position,z:4}});assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.notDeepEqual(state(f),before);assert.equal(edges(f).length,1);
+  lay(f,[[-10,height,0],[10,height,0]]);const span=edges(f)[0],id=curvePickId(span.edgeId,"midpoint"),before=state(f);
+  f.click(midpointOf(f,span));const handles=editHandles(f,id);
+  assert.ok(!handles.some(h=>h.id===curvePickId(span.edgeId,1)||h.id===curvePickId(span.edgeId,2)),"unrequested tangent dots do not appear");
+  const create=handles.find(h=>h.kind==="createBranch");assert.ok(create,"selected edge exposes its construction handle");
+  f.click({nodeId:create.id,point:create.position});assert.equal(tool.drafting(f.ctx),true);assert.deepEqual(state(f),before,"choosing an origin does not split the graph yet");assert.equal(tool.rulerAnchor(f.ctx,params).y,height);
+  const end={point:{x:0,y:height,z:10}};tool.previewFor(gesture(end,end),params,f.ctx);assert.ok(f.previews.has("road-draft-spine"),"creation previews the new branch");f.click(end);
+  assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));assert.equal(edges(f).length,3);const node=junctionAt(f,0,0);assert.ok(node);assert.equal(node.position.y,height);
   const entry=f.ctx.history.undo();f.session.undo_region_overlay(entry.transactionId);assert.deepEqual(state(f),before);
  }finally{f.close();}
 });

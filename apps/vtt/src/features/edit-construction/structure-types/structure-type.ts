@@ -272,6 +272,8 @@ export interface SpineRegeneration {
  * whatever surface this type makes of them.
  */
 export interface SpineGeneration {
+  /** Selected spans or anchors can offer a new construction starting from them. */
+  readonly branchCreation?: boolean;
   /** The width a span with no profile of its own is given. */
   readonly defaultOffsets: readonly number[];
   /**

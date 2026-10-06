@@ -233,3 +233,10 @@ export function createRulerLabelTexture(text: string): HTMLCanvasElement {
   context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
   return canvas;
 }
+
+/** Starts a new construction from an existing control. */
+export function createAddHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#2f6fde", (context) => {
+    context.beginPath(); context.moveTo(18, 32); context.lineTo(46, 32); context.moveTo(32, 18); context.lineTo(32, 46); context.stroke();
+  });
+}

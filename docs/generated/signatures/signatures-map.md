@@ -3857,7 +3857,7 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind, RenderHandleGlyph>>
   anchor: "midpoint",
   /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
-  tangent: "point",
+  createBranch: "add",
   /** On the edge of a span's band: push it out or in. */
   width: "side",
 export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
@@ -6321,7 +6321,7 @@ export function joinedStructures(
   const members = new Map(seeds.map((topology) => [faceKey(topology), topology]));
 
 // src/features/edit-construction/orchestration/scene-handles.ts
-export type SceneHandleKind = "anchor" | "midpoint" | "tangent" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
+export type SceneHandleKind = "anchor" | "midpoint" | "createBranch" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
 export interface SceneHandle {
   readonly id: string;
   readonly kind: SceneHandleKind;
@@ -7665,13 +7665,13 @@ export interface SpineRegeneration {
   readonly preview: Float32Array;
   }
 export interface SpineGeneration {
+  /** Selected spans or anchors can offer a new construction starting from them. */
+  readonly branchCreation?: boolean;
   /** The width a span with no profile of its own is given. */
   readonly defaultOffsets: readonly number[];
   /**
   * The spine's points move in plan only: the owner derives every height
   * itself on regeneration, so a drag keeps the grabbed point's own height
-  * instead of taking whatever lies under the pointer, and never snaps onto
-  * another network's node by position. Heights still change on purpose, in
 export type StructureEndName = "origin" | "destination";
 export interface StructureEnd {
   readonly name: StructureEndName;
@@ -8021,7 +8021,7 @@ export function keepsOutline(topology: ConstructionRegionTopology, positions: Re
 // src/features/edit-construction/topology/curve-handles.ts
 export function curveAnchorId(nodeId: string): string { return ANCHOR + encodeURIComponent(nodeId); }
 export function curveAnchorPick(id: string): string | undefined { return id.startsWith(ANCHOR) ? decodeURIComponent(id.slice(ANCHOR.length)) : undefined; }
-export type CurveHandleAction = "disconnect" | "delete-segment" | "close";
+export type CurveHandleAction = "disconnect" | "delete-segment" | "close" | "create";
 export function curveActionId(targetId: string, action: CurveHandleAction): string { return ACTION + action + ":" + encodeURIComponent(targetId); }
 export function curveActionPick(id: string): { readonly targetId: string; readonly action: CurveHandleAction } | undefined {
   if (!id.startsWith(ACTION)) return;
@@ -8714,7 +8714,7 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
-export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink" | "delete";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink" | "delete" | "add";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };

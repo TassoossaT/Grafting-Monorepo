@@ -30,13 +30,13 @@ const END_WIDTH = "curve-end-width:";
 
 export function curveAnchorId(nodeId: string): string { return ANCHOR + encodeURIComponent(nodeId); }
 export function curveAnchorPick(id: string): string | undefined { return id.startsWith(ANCHOR) ? decodeURIComponent(id.slice(ANCHOR.length)) : undefined; }
-export type CurveHandleAction = "disconnect" | "delete-segment" | "close";
+export type CurveHandleAction = "disconnect" | "delete-segment" | "close" | "create";
 export function curveActionId(targetId: string, action: CurveHandleAction): string { return ACTION + action + ":" + encodeURIComponent(targetId); }
 export function curveActionPick(id: string): { readonly targetId: string; readonly action: CurveHandleAction } | undefined {
   if (!id.startsWith(ACTION)) return;
   const tail = id.slice(ACTION.length), split = tail.indexOf(":");
   const action = tail.slice(0, split);
-  if (action !== "disconnect" && action !== "delete-segment" && action !== "close") return;
+  if (action !== "disconnect" && action !== "delete-segment" && action !== "close" && action !== "create") return;
   return { targetId: decodeURIComponent(tail.slice(split + 1)), action };
 }
 export function curveEndWidthId(edgeId: string): string { return END_WIDTH + encodeURIComponent(edgeId); }
@@ -131,15 +131,8 @@ export function curveMidframes(edges: readonly CurveEdge[], port: Pick<BezierPor
 }
 
 /** Each curve's midpoint handle, placed from its midframe. */
-export function curveHandles(frames: readonly CurveMidframe[], selectedId?: string): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
-  const handles = frames.map((frame) => ({ id: curvePickId(frame.edge.edgeId, "midpoint"), position: frame.position }));
-  const selected = selectedId ? curvePick(selectedId) : undefined;
-  const anchor = selectedId ? curveAnchorPick(selectedId) ?? selectedId : undefined;
-  for (const frame of frames) {
-    if (selected?.edgeId !== frame.edge.edgeId && anchor !== frame.edge.startNodeId && anchor !== frame.edge.endNodeId) continue;
-    for (const index of [1, 2] as const) handles.push({ id: curvePickId(frame.edge.edgeId, index), position: curvePosition(frame.edge.curve.points[index]) });
-  }
-  return handles;
+export function curveHandles(frames: readonly CurveMidframe[]): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
+  return frames.map((frame) => ({ id: curvePickId(frame.edge.edgeId, "midpoint"), position: frame.position }));
 }
 
 /** `curve` with one handle dragged to `target`, or its midpoint pulled there. */

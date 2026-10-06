@@ -2,8 +2,8 @@ import type { BezierPort, ConstructionCurvedEdge, ConstructionGraphSnapshot, Con
 
 import type { GlobalHandleKind } from "../global-handles/index.ts";
 import { spineWidthHandles } from "../spine/spine-handles.ts";
-import { spineDefaultOffsets } from "../structure-types/index.ts";
-import { curveEdgesOf, curveHandles, curveMidframes, curveAnchorId, curveActionId, curvePickId, curvePick } from "../topology/curve-handles.ts";
+import { spineDefaultOffsets, structureTypeFor } from "../structure-types/index.ts";
+import { curveEdgesOf, curveHandles, curveMidframes, curveAnchorId, curveActionId, curvePickId } from "../topology/curve-handles.ts";
 import { openSpineChain } from "../spine/spine-open-chain.ts";
 import { spineComponent } from "../spine/spine-owner.ts";
 import { openingHandles, type OpeningRunPort } from "../topology/opening-handles.ts";
@@ -24,7 +24,7 @@ import { shownGlobalHandles } from "./global-handles/index.ts";
  *   resize it (`topology/opening-handles.ts`);
  * - every whole-structure handle, by its own kind (`global-handles/`).
  */
-export type SceneHandleKind = "anchor" | "midpoint" | "tangent" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
+export type SceneHandleKind = "anchor" | "midpoint" | "createBranch" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind;
 
 export interface SceneHandle {
   readonly id: string;
@@ -83,19 +83,25 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
       for (const handle of spineWidthHandles(frames, input.graph, spineDefaultOffsets, true)) handles.push({ id: handle.id, kind: "width", position: handle.position });
       for (const frame of frames) {
         const midpointId = curvePickId(frame.edge.edgeId, "midpoint");
-        if (input.selected === midpointId) handles.push({ id: curveActionId(midpointId, "delete-segment"), kind: "deleteSegment", position: { ...frame.position, y: frame.position.y + 0.6 } });
+        if (input.selected === midpointId) {
+          handles.push({ id: curveActionId(midpointId, "delete-segment"), kind: "deleteSegment", position: { ...frame.position, y: frame.position.y + 0.6 } });
+          const owner = input.graph.edges.find((edge) => edge.edgeId === frame.edge.edgeId)?.curve?.surfaceType;
+          if (owner && structureTypeFor(owner)?.spine?.branchCreation) handles.push({ id: curveActionId(midpointId, "create"), kind: "createBranch", position: { ...frame.position, y: frame.position.y + 1.15 } });
+        }
       }
       const node = input.graph.nodes.find((node) => node.id === input.selected && anchors.has(node.id));
       if (node) {
         const graph = { ...input.graph, edges: input.graph.edges.filter((edge) => shown.some((span) => span.edgeId === edge.edgeId)) };
         const component = spineComponent(graph, [node.id]);
         const incident = component.edges.filter((edge) => edge.startNodeId === node.id || edge.endNodeId === node.id);
+        const owner = incident[0]?.curve?.surfaceType;
+        if (owner && structureTypeFor(owner)?.spine?.branchCreation) handles.push({ id: curveActionId(curveAnchorId(node.id), "create"), kind: "createBranch", position: { ...node.position, y: node.position.y + 1.15 } });
         if (incident.length > 1) handles.push({ id: curveActionId(node.id, "disconnect"), kind: "disconnect", position: { ...node.position, y: node.position.y + 0.6 } });
         const chain = openSpineChain(component.edges);
         if (incident.length === 1 && chain && component.edges.length >= 2) handles.push({ id: curveActionId(node.id, "close"), kind: "closeCurve", position: { ...node.position, y: node.position.y + 0.6 } });
       }
     }
-    for (const handle of curveHandles(frames, input.selected)) handles.push({ id: handle.id, kind: curvePick(handle.id)?.index === "midpoint" ? "midpoint" : "tangent", position: handle.position });
+    for (const handle of curveHandles(frames)) handles.push({ id: handle.id, kind: "midpoint", position: handle.position });
   }
   if (!input.pointsOnly) {
     // With a focus, only the focused structure's own.

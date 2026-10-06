@@ -82,8 +82,9 @@ function createSpineEditBehavior({ ownsSpine, snap }: SpineEditOptions): SpineEd
     const edges = graph.edges.filter((e) => owned(e.curve?.surfaceType));
     const pick = curvePick(sample.nodeId);
     if (pick) {
+      if (pick.index !== "midpoint") return;
       const edge = edges.find((e) => e.edgeId === pick.edgeId);
-      const handle = edge && curveHandles(curveMidframes(curveEdgesOf({ ...graph, edges: [edge] }, [], ctx.runtime), ctx.runtime), sample.nodeId).find((handle) => handle.id === sample.nodeId);
+      const handle = edge && curveHandles(curveMidframes(curveEdgesOf({ ...graph, edges: [edge] }, [], ctx.runtime), ctx.runtime))[0];
       return handle && { ...sample, point: handle.position };
     }
     const anchorId = curveAnchorPick(sample.nodeId);
@@ -114,6 +115,7 @@ function createSpineEditBehavior({ ownsSpine, snap }: SpineEditOptions): SpineEd
     pick(ctx, sample) {
       const action = sample.nodeId ? curveActionPick(sample.nodeId) : undefined;
       if (action) {
+        if (action.action === "create") return;
         const graph = ctx.runtime.getGraphSnapshot();
         const midpoint = curvePick(action.targetId);
         const owner = midpoint ? graph.edges.find((edge) => edge.edgeId === midpoint.edgeId)?.curve?.surfaceType : graph.edges.find((edge) => edge.startNodeId === action.targetId || edge.endNodeId === action.targetId)?.curve?.surfaceType;
@@ -216,6 +218,16 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
     onPointerDown(ctx, sample, params) {
       claimed.delete(ctx.runtime);
       try {
+        const action = sample.nodeId ? curveActionPick(sample.nodeId) : undefined;
+        if (action?.action === "create") {
+          claimed.set(ctx.runtime, true);
+          const picked = spine.pick(ctx, { ...sample, nodeId: action.targetId });
+          if (picked && tool.startFrom) {
+            spine.cancel(ctx);
+            tool.startFrom(ctx, picked.sample, params);
+          }
+          return;
+        }
         // A handle always edits: a draft waiting for its next press is dropped, never drawn from it.
         const picked = spine.pick(ctx, sample);
         if (picked) { if (options.drafting?.(ctx)) tool.onCancel?.(ctx); claimed.set(ctx.runtime, true); spine.begin(ctx, picked); return; }

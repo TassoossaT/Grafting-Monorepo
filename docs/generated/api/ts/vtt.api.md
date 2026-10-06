@@ -250,6 +250,10 @@ Invisible pick proxy retaining one canonical SurfaceRef per render item.
 
 ### `function vtt.map-surface-pick-scene-item.mapSurfacePickSceneItemId(surfaceRef: string): string`
 
+### `function vtt.marker-textures.createAddHandleTexture(): HTMLCanvasElement`
+
+Starts a new construction from an existing control.
+
 ### `function vtt.marker-textures.createCornerHandleTexture(): HTMLCanvasElement`
 
 Pushes a corner -- both its sides at once: the corner, and a double arrow across it.
@@ -3408,6 +3412,10 @@ Gesture end. Tools that commit a single shape from a drag (wall, move-node's his
 
 The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
 
+### `method vtt.spine-draft.SpineDraftTool.startFrom(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+Begins this tool's existing construction flow from a selected scene handle.
+
 ### `type vtt.spine-draft.FinishedSpineDraft = { joins?: PointerSample; kind: "spans"; spans: readonly { curve: CubicBezier; handles: CurveHandles }[] } | { joins?: PointerSample; kind: "points"; points: readonly ConstructionPosition[] }`
 
 A finished draft: laid-out spans, or the points a smooth run passes through. Ends carry their heights.
@@ -3679,6 +3687,10 @@ Gesture end. Tools that commit a single shape from a drag (wall, move-node's his
 ### `method vtt.tool-context.ConstructionTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
 
 The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
+
+### `method vtt.tool-context.ConstructionTool.startFrom(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+Begins this tool's existing construction flow from a selected scene handle.
 
 ### `interface vtt.tool-context.ConstructionToolFeedback`
 
@@ -6625,7 +6637,7 @@ Places an opening's handles on its whole box along the walls it crosses; absent,
 
 ### `property vtt.scene-handles.SceneHandleInput.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "tangent" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind`
+### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "createBranch" | "width" | "panelHeight" | "disconnect" | "deleteSegment" | "closeCurve" | GlobalHandleKind`
 
 Every edit handle the scene shows, in one list: what each one is for --
 its kind, which is also what its look is chosen by -- and where it stands.
@@ -9363,6 +9375,10 @@ How a type is generated along a spine (`features/edit-construction/spine`):
 the same control nodes and bezier spans for every owner, regenerated into
 whatever surface this type makes of them.
 
+### `property vtt.structure-type.SpineGeneration.branchCreation?: boolean`
+
+Selected spans or anchors can offer a new construction starting from them.
+
 ### `property vtt.structure-type.SpineGeneration.defaultOffsets: readonly number[]`
 
 The width a span with no profile of its own is given.
@@ -10388,7 +10404,7 @@ A curve halfway along: where it stands, and which way it runs there.
 
 ### `property vtt.curve-handles.CurveMidframe.tangent: CurvePoint`
 
-### `type vtt.curve-handles.CurveHandleAction = "disconnect" | "delete-segment" | "close"`
+### `type vtt.curve-handles.CurveHandleAction = "disconnect" | "delete-segment" | "close" | "create"`
 
 ### `type vtt.curve-handles.CurveHandleIndex = 1 | 2 | "midpoint"`
 
@@ -10420,7 +10436,7 @@ Every curve on the table: spine spans resolved from their stored handles, and cu
 
 ### `function vtt.curve-handles.curveEndWidthPick(id: string): string | undefined`
 
-### `function vtt.curve-handles.curveHandles(frames: readonly CurveMidframe[], selectedId?: string): readonly { id: string; position: ConstructionPosition }[]`
+### `function vtt.curve-handles.curveHandles(frames: readonly CurveMidframe[]): readonly { id: string; position: ConstructionPosition }[]`
 
 Each curve's midpoint handle, placed from its midframe.
 
@@ -12626,7 +12642,7 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink" | "delete"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink" | "delete" | "add"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something
