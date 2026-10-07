@@ -51,7 +51,7 @@ fn edges(faces: &[Vec<usize>]) -> HashMap<(usize, usize), usize> {
 
 #[test]
 fn a_layer_laid_on_the_bare_table_rises_from_it_as_deep_as_asked() {
-    let edit = LayerEdit { shapes: vec![raise(vec![Vec3::new(-5.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 4.0, 2.0)], blend: 0.5, face_side: 1.0, seed: 3, table: Some(0.0) };
+    let edit = LayerEdit { shapes: vec![raise(vec![Vec3::new(-5.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0)], 4.0, 2.0)], blend: 0.5, face_side: 1.0, seed: 3, table: Some(0.0), beds: Vec::new() };
     let out = layer_surface(&Faces::default(), &Faces::default(), &Faces::default(), &edit).expect("the layer lays");
     assert!(out.faces.len() > 20, "{} faces", out.faces.len());
     assert!(out.faces.iter().all(|face| plan_area(&out.vertices, face) > 0.0), "every face wound as the tabletop's ground");
@@ -71,7 +71,7 @@ fn a_layer_laid_over_a_hill_adds_to_it_and_gives_back_its_ring_whole() {
     let near = |face: &Vec<usize>| face.iter().any(|&v| shape.distance(all.vertices[v]) < 1.0);
     let patch = Faces { vertices: all.vertices.clone(), faces: all.faces.iter().filter(|f| near(f)).cloned().collect() };
     let context = Faces { vertices: all.vertices.clone(), faces: all.faces.iter().filter(|f| !near(f)).cloned().collect() };
-    let edit = LayerEdit { shapes: vec![shape], blend: 0.5, face_side: 2.0, seed: 3, table: None };
+    let edit = LayerEdit { shapes: vec![shape], blend: 0.5, face_side: 2.0, seed: 3, table: None, beds: Vec::new() };
     let out = layer_surface(&patch, &context, &Faces::default(), &edit).expect("the layer lays");
 
     let top = out.vertices.iter().map(|v| v.y).fold(f64::NEG_INFINITY, f64::max);

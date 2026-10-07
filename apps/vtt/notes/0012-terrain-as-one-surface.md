@@ -8,9 +8,11 @@
 
 The ground is **one oriented surface in 3D**, made of `ground` regions. **No code may assume one ground height per point of the plane.** There are only two engine operations:
 
-- **E1 `edit_surface`** — volume edit. Cavar 3D and Erguer 3D use it: the edits that change what is solid.
-- **E3 `layer_surface`** — the surface moved. Adicionar, Remover and Aplainar use it (2026-10-06, superseding E1 for them; see **As built**).
-- **E2 `regenerate_surface`** — relays the cells of a patch of surface, with the shape unchanged. Every repair around a structure uses it.
+- **E1 `edit_surface`** — volume edit: the edits that change what is solid. The brush's ball uses it off flat ground (a flank, a cliff, a ball on the last ball).
+- **E3 `layer_surface`** — the surface moved. The ball as a cap on ground facing up, Aplainar, and **the ground brought to rest under structures** (beds, 2026-10-07) use it.
+- **E2 `regenerate_surface`** — relays the cells of a patch of surface, with the shape unchanged. No longer used by structures since the rest law (2026-10-07); still inside E3 for ground folding over itself.
+
+**Rest law (2026-10-07, owner):** a structure never cuts the ground. The ground is brought to rest just under it (see **Rest law** below); the ground stays one surface with no hole and no side shared with a structure.
 
 Patches are always chosen **by walking the surface**, never by plan coverage. The planar terrain path is deleted, not kept as a fallback.
 
@@ -27,11 +29,11 @@ Owner decisions (2026-10-05):
 
 ## Invariants (tests hold every one)
 
-- **I1. One ground mesh.** No ground edge is held by more than 2 ground faces. Open edges exist only on the map border or on a structure's contact line.
+- **I1. One ground mesh.** No ground edge is held by more than 2 ground faces. Open edges exist only on the map border (since the rest law: never round a structure).
 - **I2. Layers never mix.** An edit or a repair changes only faces reachable over the surface from where it acts. A face on another layer over or under the same plan point is never read for heights and never relaid.
 - **I3. The preview is the contract.** E1 changes faces only within the volume's reach plus its blend, and the ghost shows that volume.
 - **I4. The ring is untouched.** The nodes round a patch come back as the same nodes, with their edges unsplit except by explicit adoption.
-- **I5. Contact law, measured in 3D.** Ground is cut only where a structure rests on the layer directly under it, within 1.5 m (`GROUND_CONTACT_CLEARANCE` and its siblings, unchanged). Platforms stay sealed. "Under" means the first ground hit by a ray going down from the structure, never ground anywhere in plan.
+- **I5. Rest law, measured in 3D** (replaced the contact law 2026-10-07). Ground within 1.5 m under a structure (`GROUND_CONTACT_CLEARANCE`) or up to 6 m rising through it is brought to rest 8 cm under its faces, eased back over a shoulder; never through another sheet of ground (a tunnel's ceiling, a deck's underside). Ground farther off is untouched.
 - **I6. Stable counts.** Moving a structure back and forth, or repeating a stroke, does not grow the face count; the stroke-margin rule from the regen brush-stroke work carries over.
 - **I7. Determinism.** Same input gives the same output. Iterate in sorted order; never rely on HashMap order.
 
@@ -233,9 +235,34 @@ Read this before the plan sections above; where they disagree, this wins.
 
 
 
+## Rest law (2026-10-07)
+
+Owner: the regrow is a dig/raise stroke with the tools that exist; holes between meshes must go. Industry does the same (BeamNG terraform, EasyRoads3D, AoE deform along spline: the terrain conforms under the road, nothing is cut).
+
+- **Where:** `terrain/terrain-conform.ts` (`conformGround`), the default executor of the `"lattice-regenerate"` reaction (`terrain-lattice-reaction.ts`). `terrain-regrow.ts` and `structure-contact.ts` are no longer reached by production code (only by tests); delete in a follow-up.
+- **Engine:** `solid-field/src/bed.rs`, a `Bed` per connected structure handed to E3 (`LayerEdit.beds`, wire `beds` on the layer request).
+  - Target height: the structure's faces in plan, triangulated by **shortest-diagonal ears** (a road is one long face; any other ear ran end to end and read metres off), minus `sink` 0.08.
+  - Full pull within `below` 1.5 (ground under) / `above` 6 (ground rising through), easing to nothing a third past it.
+  - Shoulder: flat for `margin` (one face) past the rim, then a smoothstep `max(1, 1.5 × |move|)` wide.
+  - Beds that disagree: eased in from the highest target down, so the lowest wins — a road under another gets its cutting, the upper one is a bridge.
+  - Never through another sheet (`Sheets`): at the point itself any sheet between blocks; on the shoulder only a sheet facing down at the rim blocks (the slope the shoulder runs up faces up and blocks nothing).
+  - After laying: `settled_under` lowers corners at rest (≤ 0.3 m) where a face rises through a structure between them (a road's crossfall twisting at a junction), only from samples whose corners are all at rest.
+- **TS side mirrors the engine's pull** (same triangulation, fade, shoulder, sheets) only to pick the faces that move ≥ 2 cm; the patch is closed (`closedPatch`) and taken past rim spikes and faces wedged into notches (`withoutSpikes`) — both made the engine bridge across and leave a hole.
+- **Measured:** the old many-roads sweep (hill, valley, flat, 9 roads each) went from refusals at the 3rd–7th road to 27/27; conform 70–210 ms a road; ground through a road ≤ 8 cm in the end state (13 cm transient).
+- Layer rings are now read off the patch's faces (fanned), not their ear-clipped triangles: a face folded on itself clipped to nothing and read as a hole.
+
+## The brush's ball (2026-10-07)
+
+Owner: one tool for 2D and 3D, building and destroying with the ball. The dock offers **Adicionar**, **Remover** (both the ball) and **Aplainar**; Cavar 3D / Erguer 3D are gone from the dock (`"carve"`/`"fill"` modes stay callable by name: tests build tunnels and arches with them).
+
+- `ballShape` (`terrain-volume-edit.ts`): ball `brushRadius` round, standing `elevationStep` out of the surface the pointer sees (dug that deep for Remover), at most 0.9 × its width. On ground facing up (`outward.y ≥ 0.75` at every sample) and no higher than its radius it is a **cap** (E3 raise/lower, footprint = radius, height = step: at step = radius the half ball, so cap → ball has no jump); otherwise the ball itself through E1. Preview: the ball, rolled along the stroke.
+- **Edge erase fixed:** E1 with a ring partly held (a shape crossing the ground's open border onto the table) dropped a half disc of the new surface round each free end of the held chain (the ring clearance), and nothing covered it. Sparing that clearance in E1 broke the arch built ball by ball, so the tool instead **runs the ground on over the bare table first** (`groundRunOn`: a 2 cm E3 layer `radius + 3 faces` round the ball, only where some of that is bare). The ball then meets ground all round. Two undo steps.
+
 ## Open
 
-- **Erguer 3D** fills a capsule of the brush radius along an arch `elevationStep` high. At default settings (radius 6, rise 2) that is a ball or a sausage, never a bridge. What it should make is the owner's call.
+- **Rest law:** a floor raised off flat ground and moved back and forth leaves a bank each time; the ground round it grows ~5 faces a move (204 → 247 over eight), slowing. Legacy ground cut before the rest law keeps its holes (nothing fills them). A structure removed leaves the ground shaped (earthwork), by design.
+- **E1 stitch at a partly held ring** still drops the band past a chain's free end when called without `groundRunOn` (legacy `"fill"` over the edge).
+- **Shared wasm `pkg`:** `libs/domains/procgen/construction-wasm/pkg` is a junction shared by every worktree and the main checkout; any session's `construction-wasm:build` overwrites it with its own branch's engine. Tests and the dev server load whichever built last.
 - A few strokes in 20 leave one sliver cell at a cloud's rim on the table, turned over in plan, where the reach meets the old rim nearly tangentially.
 - **E1 can return a surface that crosses itself.** A bridge leaves a few dozen crossing triangle pairs at its flanks. Digging 6 m into a narrow spike under an arch leaves thousands, takes 1–2 s, and goes through E1 because the layer refuses a patch that is not a disk. The crossings start at the stitch: the zipper joins the ring to a read border that runs metres off it, and unfolding doubles them. Since the sign comes from the band, later strokes are no longer refused over such ground. Refusing on the stitch's longest side was tried and dropped, because an ordinary bridge stitches across 14–17 cells at a corner of the map and the remesh mends it. The fix is the one under the ridge item below: cut the read mesh along the ring.
 

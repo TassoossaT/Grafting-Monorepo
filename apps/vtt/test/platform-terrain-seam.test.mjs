@@ -5,8 +5,9 @@ import { sessionFixture } from "./platform-session-fixture.mjs";
 import { commitPlatformContour } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 
 /**
- * A platform laid in a depression, against the real engine, meets the ground
- * around it on every side -- whichever diagonal the rectangle was dragged along.
+ * A platform laid in a depression, against the real engine, has the ground
+ * rest under it all over -- whichever diagonal the rectangle was dragged along
+ * (note 0012: the ground is never cut for a structure, it rests under it).
  *
  * Dragged one way the contour winds counter-clockwise, the other way clockwise,
  * and two things went wrong only for the second. The face was stored walking
@@ -56,6 +57,35 @@ function bowl(runtime, session) {
   runtime.addPatch({ nodes, edges: [...edges.values()], regions });
 }
 
+/** How far under a structure's faces the ground comes to rest: `GROUND_REST_SINK`. */
+const SINK = 0.08;
+
+/** The top of the ground over a point of the plane, read off its own corners. */
+function groundTop(runtime, x, z) {
+  let top = -Infinity;
+  for (const t of runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "terrain")) {
+    const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
+    for (let k = 1; k + 1 < ring.length; k++) {
+      const [a, b, c] = [ring[0], ring[k], ring[k + 1]];
+      const d = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
+      if (Math.abs(d) < 1e-12) continue;
+      const u = ((b.x - x) * (c.z - z) - (c.x - x) * (b.z - z)) / d, v = ((c.x - x) * (a.z - z) - (a.x - x) * (c.z - z)) / d, w = 1 - u - v;
+      if (u >= -1e-9 && v >= -1e-9 && w >= -1e-9) top = Math.max(top, u * a.y + v * b.y + w * c.y);
+    }
+  }
+  return top;
+}
+
+/** Points under the platform's box where the ground does not lie just under it. */
+function notAtRest(runtime, [x0, z0, x1, z1], y) {
+  const off = [];
+  for (let x = x0 + 0.13; x < x1; x += 0.5) for (let z = z0 + 0.13; z < z1; z += 0.5) {
+    const top = groundTop(runtime, x, z);
+    if (!(Math.abs(top - (y - SINK)) < 0.1)) off.push([+x.toFixed(2), +z.toFixed(2), +top.toFixed(2)]);
+  }
+  return off;
+}
+
 /**
  * Platform corners no ground node stands at, at their height. A platform's
  * outline is sealed: the ground meets its sides without splitting them or
@@ -74,7 +104,7 @@ for (const [label, from, to] of [
   ["counter-clockwise", [-3, -2], [2, 3]],
   ["clockwise", [2, -2], [-3, 3]],
 ]) {
-  test(`a platform dragged ${label} in a depression is met by ground on every side`, () => {
+  test(`a platform dragged ${label} in a depression has the ground rest under it all over, with no hole round it`, () => {
     const { session, runtime, ctx, calls } = sessionFixture();
     const info = console.info;
     const warn = console.warn;
@@ -88,7 +118,8 @@ for (const [label, from, to] of [
 
       assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback));
       assert.equal(runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform").nodes.length, 4, "its four corners: the ground never splits its sides");
-      assert.equal(unmetCorners(runtime), 0, "no side of the platform is left without ground against it");
+      const [bx0, bx1] = [Math.min(from[0], to[0]), Math.max(from[0], to[0])], [bz0, bz1] = [Math.min(from[1], to[1]), Math.max(from[1], to[1])];
+      assert.deepEqual(notAtRest(runtime, [bx0, bz0, bx1, bz1], 0.3), [], "the ground lies just under it everywhere");
       // And no hole in the ground round it: every point just off its outline has ground over it.
       const ground = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "terrain");
       const covered = (x, z) => ground.some((t) => {
@@ -160,7 +191,7 @@ test("ground repaired around a platform already stored clockwise leaves the plat
   }
 });
 
-test("a ramp still welds to a platform merged with the ground, whose sides the ground meets without splitting", async () => {
+test("a ramp still welds to a platform resting on the ground, whose sides the ground never splits", async () => {
   const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
   const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
   const { session, runtime, ctx, calls } = sessionFixture();
@@ -173,8 +204,8 @@ test("a ramp still welds to a platform merged with the ground, whose sides the g
     const corners = [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0.3, z } }));
     commitPlatformContour(ctx, corners, { mode: "create", elevation: 0.3, shape: "rectangle" });
     const platform = () => runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform");
-    assert.equal(platform().outerLoops[0].length, 4, "the ground meets the platform's sides without splitting them");
-    assert.equal(unmetCorners(runtime), 0, "and comes up to every corner");
+    assert.equal(platform().outerLoops[0].length, 4, "the ground takes nothing of the platform's sides");
+    assert.deepEqual(notAtRest(runtime, [-3, -2, 2, 3], 0.3), [], "and lies just under it everywhere");
     // Straight ramp off the east side.
     const s = { point: { x: 2, y: 0.3, z: 0.5 } }, e = { point: { x: 6, y: 0, z: 0.5 } };
     slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, { bottomWidth: 2.5, topWidth: 1.5, rise: 2 });

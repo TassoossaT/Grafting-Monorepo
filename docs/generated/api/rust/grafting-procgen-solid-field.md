@@ -243,6 +243,34 @@ never further than `limit` from where it started.
 
 ### `pub fn grafting_procgen_solid_field::volume::EditField<'a>::clone(&self) -> grafting_procgen_solid_field::volume::EditField<'a>`
 
+### `pub grafting_procgen_solid_field::Bed::above: f64`
+
+How far over its rest the ground may rise and still be brought down to it.
+
+### `pub grafting_procgen_solid_field::Bed::below: f64`
+
+How far under its rest the ground may lie and still be brought up to it.
+
+### `pub grafting_procgen_solid_field::Bed::faces: grafting_procgen_solid_field::edit::Faces`
+
+The structure's faces the ground rests under.
+
+### `pub grafting_procgen_solid_field::Bed::margin: f64`
+
+How far past the faces' rim the ground still lies at rest, before the shoulder.
+
+### `pub grafting_procgen_solid_field::Bed::shoulder: f64`
+
+The narrowest a shoulder is.
+
+### `pub grafting_procgen_solid_field::Bed::sink: f64`
+
+How far under the faces the ground comes to rest.
+
+### `pub grafting_procgen_solid_field::Bed::slope: f64`
+
+The shoulder's width for every metre the ground is moved there.
+
 ### `pub grafting_procgen_solid_field::EditedSurface::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
 In the winding the faces handed in had.
@@ -311,6 +339,10 @@ stroke, or the trench dug along one.
 ### `pub grafting_procgen_solid_field::Landing::to: grafting_procgen_solid_field::regenerate::Origin`
 
 ### `pub grafting_procgen_solid_field::Landing::vertex: usize`
+
+### `pub grafting_procgen_solid_field::LayerEdit::beds: alloc::vec::Vec<grafting_procgen_solid_field::bed::Bed>`
+
+Structures the ground is brought to rest under, after the shapes.
 
 ### `pub grafting_procgen_solid_field::LayerEdit::blend: f64`
 
@@ -414,6 +446,34 @@ below it wherever no ground stands. `None` never reads the table.
 
 ### `pub grafting_procgen_solid_field::Vec3::z: f64`
 
+### `pub grafting_procgen_solid_field::bed::Bed::above: f64`
+
+How far over its rest the ground may rise and still be brought down to it.
+
+### `pub grafting_procgen_solid_field::bed::Bed::below: f64`
+
+How far under its rest the ground may lie and still be brought up to it.
+
+### `pub grafting_procgen_solid_field::bed::Bed::faces: grafting_procgen_solid_field::edit::Faces`
+
+The structure's faces the ground rests under.
+
+### `pub grafting_procgen_solid_field::bed::Bed::margin: f64`
+
+How far past the faces' rim the ground still lies at rest, before the shoulder.
+
+### `pub grafting_procgen_solid_field::bed::Bed::shoulder: f64`
+
+The narrowest a shoulder is.
+
+### `pub grafting_procgen_solid_field::bed::Bed::sink: f64`
+
+How far under the faces the ground comes to rest.
+
+### `pub grafting_procgen_solid_field::bed::Bed::slope: f64`
+
+The shoulder's width for every metre the ground is moved there.
+
 ### `pub grafting_procgen_solid_field::edit::EditedSurface::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
 In the winding the faces handed in had.
@@ -511,6 +571,10 @@ For a layer: the ground's normal out of the solid at each point of the
 path. A layer's depth is read across the ground there, not along its
 normal, so a point over the path has the whole depth under it. Empty,
 the depth is read by plain distance to the path.
+
+### `pub grafting_procgen_solid_field::layer::LayerEdit::beds: alloc::vec::Vec<grafting_procgen_solid_field::bed::Bed>`
+
+Structures the ground is brought to rest under, after the shapes.
 
 ### `pub grafting_procgen_solid_field::layer::LayerEdit::blend: f64`
 
@@ -637,6 +701,19 @@ new nodes inside it, irregular cells.
 - [`regenerate`]: a patch laid again on its own surface, round structures.
 - [`layer`]: a layer laid on the ground or taken off it, the ground
   levelled -- the surface moved, never read again off a grid.
+- [`bed`]: the ground brought to rest under a structure, never cut for it.
+
+### `pub mod grafting_procgen_solid_field::bed`
+
+The ground laid to rest under a structure: a road, a floor, a ramp.
+
+The ground is never cut where a structure stands on it. It is moved: up to
+just under the structure's faces where it lay a little under them, down to
+it where it rose through them, and eased back to where it was over a
+shoulder round them -- a cutting through a hill, an embankment over a dip.
+Where the structure stands far off the ground -- a bridge over a valley, a
+floor over a cliff -- the ground is left as it is. One surface either way:
+no hole, no side shared with the structure.
 
 ### `pub mod grafting_procgen_solid_field::edit`
 
@@ -762,6 +839,10 @@ shapes carved out of it or filled into it.
 Built for one edit and dropped after it. Nothing here is kept: the ground
 is its mesh, and the next edit asks the mesh again.
 
+### `pub struct grafting_procgen_solid_field::Bed`
+
+What one structure asks of the ground under it.
+
 ### `pub struct grafting_procgen_solid_field::EditedSurface`
 
 The faces laid in place of the ones handed in.
@@ -802,6 +883,10 @@ A form swept along a path, carving or filling.
 One edit: what to carve or fill, and the cells to lay the result in.
 
 ### `pub struct grafting_procgen_solid_field::Vec3`
+
+### `pub struct grafting_procgen_solid_field::bed::Bed`
+
+What one structure asks of the ground under it.
 
 ### `pub struct grafting_procgen_solid_field::edit::EditedSurface`
 

@@ -255,8 +255,8 @@ export function commitTerrainVolumeEdit(
   return { faces: built };
 }
 
-/** The ground a layer laid, in the nodes it stands on: the patch's own, and the ground's and structures' round it (`given`, in that order). */
-function layerLaid(edited: ReturnType<ToolContext["runtime"]["layerTerrainSurface"]>, ids: readonly ConstructionNodeId[], given: readonly ConstructionNodeId[]): LaidGround | undefined {
+/** The ground a layer laid (`layerTerrainSurface`), in the nodes it stands on: the patch's own, and the ground's and structures' round it (`given`, in that order). */
+export function layerLaid(edited: ReturnType<ToolContext["runtime"]["layerTerrainSurface"]>, ids: readonly ConstructionNodeId[], given: readonly ConstructionNodeId[]): LaidGround | undefined {
   if (!edited) return undefined;
   const nodeOf = (origin: ConstructionSurfaceOrigin | null | undefined) => (origin === null || origin === undefined ? undefined : origin.kind === "patch" ? ids[origin.index] : given[origin.index]);
   const landed = edited.landed.flatMap((landing) => {
@@ -351,6 +351,114 @@ export function fillShape(points: readonly ConstructionPosition[], radius: numbe
     }),
   };
 }
+
+/** How high a ball stands at most, as a share of how wide it is: higher, it would float off the surface it was set on. */
+const BALL_HIGHEST = 0.9;
+/** How far up the surface under every point of a stroke has to face for the ball to be a cap of earth on it, laid as a layer. */
+const BALL_CAP_UP = 0.75;
+
+/** One point the ball rolls over, and the way out of the surface there (up when nothing says). */
+export interface BallSample {
+  readonly point: ConstructionPosition;
+  readonly outward?: ConstructionPosition | undefined;
+}
+
+/** How far out of the surface the ball's middle stands, for a ball `radius` round standing `height` out of it. */
+const ballOffset = (radius: number, height: number) => Math.min(height, 2 * radius * BALL_HIGHEST) - radius;
+
+/** `samples` thinned to one every `step` in plan, the last kept. */
+function thinnedSamples(samples: readonly BallSample[], step: number): BallSample[] {
+  const kept: BallSample[] = [];
+  for (const sample of samples) {
+    const last = kept.at(-1);
+    if (!last || Math.hypot(sample.point.x - last.point.x, sample.point.z - last.point.z) >= step) kept.push(sample);
+  }
+  const end = samples.at(-1);
+  if (end && kept.at(-1) !== end && kept.length > 1) kept[kept.length - 1] = end;
+  return kept;
+}
+
+/**
+ * Where the ball's middle runs, a stroke of it: each point of the stroke
+ * moved out of the surface there -- or into it, dug -- so the ball stands
+ * `height` out of it (or sinks that deep), at most nine tenths of its width.
+ * A cap (`ballShape`) is drawn as the half ball it grows into.
+ */
+export function ballPath(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionPosition[] {
+  const offset = Math.max(0, ballOffset(radius, height)) * (effect === "add" ? 1 : -1);
+  return thinnedSamples(samples, radius * PATH_STEP).map(({ point, outward }) => {
+    const out = outward ?? { x: 0, y: 1, z: 0 };
+    return { x: point.x + out.x * offset, y: point.y + out.y * offset, z: point.z + out.z * offset };
+  });
+}
+
+/**
+ * A ball of earth, `radius` round, rolled along a stroke: added standing
+ * `height` out of the surface under it, or dug that deep in. Over ground
+ * facing up, a ball no higher than it is round is a cap of earth on the
+ * ground -- a layer, the ground's own surface moved, `radius` wide where it
+ * meets the ground and `height` high: at `height = radius` the half ball
+ * itself, so the cap grows into the whole ball without a jump. Anywhere
+ * else -- a hillside's flank, a cliff, a ball set on the last one -- it is
+ * the ball itself, through the volume.
+ */
+export function ballShape(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionVolumeShape | undefined {
+  const kept = thinnedSamples(samples, radius * PATH_STEP);
+  if (kept.length === 0) return undefined;
+  const standing = Math.min(height, 2 * radius * BALL_HIGHEST);
+  const capped = standing <= radius && kept.every(({ outward }) => (outward?.y ?? 1) >= BALL_CAP_UP);
+  if (capped) return { effect: effect === "add" ? "raise" : "lower", radius, height: standing, path: kept.map(({ point }) => [point.x, point.y, point.z] as const) };
+  return { effect: effect === "add" ? "fill" : "carve", radius, path: ballPath(effect, kept, radius, height).map((p) => [p.x, p.y, p.z] as const) };
+}
+
+/** Directions round a point of a stroke the bare table is looked for in. */
+const BARE_DIRECTIONS = 12;
+
+/** Whether ground stands over `point` in plan, of `faces`. */
+function coveredBy(faces: readonly ConstructionRegionTopology[], x: number, z: number): boolean {
+  return faces.some((face) => {
+    const at = new Map(face.nodes.map((node) => [node.id, node.position]));
+    const ring = (face.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined);
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i]!, b = ring[j]!;
+      if ((a.z > z) !== (b.z > z) && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+    }
+    return inside;
+  });
+}
+
+/**
+ * The ground run on over the bare table under a ball about to be added
+ * through the volume, where some of the ball's reach has no ground under it:
+ * a layer a couple of centimetres thin, resting on the table, `reach` round
+ * every point the ball rolls over. Laid first, it puts ground all round the
+ * ball, so the volume edit meets ground on every side of what it lays again
+ * -- set on the ground's own edge, the volume edit's ring would be half held
+ * and half free, and the ground along the free half came back missing.
+ * `undefined` where ground stands under all of it already.
+ */
+export function groundRunOn(
+  runtime: { getRegionTopologiesInBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }): readonly ConstructionRegionTopology[] },
+  samples: readonly BallSample[],
+  reach: number,
+): ConstructionVolumeShape | undefined {
+  const kept = thinnedSamples(samples, reach * PATH_STEP * 0.5);
+  if (kept.length === 0) return undefined;
+  const xs = kept.map(({ point }) => point.x), zs = kept.map(({ point }) => point.z);
+  const ground = runtime.getRegionTopologiesInBounds({ minX: Math.min(...xs) - reach, minZ: Math.min(...zs) - reach, maxX: Math.max(...xs) + reach, maxZ: Math.max(...zs) + reach })
+    .filter((face) => hasTrait(face.surfaceType, "ground"));
+  if (ground.length === 0) return undefined;
+  const bare = kept.some(({ point }) => Array.from({ length: BARE_DIRECTIONS + 1 }, (_, k) => k).some((k) => {
+    const angle = (2 * Math.PI * k) / BARE_DIRECTIONS, r = k === BARE_DIRECTIONS ? 0 : reach;
+    return !coveredBy(ground, point.x + Math.cos(angle) * r, point.z + Math.sin(angle) * r);
+  }));
+  if (!bare) return undefined;
+  return { effect: "raise", radius: reach, height: GROUND_RUN_ON_HEIGHT, path: kept.map(({ point }) => [point.x, point.y, point.z] as const) };
+}
+
+/** How thick the ground run on over the bare table under a ball is: next to nothing, a layer to rest the ball on. */
+const GROUND_RUN_ON_HEIGHT = 0.02;
 
 /** Where the volume a stroke would carve or fill runs, for its ghost: the very path the commit uses. */
 export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {

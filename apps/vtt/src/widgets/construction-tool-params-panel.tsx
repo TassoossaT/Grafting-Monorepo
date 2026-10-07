@@ -205,20 +205,20 @@ function TerrainSculptFields(props: {
 }) {
   const { params, onChange } = props;
   const currentMode = params.mode ?? "add";
-  const isDig = currentMode === "dig" || currentMode === "lower";
-  const isAdd = currentMode === "add" || currentMode === "elevate";
+  const isDig = currentMode === "dig" || currentMode === "lower" || currentMode === "carve";
+  const isAdd = currentMode === "add" || currentMode === "elevate" || currentMode === "fill";
   const elevationStep = params.elevationStep ?? 2.0;
 
   const elevationLabel = isAdd
-    ? "Incremento de altura (+m)"
+    ? "Quanto a bola sobe do chão (+m)"
     : isDig
-      ? "Profundidade do corte (-m)"
+      ? "Quanto a bola afunda no chão (-m)"
       : "Intensidade do nivelamento";
 
   // Which stroke -- add, remove, flatten -- is picked in the dock below the map; here only how it acts.
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
+      {sliderRow(isAdd || isDig ? "Raio da bola" : "Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
       {sliderRow(elevationLabel, elevationStep, 0.2, 20.0, 0.2, (step) =>

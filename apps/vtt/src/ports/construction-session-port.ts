@@ -585,6 +585,25 @@ export interface ConstructionTerrainVolumeEditRequest {
   readonly table?: number;
   /** Structures standing round the patch: never solid, never laid again; the sides of it they hold are kept. */
   readonly neighbours?: ConstructionIndexedFaces;
+  /** {@link ConstructionSessionPort.layerTerrainSurface} only: structures the ground is brought to rest under, after the shapes. */
+  readonly beds?: readonly ConstructionGroundBed[];
+}
+
+/**
+ * A structure the ground rests under instead of being cut for it: brought up
+ * to `sink` under its faces where it lay at most `below` under that, down to
+ * it where it rose at most `above` over it, and eased back over a shoulder
+ * `margin` past the faces' rim and `slope` wide for every metre moved (at
+ * least `shoulder`). Ground farther off -- under a bridge -- is left alone.
+ */
+export interface ConstructionGroundBed {
+  readonly faces: ConstructionIndexedFaces;
+  readonly sink: number;
+  readonly below: number;
+  readonly above: number;
+  readonly margin: number;
+  readonly slope: number;
+  readonly shoulder: number;
 }
 
 /** The faces laid in place of the patch: the ring round it kept, node for node. */

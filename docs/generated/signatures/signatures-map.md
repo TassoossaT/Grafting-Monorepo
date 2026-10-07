@@ -166,7 +166,8 @@ pub fn remove(&mut self, region_id: &RegionId) -> Option<RegionBounds>
 
 // src/terrain_layer.rs
 pub struct TerrainLayerRequest
-pub fn layer_terrain_surface(request: TerrainLayerRequest) -> Result<TerrainRegenerateResponse, String>
+pub struct BedDto
+pub fn layer_terrain_surface(
 
 // src/terrain_regenerate.rs
 pub struct GivenPointDto
@@ -4067,6 +4068,21 @@ export function meetStructures(
   ): StructureMeeting {
   const standingHere = timePhase("estruturas no lugar", () => runtime.getRegionTopologiesInBounds(bounds));
 
+// src/composition/tabletop/terrain/terrain-conform.ts
+export interface TerrainConformRuntime extends GroundCommitRuntime {
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined;
+  }
+export const GROUND_REST_SINK = 0.08;
+export function conformGround(runtime: TerrainConformRuntime, fallout: CutFallout, causeId: string, tableId: string): number {
+  // Where the change was: where the structure stands, and where it stood.
+  const places = [
+  ...(fallout.footprintOutline ?? []).map(([x, z]) => ({ x, z })),
+  ...fallout.paintedNodes.map((node) => node.position),
+  ...(fallout.vacatedGround ?? []).flatMap((piece) => (piece[0] ?? []).map(([x, z]) => ({ x, z }))),
+  ...(fallout.carriedFrom ? [...fallout.carriedFrom.values()] : []),
+  ];
+
 // src/composition/tabletop/terrain/terrain-constraints.ts
 export interface ConstraintRing {
   /** What the generator receives. */
@@ -4103,10 +4119,10 @@ export function adoptContourNodes(
   positionOf: (vertex: number) => ConstructionPosition | undefined,
 
 // src/composition/tabletop/terrain/terrain-lattice-reaction.ts
-export interface LatticeReactionRuntime extends TerrainRegrowRuntime {
+export interface LatticeReactionRuntime extends TerrainRegrowRuntime, TerrainConformRuntime {
   getSnapshot(): { readonly tableId: string; readonly map: { readonly nodePositions: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
 export type LatticeRepairExecutor = (
-  runtime: TerrainRegrowRuntime,
+  runtime: TerrainRegrowRuntime & TerrainConformRuntime,
   fallout: CutFallout,
   causeId: string,
   tableId: string,
@@ -4118,7 +4134,7 @@ export function topologyIntersectsPolygon(topology: ConstructionRegionTopology, 
   const positions = new Map(topology.nodes.map((node) => [node.id, [node.position.x, node.position.z] as [number, number]]));
 export function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number) {
   const buckets = new Map<string, ConstructionPosition[]>();
-export function latticeRegenerateReaction(executor: LatticeRepairExecutor = regrowGround): Reaction<LatticeReactionRuntime> {
+export function latticeRegenerateReaction(executor: LatticeRepairExecutor = conformGround): Reaction<LatticeReactionRuntime> {
   return (runtime, effect, hits) => {
   if (effect.kind === "remove") {
   executor(
@@ -4153,10 +4169,27 @@ export function commitTerrainVolumeEdit(
   readonly seed: number;
   readonly table?: number;
   readonly surfaceType?: string;
+export function layerLaid(edited: ReturnType<ToolContext["runtime"]["layerTerrainSurface"]>, ids: readonly ConstructionNodeId[], given: readonly ConstructionNodeId[]): LaidGround | undefined {
+  if (!edited) return undefined;
+  const nodeOf = (origin: ConstructionSurfaceOrigin | null | undefined) => (origin === null || origin === undefined ? undefined : origin.kind === "patch" ? ids[origin.index] : given[origin.index]);
 export function carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
 export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number, outward?: ConstructionPosition): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
+export interface BallSample {
+  readonly point: ConstructionPosition;
+  readonly outward?: ConstructionPosition | undefined;
+  }
+export function ballPath(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionPosition[] {
+  const offset = Math.max(0, ballOffset(radius, height)) * (effect === "add" ? 1 : -1);
+export function ballShape(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionVolumeShape | undefined {
+  const kept = thinnedSamples(samples, radius * PATH_STEP);
+export function groundRunOn(
+  runtime: { getRegionTopologiesInBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }): readonly ConstructionRegionTopology[] },
+  samples: readonly BallSample[],
+  reach: number,
+  ): ConstructionVolumeShape | undefined {
+  const kept = thinnedSamples(samples, reach * PATH_STEP * 0.5);
 export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {
   const shape = mode === "carve" ? carveShape(points, radius) : fillShape(points, radius, rise);
 export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number): ConstructionVolumeShape | undefined {

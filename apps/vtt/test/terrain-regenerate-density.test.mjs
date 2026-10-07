@@ -73,6 +73,31 @@ function density(runtime) {
   return { faces: faces.length, perFace: faces.reduce((sum, t) => sum + planArea(t), 0) / faces.length };
 }
 
+/** The top of the ground over a point of the plane, read off its own corners. */
+function groundTop(runtime, x, z) {
+  let top = -Infinity;
+  for (const t of terrain(runtime)) {
+    const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
+    for (let k = 1; k + 1 < ring.length; k++) {
+      const [a, b, c] = [ring[0], ring[k], ring[k + 1]];
+      const d = (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
+      if (Math.abs(d) < 1e-12) continue;
+      const u = ((b.x - x) * (c.z - z) - (c.x - x) * (b.z - z)) / d, v = ((c.x - x) * (a.z - z) - (a.x - x) * (c.z - z)) / d, w = 1 - u - v;
+      if (u >= -1e-9 && v >= -1e-9 && w >= -1e-9) top = Math.max(top, u * a.y + v * b.y + w * c.y);
+    }
+  }
+  return top;
+}
+
+/** Whether the ground lies just under a floor at `y` all over the box -- never through it, never a hole. */
+const restsUnder = (runtime, [x0, z0, x1, z1], y) => {
+  for (let x = x0 + 0.13; x < x1; x += 0.5) for (let z = z0 + 0.13; z < z1; z += 0.5) {
+    const top = groundTop(runtime, x, z);
+    if (!(top <= y + 0.02 && top > y - 0.2)) return false;
+  }
+  return true;
+};
+
 /** Whether some ground face stands with its middle inside the box, in plan. */
 const groundUnder = (runtime, [x0, z0, x1, z1]) => terrain(runtime).some((t) => {
   const x = t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length, z = t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length;
@@ -94,7 +119,7 @@ function floorAt(ctx, [x0, z0, x1, z1], y) {
 /** Five floors resting on flat ground, off its grid lines, the last between two others. */
 const FLOORS = [[-9.3, -1.7, -5.7, 1.7], [-4.7, -1.7, -1.1, 1.7], [-0.3, -1.7, 3.3, 1.7], [4.1, -1.7, 7.7, 1.7], [-4.7, 2.5, -1.1, 5.9]];
 
-test("floors cut one after another into 2 m ground keep it near 2 m and cut every one of them", () => {
+test("floors laid one after another on 2 m ground keep it near 2 m and rest every one of them on it", () => {
   const { runtime, ctx, calls, session } = setup(2, 14);
   try {
     const start = density(runtime);
@@ -104,7 +129,7 @@ test("floors cut one after another into 2 m ground keep it near 2 m and cut ever
       floorAt(ctx, box, 0.1);
       assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
       const [x0, z0, x1, z1] = box;
-      assert.ok(!groundUnder(runtime, [x0 + 0.2, z0 + 0.2, x1 - 0.2, z1 - 0.2]), `no ground left under ${JSON.stringify(box)}`);
+      assert.ok(restsUnder(runtime, [x0, z0, x1, z1], 0.1), `the ground lies just under ${JSON.stringify(box)}`);
       after.push(density(runtime));
       probe("after", box, after.at(-1));
     }
@@ -117,17 +142,13 @@ test("floors cut one after another into 2 m ground keep it near 2 m and cut ever
   } finally { session.free(); }
 });
 
-test("a small floor cut into coarse ground is laid back at that ground's size, never at 2 m", () => {
+test("a small floor laid on coarse ground leaves it at that ground's size, never at 2 m", () => {
   const { runtime, ctx, calls, session } = setup(6, 6);
   try {
     const start = density(runtime);
     floorAt(ctx, [-1.6, -1.4, 1.4, 1.6], 0.1);
     assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
-    const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform");
-    const ground = terrain(runtime).flatMap((t) => t.nodes.map((n) => n.position));
-    const met = floor.nodes.filter((c) => ground.some((p) => Math.hypot(p.x - c.position.x, p.y - c.position.y, p.z - c.position.z) < 1e-3));
-    assert.equal(met.length, 4, "the ground was cut round the floor and comes up to every corner");
-    assert.ok(!groundUnder(runtime, [-1.4, -1.2, 1.2, 1.4]), "and none is left under it");
+    assert.ok(restsUnder(runtime, [-1.6, -1.4, 1.4, 1.6], 0.1), "the ground lies just under it");
     const end = density(runtime);
     probe("coarse", start, end);
     // At 2 m the four 6 m faces this touches came back as dozens.
@@ -200,5 +221,28 @@ test("a floor resized by its side again and again keeps its four corners and the
     }
     probe("resizes", created, counts);
     assert.ok(counts.every((faces) => Math.abs(faces - created) <= 25), `the ground's face count holds: ${created} -> ${counts.join(", ")}`);
+  } finally { session.free(); }
+});
+
+// Resting the ground under a floor raises it, and each move leaves the bank
+// it raised where the floor stood: the ground laid again round it must not
+// grow denser for it, move after move.
+test("a floor raised off flat ground, moved back and forth, has the ground brought up under it every time and leaves it no denser", () => {
+  const { runtime, ctx, calls, session } = setup(2, 14);
+  try {
+    floorAt(ctx, [-2.3, -1.7, 2.3, 1.7], 0.6);
+    assert.ok(restsUnder(runtime, [-2.3, -1.7, 2.3, 1.7], 0.6), "brought up under it");
+    const created = density(runtime).faces;
+    const counts = [];
+    for (let move = 0; move < 8; move += 1) {
+      dragAlongX(ctx, handlesOf(runtime).find((h) => h.kind === "pivot"), move % 2 === 0 ? 1.3 : -1.3);
+      assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+      const xs = platformOf(runtime).nodes.map((n) => n.position.x);
+      assert.ok(restsUnder(runtime, [Math.min(...xs), -1.7, Math.max(...xs), 1.7], 0.6), `brought up under it after move ${move + 1}`);
+      counts.push(density(runtime).faces);
+    }
+    probe("raised moves", created, counts);
+    // Every bank left behind is laid again round the next: a few faces a move, fewer each time (204 -> 247 over eight).
+    assert.ok(counts.every((faces) => faces - created <= 50), `the ground's face count holds: ${created} -> ${counts.join(", ")}`);
   } finally { session.free(); }
 });

@@ -36,7 +36,8 @@ import {
 } from "../../../features/edit-construction/index.ts";
 import { timePhase } from "../commit-timing.ts";
 import { paintedFalloutOf } from "../interference/painted-topologies.ts";
-import { regrowGround, type TerrainRegrowRuntime } from "./terrain-regrow.ts";
+import type { TerrainRegrowRuntime } from "./terrain-regrow.ts";
+import { conformGround, type TerrainConformRuntime } from "./terrain-conform.ts";
 import { REALLY_MOVED, changeAreaOf, largestOuterRing } from "../effects/change-area.ts";
 import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
@@ -52,14 +53,14 @@ import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
  */
 
 /** What regenerating ground needs of the runtime, read and written inside the pipeline's transaction. */
-export interface LatticeReactionRuntime extends TerrainRegrowRuntime {
+export interface LatticeReactionRuntime extends TerrainRegrowRuntime, TerrainConformRuntime {
   getSnapshot(): { readonly tableId: string; readonly map: { readonly nodePositions: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
   getFootprintCoverage?(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[];
 }
 
 /** Regenerates one ground type's consumed faces; returns how many it built. */
 export type LatticeRepairExecutor = (
-  runtime: TerrainRegrowRuntime,
+  runtime: TerrainRegrowRuntime & TerrainConformRuntime,
   fallout: CutFallout,
   causeId: string,
   tableId: string,
@@ -708,10 +709,11 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
 }
 
 /**
- * Builds the reaction around an executor. The default regenerates for real;
- * tests hand in a recorder to see exactly what a regeneration would be given.
+ * Builds the reaction around an executor. The default brings the ground to
+ * rest under the structures (`conformGround`) for real; tests hand in a
+ * recorder to see exactly what a regeneration would be given.
  */
-export function latticeRegenerateReaction(executor: LatticeRepairExecutor = regrowGround): Reaction<LatticeReactionRuntime> {
+export function latticeRegenerateReaction(executor: LatticeRepairExecutor = conformGround): Reaction<LatticeReactionRuntime> {
   return (runtime, effect, hits) => {
     if (effect.kind === "remove") {
       executor(

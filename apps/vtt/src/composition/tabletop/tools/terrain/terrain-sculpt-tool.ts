@@ -3,21 +3,26 @@ import type { TerrainSculptParams } from "@/features/edit-construction";
 import type { ConstructionPosition, ConstructionVolumeShape } from "@/ports";
 
 import { capsuleWireframe } from "../shapes/preview-shapes.ts";
-import { carveShape, commitTerrainVolumeEdit, fillShape, levelShapes, moundShape } from "../../terrain/terrain-volume-edit.ts";
+import { ballPath, ballShape, carveShape, commitTerrainVolumeEdit, fillShape, groundRunOn, levelShapes } from "../../terrain/terrain-volume-edit.ts";
 import { timeCommit } from "../../commit-timing.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
  * The terrain brush: every mode an edit of the ground's volume (note 0012).
  *
- * - **Adicionar** lays a layer of earth along the stroke, **Remover** takes
- *   one off: `elevationStep` deep where the stroke ran, thinning to nothing
- *   at the brush's radius, over the ground it lies on.
+ * - **Adicionar** and **Remover** are one ball of earth, `brushRadius` round,
+ *   rolled along the stroke on the ground it touches: added standing
+ *   `elevationStep` out of the surface under the pointer, or dug that deep
+ *   into it -- out of whichever side of it the pointer sees, so a ball set on
+ *   a hillside grows it sideways, one set on the last ball bridges a gap, one
+ *   dug into a cliff bores a tunnel, ball by ball. On the bare table it rests
+ *   on the table. Where the stroke runs over ground facing up and the ball
+ *   stands no higher than it is round, it is a cap of earth on the ground --
+ *   laid as a layer, the ground's own surface moved; anywhere else it goes
+ *   through the ground's volume.
  * - **Aplainar** levels the ground under the stroke at the height it starts
  *   on: filled up to it and cut down to it, a few metres either way and no
  *   further.
- * - **Cavar 3D** and **Erguer 3D** push a bore into the ground or raise an
- *   arch of earth over it.
  *
  * The engine lays the result on the ground's own surface -- a layer or a
  * level by moving it (`layer_surface`), a bore or an arch through the volume
@@ -31,6 +36,9 @@ const VOLUME_GHOST_COLOR = 0xe2e8f0;
 
 /** The table's height: new ground laid on the bare table rests on it. */
 const TABLE_HEIGHT = 0;
+
+/** How far past a ball, in faces, the ground is run on over the bare table under it: past what the volume edit lays again round it. */
+const EDGE_REACH_FACES = 3;
 
 /** How far above and below its level a levelling stroke reaches, at least. */
 const LEVEL_REACH_STEPS = 2;
@@ -55,11 +63,41 @@ function outwardOf(sample: PointerSample | undefined): ConstructionPosition | un
   return { x: normal.x * sign, y: normal.y * sign, z: normal.z * sign };
 }
 
-/** The shapes a stroke carves or fills, in order. */
+/** Whether a stroke only takes ground away -- it never rests anything on the table. */
+const takesAway = (params: TerrainSculptParams) => params.mode === "carve" || params.mode === "dig" || params.mode === "lower";
+
+/** The ball's way -- added or dug -- or `undefined` for a stroke that is no ball. "elevate" and "lower" are the older names of the same two. */
+function ballOf(params: TerrainSculptParams): "add" | "dig" | undefined {
+  switch (params.mode ?? "add") {
+    case "add":
+    case "elevate":
+      return "add";
+    case "dig":
+    case "lower":
+      return "dig";
+    default:
+      return undefined;
+  }
+}
+
+/** Each sample as the ball rolls on it: where, and out of which side of the surface. */
+const rolled = (samples: readonly PointerSample[]) => samples.map((sample) => ({ point: sample.point, outward: outwardOf(sample) }));
+
+/**
+ * The shapes a stroke carves or fills, in order. "carve" and "fill" -- a bore
+ * pushed level into the ground from where the stroke starts, an arch from
+ * where it starts to where it ends -- are kept for whoever asks for them by
+ * name; the dock offers the ball.
+ */
 function strokeShapes(params: TerrainSculptParams, samples: readonly PointerSample[]): readonly ConstructionVolumeShape[] {
   const points = samples.map((sample) => sample.point);
   const step = params.elevationStep ?? 2;
-  switch (params.mode ?? "add") {
+  const ball = ballOf(params);
+  if (ball) {
+    const shape = ballShape(ball, rolled(samples), params.brushRadius, step);
+    return shape ? [shape] : [];
+  }
+  switch (params.mode) {
     case "carve": {
       const shape = carveShape(points, params.brushRadius);
       return shape ? [shape] : [];
@@ -68,22 +106,10 @@ function strokeShapes(params: TerrainSculptParams, samples: readonly PointerSamp
       const shape = fillShape(points, params.brushRadius, step, outwardOf(samples[0]));
       return shape ? [shape] : [];
     }
-    case "flatten":
+    default:
       return levelShapes(points, params.brushRadius, Math.max(step * LEVEL_REACH_STEPS, params.brushRadius));
-    case "dig":
-    case "lower": {
-      const shape = moundShape("lower", points, params.brushRadius, step);
-      return shape ? [shape] : [];
-    }
-    default: {
-      const shape = moundShape("raise", points, params.brushRadius, step);
-      return shape ? [shape] : [];
-    }
   }
 }
-
-/** Whether a stroke only takes ground away -- it never rests anything on the table. */
-const takesAway = (params: TerrainSculptParams) => params.mode === "carve" || params.mode === "dig" || params.mode === "lower";
 
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -98,11 +124,12 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const shapes = strokeShapes(params, gesture.samples);
     const shape = shapes[0];
     if (!shape) return undefined;
+    // The ball as the ball, rolled along the stroke -- whichever way the
+    // engine lays it; a level as the level itself, flat.
+    const ball = ballOf(params);
+    if (ball) return capsuleWireframe(ballPath(ball, rolled(gesture.samples), params.brushRadius, params.elevationStep ?? 2), params.brushRadius, VOLUME_GHOST_COLOR, 0.75, 1);
     const path = shape.path.map(([x, y, z]) => ({ x, y, z }));
-    // A level is drawn as the level itself, a layer as the reach of the
-    // brush along the ground: the stroke's plan, flat.
-    const flat = shape.column !== undefined || shape.effect === "raise" || shape.effect === "lower";
-    return capsuleWireframe(path, shape.radius, VOLUME_GHOST_COLOR, 0.75, flat ? 0 : shape.squash ?? 1);
+    return capsuleWireframe(path, shape.radius, VOLUME_GHOST_COLOR, 0.75, shape.column !== undefined ? 0 : shape.squash ?? 1);
   },
 
   // Presence of this hook makes the generic dispatcher capture and sample the drag; the ground is only ever laid on release.
@@ -131,16 +158,23 @@ function volumeStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainScu
     return;
   }
   const surfaceType = params.targetSurface && hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
+  const options = {
+    seed: Math.floor(params.seed ?? 1) || 1,
+    surfaceType,
+    // The brush's own face size, every stroke: read off the ground it lays,
+    // each stroke would lay finer than the last.
+    faceSide: strokeFaceSize(params),
+    ...(takesAway(params) ? {} : { table: TABLE_HEIGHT }),
+  };
   try {
+    // A ball added through the volume over the ground's edge: the ground run
+    // on over the bare table under it first, so it is set on ground all round.
+    const ball = ballOf(params) === "add" && shapes[0]?.effect === "fill"
+      ? groundRunOn(ctx.runtime, rolled(gesture.samples), params.brushRadius + EDGE_REACH_FACES * strokeFaceSize(params))
+      : undefined;
+    if (ball) timeCommit("terreno: chão sob a bola", () => commitTerrainVolumeEdit(ctx, [ball], options));
     // Timed whole -- engine, graph and render -- so the debug panel shows what the stroke cost.
-    const { faces } = timeCommit(`terreno: ${params.mode ?? "add"}`, () => commitTerrainVolumeEdit(ctx, shapes, {
-      seed: Math.floor(params.seed ?? 1) || 1,
-      surfaceType,
-      // The brush's own face size, every stroke: read off the ground it lays,
-      // each stroke would lay finer than the last.
-      faceSide: strokeFaceSize(params),
-      ...(takesAway(params) ? {} : { table: TABLE_HEIGHT }),
-    }));
+    const { faces } = timeCommit(`terreno: ${params.mode ?? "add"}`, () => commitTerrainVolumeEdit(ctx, shapes, options));
     if (faces === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
       return;

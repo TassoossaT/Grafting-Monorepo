@@ -27,6 +27,7 @@ use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
 
+use crate::bed::{Bed, BedIndex, Sheets, bedded, settled_under};
 use crate::edit::{Faces, newell};
 use crate::field::{Effect, Form, Shape};
 use crate::mesh_distance::MeshDistance;
@@ -47,6 +48,8 @@ pub struct LayerEdit {
     /// The table's height, where a layer laid past the ground rests new
     /// ground on the bare table. `None` never reaches past the ground.
     pub table: Option<f64>,
+    /// Structures the ground is brought to rest under, after the shapes.
+    pub beds: Vec<Bed>,
 }
 
 /// How much of the faces may lie turned over in plan, as a share of their
@@ -127,6 +130,12 @@ fn moved(point: Vec3, shapes: &[Shape], blend: f64, up: &dyn Fn(&Shape, Vec3) ->
         }
         _ => at,
     })
+}
+
+/// Every face of `faces` fanned from its first corner: its own sides, each
+/// once, whatever its shape -- the patch's border as its faces draw it.
+fn fanned(faces: &Faces) -> Vec<[usize; 3]> {
+    faces.faces.iter().filter(|face| face.len() >= 3).flat_map(|face| (1..face.len() - 1).map(move |k| [face[0], face[k], face[k + 1]])).collect()
 }
 
 /// The narrowest a shape is: what the faces laid on it must be finer than.
@@ -510,8 +519,10 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
         context_triangles.iter().map(|&[a, b, c]| cross_2d(plan(context.vertices[a]), plan(context.vertices[b]), plan(context.vertices[c]))).sum::<f64>() >= 0.0
     };
 
-    // The patch's own rings in plan: its rim and the holes structures make in it.
-    let loops = border_loops(triangles);
+    // The patch's own rings in plan: its rim and the holes structures make in
+    // it -- read off its faces, never off their triangles: a face folded on
+    // itself clips to nothing, and its place would read as a hole.
+    let loops = border_loops(&fanned(patch));
     // Every corner the new ground may come to stand on, by one numbering: the
     // patch's own, then the ground's round it, then the structures'. A layer
     // run on out over the table meets the ground and structures beside it on
@@ -547,6 +558,8 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
     };
 
     let locator = PlanLocator::new(&patch.vertices, triangles, counter_clockwise, face_side.max(1.0));
+    let beds: Vec<BedIndex> = edit.beds.iter().map(BedIndex::new).collect();
+    let sheets = Sheets::new(&[patch, context], face_side);
     // Past the patch, a layer laid rests on the table wherever no ground or
     // structure already stands.
     let raised: Vec<&Shape> = edit.shapes.iter().filter(|s| s.effect == Effect::Raise).collect();
@@ -625,7 +638,7 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
             continue;
         }
         let base = locator.height(point, face_side * 0.5).or(edit.table).unwrap_or(0.0);
-        vertices.push(moved(Vec3::new(point.x, base, point.y), &edit.shapes, edit.blend, &vertical));
+        vertices.push(bedded(moved(Vec3::new(point.x, base, point.y), &edit.shapes, edit.blend, &vertical), &beds, &sheets));
     }
     // A corner on a side somebody holds -- the patch's rim, the ground or a
     // structure beside it -- lies on that side, named with its two ends.
@@ -649,6 +662,12 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
         vertices[node.vertex] = at_a.lerp(at_b, t);
         landed.push(Landing { vertex: node.vertex, from, to });
     }
+    // Never through a structure between the corners resting under it.
+    let mut movable: Vec<bool> = origin.iter().map(Option::is_none).collect();
+    for landing in &landed {
+        movable[landing.vertex] = false;
+    }
+    settled_under(&mut vertices, &grid.mesh.faces, &movable, &beds, &sheets);
     // The grid winds counter-clockwise in plan; the patch's own winding back.
     let faces = grid.mesh.faces.iter().map(|face| if counter_clockwise { face.clone() } else { face.iter().rev().copied().collect() }).collect();
     Ok(RegeneratedSurface { vertices, faces, origin, landed, refinement_complete: grid.refinement_complete })
@@ -769,7 +788,7 @@ fn layer_on_surface(patch: &Faces, triangles: &[[usize; 3]], context: &Faces, ed
     let out = if rising < 0.0 { -1.0 } else { 1.0 };
 
     let mut support = patch.vertices.clone();
-    let rim: HashSet<usize> = border_loops(triangles).into_iter().flatten().collect();
+    let rim: HashSet<usize> = border_loops(&fanned(patch)).into_iter().flatten().collect();
     let fine = refined(&mut support, triangles.to_vec(), face_side * 0.5, 3);
     // The ground's normal under every point of each path.
     let surface = MeshDistance::new(support.clone(), &fine.iter().map(|t| t.to_vec()).collect::<Vec<_>>(), face_side);
@@ -811,7 +830,9 @@ fn layer_on_surface(patch: &Faces, triangles: &[[usize; 3]], context: &Faces, ed
         }
         (best.1, best.2)
     };
-    let displaced: Vec<Vec3> = support.iter().enumerate().map(|(v, &p)| if rim.contains(&v) { p } else { moved(p, &edit.shapes, edit.blend, &across) }).collect();
+    let beds: Vec<BedIndex> = edit.beds.iter().map(BedIndex::new).collect();
+    let sheets = Sheets::new(&[patch, context], face_side);
+    let displaced: Vec<Vec3> = support.iter().enumerate().map(|(v, &p)| if rim.contains(&v) { p } else { bedded(moved(p, &edit.shapes, edit.blend, &across), &beds, &sheets) }).collect();
 
     // The holes in the patch -- structures standing in it -- gone round,
     // never capped: the ground goes round them as they are.

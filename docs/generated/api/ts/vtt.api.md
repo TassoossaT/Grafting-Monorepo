@@ -758,6 +758,8 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
 
+### `method vtt.effect-commit.EffectCommitRuntime.layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
@@ -1557,6 +1559,31 @@ about to be laid there meets them. `terrainStanding` is the ground around,
 read for the ground's own height; `restingOn` the ground being laid, the
 only ground whose structures count -- by default all of it.
 
+### `interface vtt.terrain-conform.TerrainConformRuntime`
+
+What resting the ground needs of the runtime.
+
+### `method vtt.terrain-conform.TerrainConformRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.terrain-conform.TerrainConformRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
+
+### `method vtt.terrain-conform.TerrainConformRuntime.getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[]`
+
+### `method vtt.terrain-conform.TerrainConformRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> } }`
+
+### `method vtt.terrain-conform.TerrainConformRuntime.layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined`
+
+### `variable vtt.terrain-conform.GROUND_REST_SINK: 0.08`
+
+How far under a structure's faces the ground comes to rest.
+
+### `function vtt.terrain-conform.conformGround(runtime: TerrainConformRuntime, fallout: CutFallout, causeId: string, tableId: string): number`
+
+Brings the ground round a changed structure to rest under every structure
+standing there. `fallout` says where the change was: the structure's
+footprint and nodes, where it stood before, and what it cut. Returns how
+many faces it laid.
+
 ### `interface vtt.terrain-constraints.AdoptionRuntime`
 
 What adoptContourNodes needs of the runtime.
@@ -1671,18 +1698,21 @@ What regenerating ground needs of the runtime, read and written inside the pipel
 
 ### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
 
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined`
+
 ### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
 ### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined`
 
-### `type vtt.terrain-lattice-reaction.LatticeRepairExecutor = (runtime: TerrainRegrowRuntime, fallout: CutFallout, causeId: string, tableId: string) => number`
+### `type vtt.terrain-lattice-reaction.LatticeRepairExecutor = (runtime: TerrainRegrowRuntime & TerrainConformRuntime, fallout: CutFallout, causeId: string, tableId: string) => number`
 
 Regenerates one ground type's consumed faces; returns how many it built.
 
 ### `function vtt.terrain-lattice-reaction.latticeRegenerateReaction(executor: LatticeRepairExecutor): Reaction<LatticeReactionRuntime>`
 
-Builds the reaction around an executor. The default regenerates for real;
-tests hand in a recorder to see exactly what a regeneration would be given.
+Builds the reaction around an executor. The default brings the ground to
+rest under the structures (`conformGround`) for real; tests hand in a
+recorder to see exactly what a regeneration would be given.
 
 ### `function vtt.terrain-lattice-reaction.pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number): { isNear: any }`
 
@@ -1719,6 +1749,32 @@ touched, so moving it back and forth does not grow the face count.
 The `"lattice-regenerate"` reaction's executor: the ground grown back round
 the structure that cut it, on the ground's own surface. Returns the faces built.
 
+### `interface vtt.terrain-volume-edit.BallSample`
+
+One point the ball rolls over, and the way out of the surface there (up when nothing says).
+
+### `property vtt.terrain-volume-edit.BallSample.outward?: ConstructionPosition`
+
+### `property vtt.terrain-volume-edit.BallSample.point: ConstructionPosition`
+
+### `function vtt.terrain-volume-edit.ballPath(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionPosition[]`
+
+Where the ball's middle runs, a stroke of it: each point of the stroke
+moved out of the surface there -- or into it, dug -- so the ball stands
+`height` out of it (or sinks that deep), at most nine tenths of its width.
+A cap (`ballShape`) is drawn as the half ball it grows into.
+
+### `function vtt.terrain-volume-edit.ballShape(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionVolumeShape | undefined`
+
+A ball of earth, `radius` round, rolled along a stroke: added standing
+`height` out of the surface under it, or dug that deep in. Over ground
+facing up, a ball no higher than it is round is a cap of earth on the
+ground -- a layer, the ground's own surface moved, `radius` wide where it
+meets the ground and `height` high: at `height = radius` the half ball
+itself, so the cap grows into the whole ball without a jump. Anywhere
+else -- a hillside's flank, a cliff, a ball set on the last one -- it is
+the ball itself, through the volume.
+
 ### `function vtt.terrain-volume-edit.carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined`
 
 A carve pushed into the ground from where the stroke starts: level at that
@@ -1740,6 +1796,21 @@ the ground at both, arched `rise` over the line between them -- a bridge.
 A click without a drag is a ball standing out of the surface it was set
 on, `outward` from it: set on the side of the last ball, it grows the
 ground on sideways, and balls set one on another bridge a gap.
+
+### `function vtt.terrain-volume-edit.groundRunOn(runtime: { getRegionTopologiesInBounds: any }, samples: readonly BallSample[], reach: number): ConstructionVolumeShape | undefined`
+
+The ground run on over the bare table under a ball about to be added
+through the volume, where some of the ball's reach has no ground under it:
+a layer a couple of centimetres thin, resting on the table, `reach` round
+every point the ball rolls over. Laid first, it puts ground all round the
+ball, so the volume edit meets ground on every side of what it lays again
+-- set on the ground's own edge, the volume edit's ring would be half held
+and half free, and the ground along the free half came back missing.
+`undefined` where ground stands under all of it already.
+
+### `function vtt.terrain-volume-edit.layerLaid(edited: ConstructionTerrainRegeneration | undefined, ids: readonly string[], given: readonly string[]): LaidGround | undefined`
+
+The ground a layer laid (`layerTerrainSurface`), in the nodes it stands on: the patch's own, and the ground's and structures' round it (`given`, in that order).
 
 ### `function vtt.terrain-volume-edit.levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number): readonly ConstructionVolumeShape[]`
 
@@ -10947,6 +11018,28 @@ Minimum angle in degrees for triangles (default 20.5).
 
 Minimum triangle area ratio relative to maximum allowed area (default 0.25).
 
+### `interface vtt.construction-session-port.ConstructionGroundBed`
+
+A structure the ground rests under instead of being cut for it: brought up
+to `sink` under its faces where it lay at most `below` under that, down to
+it where it rose at most `above` over it, and eased back over a shoulder
+`margin` past the faces' rim and `slope` wide for every metre moved (at
+least `shoulder`). Ground farther off -- under a bridge -- is left alone.
+
+### `property vtt.construction-session-port.ConstructionGroundBed.above: number`
+
+### `property vtt.construction-session-port.ConstructionGroundBed.below: number`
+
+### `property vtt.construction-session-port.ConstructionGroundBed.faces: ConstructionIndexedFaces`
+
+### `property vtt.construction-session-port.ConstructionGroundBed.margin: number`
+
+### `property vtt.construction-session-port.ConstructionGroundBed.shoulder: number`
+
+### `property vtt.construction-session-port.ConstructionGroundBed.sink: number`
+
+### `property vtt.construction-session-port.ConstructionGroundBed.slope: number`
+
 ### `interface vtt.construction-session-port.ConstructionHostCurve`
 
 A host-traced edge, oriented as its loop walks it: straight or a cubic in the host's `(u, v)`.
@@ -11712,6 +11805,10 @@ Index-aligned with `vertices`: the patch vertex a corner of the ring is.
 ### `interface vtt.construction-session-port.ConstructionTerrainVolumeEditRequest`
 
 One edit of the ground's own mesh: the faces it lays again, the ground round them, and what to carve or fill.
+
+### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.beds?: readonly ConstructionGroundBed[]`
+
+ConstructionSessionPort.layerTerrainSurface only: structures the ground is brought to rest under, after the shapes.
 
 ### `property vtt.construction-session-port.ConstructionTerrainVolumeEditRequest.blend?: number`
 

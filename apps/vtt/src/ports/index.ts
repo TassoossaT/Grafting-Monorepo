@@ -79,6 +79,7 @@ export type {
   ConstructionTerrainRegeneration,
   ConstructionTerrainVolumeEdit,
   ConstructionTerrainVolumeEditRequest,
+  ConstructionGroundBed,
   ConstructionVolumeShape,
   ConstructionOrientedEdgeUse,
   ConstructionPosition,
