@@ -359,7 +359,9 @@ How wide one finished face should be, measured on the surface.
 
 ### `pub grafting_procgen_solid_field::Regeneration::holes: alloc::vec::Vec<alloc::vec::Vec<grafting_procgen_solid_field::regenerate::GivenPoint>>`
 
-Closed rings where structures rest on the ground: no ground inside.
+Closed rings where structures rest on the ground: no ground inside --
+but a ring wound the other way inside one is ground again, a block the
+structures close round (non-zero).
 
 ### `pub grafting_procgen_solid_field::Regeneration::relax_strength: f64`
 
@@ -567,7 +569,9 @@ How wide one finished face should be, measured on the surface.
 
 ### `pub grafting_procgen_solid_field::regenerate::Regeneration::holes: alloc::vec::Vec<alloc::vec::Vec<grafting_procgen_solid_field::regenerate::GivenPoint>>`
 
-Closed rings where structures rest on the ground: no ground inside.
+Closed rings where structures rest on the ground: no ground inside --
+but a ring wound the other way inside one is ground again, a block the
+structures close round (non-zero).
 
 ### `pub grafting_procgen_solid_field::regenerate::Regeneration::relax_strength: f64`
 

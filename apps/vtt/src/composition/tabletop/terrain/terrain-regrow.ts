@@ -8,7 +8,7 @@ import type {
   ConstructionTerrainRegenerateRequest,
   ConstructionTerrainRegeneration,
 } from "@/ports";
-import type { CutFallout, PlanarArea, PlanarPolygon } from "@/features/edit-construction";
+import type { CutFallout, PlanarArea, PlanarPolygon, PlanarRing } from "@/features/edit-construction";
 
 // Relative, not `@/...`: the test runner resolves no aliases.
 import {
@@ -246,6 +246,23 @@ function groundRoundContact(
   return closable.filter((face) => face.nodes.some((node) => reaches.some((r) => node.position.x >= r.minX && node.position.x <= r.maxX && node.position.z >= r.minZ && node.position.z <= r.maxZ)));
 }
 
+/** A point inside `ring` (closed or not): the middle of its widest span across a line through its middle. */
+function insideOf(ring: PlanarRing): { readonly x: number; readonly z: number } {
+  const points = ring.length > 1 && ring[0]![0] === ring.at(-1)![0] && ring[0]![1] === ring.at(-1)![1] ? ring.slice(0, -1) : ring;
+  const z = points.reduce((sum, p) => sum + p[1], 0) / Math.max(1, points.length);
+  const crossings: number[] = [];
+  points.forEach((a, k) => {
+    const b = points[(k + 1) % points.length]!;
+    if ((a[1] > z) !== (b[1] > z)) crossings.push(a[0] + ((z - a[1]) * (b[0] - a[0])) / (b[1] - a[1]));
+  });
+  crossings.sort((p, q) => p - q);
+  let best = { x: points[0]?.[0] ?? 0, width: -1 };
+  for (let k = 0; k + 1 < crossings.length; k += 2) {
+    if (crossings[k + 1]! - crossings[k]! > best.width) best = { x: (crossings[k]! + crossings[k + 1]!) / 2, width: crossings[k + 1]! - crossings[k]! };
+  }
+  return { x: best.x, z };
+}
+
 /**
  * `ring` with every structure corner lying on one of its sides put back in
  * there, in order along it. The plane's boolean drops a corner lying straight
@@ -324,8 +341,23 @@ function regrowPiece(runtime: TerrainRegrowRuntime, request: PieceRequest): numb
   } catch {
     area = meeting.area;
   }
-  const holes = area.flatMap((piece) => {
-    const closed = piece[0] ?? [];
+  // Every ring of the area: its outline, and the ground it closes round --
+  // the block between crossing roads -- which the engine takes back out of
+  // the hole (rings nested in one another alternate, hole and ground). A ring
+  // round ground still under a structure -- where a road stands clear of it
+  // and the ground runs on under -- stays hole: given back, that ground would
+  // reach the road's side from under it.
+  const blockOrOutline = (ring: PlanarRing, index: number) => index === 0 || !meeting.standsUnder(insideOf(ring));
+  // Wound counter-clockwise round a hole, clockwise round a block in it.
+  const wound = (ring: PlanarRing, index: number): PlanarRing => {
+    let twice = 0;
+    ring.forEach((a, k) => {
+      const b = ring[(k + 1) % ring.length]!;
+      twice += a[0] * b[1] - b[0] * a[1];
+    });
+    return (index === 0) === (twice > 0) ? ring : [...ring].reverse();
+  };
+  const holes = area.flatMap((piece) => piece.map(wound).filter(blockOrOutline)).flatMap((closed) => {
     const ring = withCornersOnSides(closed.length > 1 && closed[0]![0] === closed.at(-1)![0] && closed[0]![1] === closed.at(-1)![1] ? closed.slice(0, -1) : closed, corners);
     if (ring.length < 3) return [];
     const ids = ring.map(([x, z]) => {

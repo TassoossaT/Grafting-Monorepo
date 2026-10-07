@@ -46,7 +46,9 @@ pub struct GivenPoint {
 /// One repair: the rings to go round and the cells to lay.
 #[derive(Debug, Clone)]
 pub struct Regeneration {
-    /// Closed rings where structures rest on the ground: no ground inside.
+    /// Closed rings where structures rest on the ground: no ground inside --
+    /// but a ring wound the other way inside one is ground again, a block the
+    /// structures close round (non-zero).
     pub holes: Vec<Vec<GivenPoint>>,
     /// How wide one finished face should be, measured on the surface.
     pub face_side: f64,
@@ -673,6 +675,9 @@ fn ground_less_holes(
     let ring = |points: &[ConstraintPoint]| points.iter().map(|p| [p.position.x, p.position.y]).collect::<Vec<[f64; 2]>>();
     let subject: Vec<Vec<[f64; 2]>> = vec![ring(rim)];
     let clip: Vec<Vec<Vec<[f64; 2]>>> = holes.iter().filter(|h| h.len() >= 3).map(|h| vec![ring(h)]).collect();
+    // Non-zero: holes overlapping are one hole, and a ring wound the other
+    // way inside one -- the block between crossing roads -- is ground it
+    // closes round, taken back out of it.
     let pieces = subject.overlay(&clip, OverlayRule::Difference, FillRule::NonZero);
     let named = |[x, y]: [f64; 2]| -> ConstraintPoint {
         let source = known
