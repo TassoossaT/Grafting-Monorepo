@@ -8,9 +8,10 @@ import { commitPathCloudIntent } from "../src/composition/tabletop/path/path-clo
 import { createPathBrushEffect, DEFAULT_TOOL_PARAMS, hasTrait, pathFormationFor } from "../src/features/edit-construction/index.ts";
 
 /**
- * The terrain brush's ball, against the real engine: added and dug on the bare
- * table, on flat ground, on a hillside and into it -- one tool for both, never erasing:
- * so a ball rolled over the ground's edge only ever adds to it.
+ * The terrain brush, a terrain editor's (Flax's sculpt tools), against the
+ * real engine: Adicionar, Remover, Suavizar, Aplainar and Ruído, with
+ * strength, falloff and its kinds -- and a stroke over the ground's edge only
+ * ever adds to it, never erases.
  */
 
 function setup() {
@@ -103,84 +104,100 @@ function covered(runtime, extent = 24) {
   return points;
 }
 
-test("a ball added on the bare table rests ground on it, as high as asked; dug there it does nothing", () => {
+const top = (runtime, x, z) => sheetsAt(runtime, x, z).at(-1);
+
+test("Adicionar on the bare table rests ground on it, as high as asked, no wider than the brush", () => {
   const fixture = setup();
   try {
     const { runtime } = fixture;
     sculpt(fixture, [{ point: { x: 0, y: 0, z: 0 } }], { mode: "add", brushRadius: 4, elevationStep: 2 });
-    const top = sheetsAt(runtime, 0, 0).at(-1);
-    assert.ok(Math.abs(top - 2) < 0.25, `a cap of earth 2 m high: ${top}`);
-    assert.equal(sheetsAt(runtime, 6, 0).length, 0, "no wider than the ball where it meets the table");
+    assert.ok(Math.abs(top(runtime, 0, 0) - 2) < 0.25, `2 m high: ${top(runtime, 0, 0)}`);
+    assert.equal(sheetsAt(runtime, 6, 0).length, 0, "no wider than the brush");
   } finally { fixture.session.free(); }
 });
 
-for (const [label, radius, height] of [["a cap", 4, 2], ["a whole ball", 2, 3.4]]) {
-  test(`${label} rolled across the ground's edge onto the bare table only ever adds ground: nothing it covered goes`, () => {
+for (const [label, radius, height] of [["a low stroke", 4, 2], ["a stroke taller than it is wide", 2, 4]]) {
+  test(`${label} over the ground's edge onto the bare table only ever adds ground: nothing it covered goes`, () => {
     const fixture = setup();
     try {
       const { runtime } = fixture;
       stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 8, elevationStep: 2 });
       const before = covered(runtime);
-      const heightBefore = (x, z) => sheetsAt(runtime, x, z).at(-1) ?? 0;
-      const along = [[2, 0], [6, 0], [10, 0], [14, 0]].map(([x, z]) => [x, z, heightBefore(x, z)]);
-      // Along the edge too, round it.
-      stroke(fixture, [0, 0], [14, 0], { mode: "add", brushRadius: radius, elevationStep: height });
+      const along = [[2, 0], [6, 0], [10, 0]].map(([x, z]) => [x, z, top(runtime, x, z) ?? 0]);
+      // Across the edge, along it, a click on it, and a drag in from the bare table.
+      stroke(fixture, [0, 0], [12, 0], { mode: "add", brushRadius: radius, elevationStep: height });
       stroke(fixture, [7, -7], [7, 7], { mode: "add", brushRadius: radius, elevationStep: height });
-      // A click on the edge itself, and a drag in from the bare table.
-      stroke(fixture, [-4.6, -2], [-4.6, -2], { mode: "add", brushRadius: radius, elevationStep: height });
-      stroke(fixture, [-12, 8], [-2, 2], { mode: "add", brushRadius: radius, elevationStep: height });
+      stroke(fixture, [-7.6, -2], [-7.6, -2], { mode: "add", brushRadius: radius, elevationStep: height });
+      stroke(fixture, [-14, 8], [-2, 2], { mode: "add", brushRadius: radius, elevationStep: height });
       const after = new Set(covered(runtime).map(([x, z]) => `${x}:${z}`));
       assert.deepEqual(before.filter(([x, z]) => !after.has(`${x}:${z}`)), [], "every point that had ground still has it");
-      for (const [x, z, was] of along) assert.ok((sheetsAt(runtime, x, z).at(-1) ?? 0) > was + 0.5, `added to where it rolled, at ${x}: ${sheetsAt(runtime, x, z).at(-1)} over ${was}`);
+      for (const [x, z, was] of along) assert.ok((top(runtime, x, z) ?? 0) > was + 0.5, `added to where it ran, at ${x}: ${top(runtime, x, z)} over ${was}`);
     } finally { fixture.session.free(); }
   });
 }
 
-test("a ball set on a hillside's flank stands out of it sideways", () => {
-  const fixture = setup();
-  try {
-    const { runtime } = fixture;
-    stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 12, elevationStep: 10 });
-    // Pointed at the flank level from the side: the ball stands out of the slope, not up.
-    const sample = pointerAt(runtime, [30, 3, 0.01], [0, 3, 0.01]);
-    assert.ok(sample, "the pointer meets the flank");
-    const flank = sample.point.x;
-    sculpt(fixture, [sample], { mode: "add", brushRadius: 2.5, elevationStep: 4.5 });
-    const out = pointerAt(runtime, [30, 3, 0.01], [0, 3, 0.01]);
-    assert.ok(out && out.point.x > flank + 1.5, `the flank comes out to meet the pointer sooner: ${flank.toFixed(2)} -> ${out?.point.x.toFixed(2)}`);
-  } finally { fixture.session.free(); }
-});
-
-test("balls dug into a hillside one after another bore a tunnel into it", () => {
-  const fixture = setup();
-  try {
-    const { runtime } = fixture;
-    stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 14, elevationStep: 12 });
-    const dug = [];
-    for (let ball = 0; ball < 4; ball++) {
-      // Each ball set where the pointer now meets the hill: the back of the hole the last one dug.
-      const sample = pointerAt(runtime, [30, 3.5, 0.01], [0, 3.5, 0.01]);
-      assert.ok(sample, `the pointer meets the hill for ball ${ball + 1}`);
-      dug.push(sample.point.x);
-      sculpt(fixture, [sample], { mode: "dig", brushRadius: 1.8, elevationStep: 3.2 });
-    }
-    assert.ok(dug.every((x, k) => k === 0 || x < dug[k - 1] - 0.5), `each ball reaches further in: ${dug.map((x) => x.toFixed(1))}`);
-    // Along the way in, the hill stands over the hole: a floor, a ceiling and the hill's top.
-    const roofed = dug.slice(1).filter((x) => sheetsAt(runtime, x, 0.01).length >= 3);
-    assert.ok(roofed.length >= 2, `roofed over along the way in: ${dug.map((x) => sheetsAt(runtime, x, 0.01).map((y) => y.toFixed(1)).join("/"))}`);
-  } finally { fixture.session.free(); }
-});
-
-test("a ball dug along flat ground lays a trench as deep as asked", () => {
+test("Remover along flat ground lays a trench as deep as asked", () => {
   const fixture = setup();
   try {
     const { runtime } = fixture;
     stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 14, elevationStep: 3 });
-    const was = [-2, 2].map((x) => sheetsAt(runtime, x, 0).at(-1));
-    stroke(fixture, [-4, 0], [4, 0], { mode: "dig", brushRadius: 3, elevationStep: 1.5 });
-    [-2, 2].forEach((x, k) => {
-      const now = sheetsAt(runtime, x, 0).at(-1);
-      assert.ok(Math.abs(was[k] - now - 1.5) < 0.3, `1.5 m down at ${x}: ${was[k]} -> ${now}`);
-    });
+    const was = [-2, 2].map((x) => top(runtime, x, 0));
+    stroke(fixture, [-4, 0], [4, 0], { mode: "dig", brushRadius: 3, elevationStep: 1.5, falloff: 0.5 });
+    [-2, 2].forEach((x, k) => assert.ok(Math.abs(was[k] - top(runtime, x, 0) - 1.5) < 0.3, `1.5 m down at ${x}: ${was[k]} -> ${top(runtime, x, 0)}`));
+  } finally { fixture.session.free(); }
+});
+
+test("the falloff type shapes the stroke between its middle and its rim: a dome over a ramp over a spike", () => {
+  const heights = {};
+  for (const falloffType of ["spherical", "linear", "tip"]) {
+    const fixture = setup();
+    try {
+      stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 14, elevationStep: 0.5, falloff: 0 });
+      const base = top(fixture.runtime, 4.5, 0);
+      stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 6, elevationStep: 2, falloff: 0.5, falloffType });
+      heights[falloffType] = top(fixture.runtime, 4.5, 0) - base;
+    } finally { fixture.session.free(); }
+  }
+  assert.ok(heights.spherical > heights.linear + 0.2 && heights.linear > heights.tip + 0.2, JSON.stringify(heights));
+});
+
+test("Suavizar takes a ridge most of the way down, the ground past the brush as it was", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 16, elevationStep: 0.5, falloff: 0 });
+    stroke(fixture, [-6, 0], [6, 0], { mode: "add", brushRadius: 1.5, elevationStep: 2.5, falloff: 0.3 });
+    const ridge = top(runtime, 0, 0), beside = top(runtime, 0, 3), far = top(runtime, 0, 12);
+    stroke(fixture, [-6, 0], [6, 0], { mode: "smooth", brushRadius: 5, strength: 1, falloff: 0.3, filterRadius: 0.8 });
+    assert.ok(top(runtime, 0, 0) < ridge - 1, `the ridge comes down: ${ridge} -> ${top(runtime, 0, 0)}`);
+    assert.ok(top(runtime, 0, 3) > beside, `the ground beside it comes up: ${beside} -> ${top(runtime, 0, 3)}`);
+    assert.ok(Math.abs(top(runtime, 0, 12) - far) < 1e-6, "past the brush untouched");
+  } finally { fixture.session.free(); }
+});
+
+test("Aplainar at half strength takes a mound halfway down to the height the stroke starts at", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 16, elevationStep: 0.5, falloff: 0 });
+    stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 5, elevationStep: 3, falloff: 0.5 });
+    const level = top(runtime, -10, 0), peak = top(runtime, 0, 0);
+    stroke(fixture, [-10, 0], [10, 0], { mode: "flatten", brushRadius: 4, strength: 0.5, falloff: 0, elevationStep: 4 });
+    const now = top(runtime, 0, 0);
+    assert.ok(Math.abs(now - (level + peak) / 2) < 0.35, `halfway from ${peak} to ${level}: ${now}`);
+  } finally { fixture.session.free(); }
+});
+
+test("Ruído roughens level ground under the brush only", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    stroke(fixture, [0, 0], [0, 0], { mode: "add", brushRadius: 16, elevationStep: 0.5, falloff: 0 });
+    const far = top(runtime, 0, 12);
+    stroke(fixture, [-5, 0], [5, 0], { mode: "noise", brushRadius: 4, strength: 1, falloff: 0.2, heightScale: 1.5, noiseScale: 0.5 });
+    const inside = [-4, -2, 0, 2, 4].flatMap((x) => [-1, 1].map((z) => top(runtime, x, z)));
+    const spread = Math.max(...inside) - Math.min(...inside);
+    assert.ok(spread > 0.4, `rough under the brush: ${inside.map((y) => y.toFixed(2))}`);
+    assert.ok(Math.abs(top(runtime, 0, 12) - far) < 1e-6, "past it untouched");
   } finally { fixture.session.free(); }
 });

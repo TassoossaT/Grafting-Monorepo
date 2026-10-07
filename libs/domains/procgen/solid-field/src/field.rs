@@ -23,6 +23,75 @@ pub enum Effect {
     Raise,
     /// Takes such a layer away: the trench dug along a stroke.
     Lower,
+    /// Smooths the ground under the brush: each point drawn toward the
+    /// ground's mean height round it, over the brush's filter radius.
+    Smooth,
+    /// Roughens it: Perlin noise `Form::Profile` height high, at the brush's
+    /// noise scale.
+    Noise,
+}
+
+/// How a brush's effect fades from its middle to its rim -- a terrain
+/// editor's own falloff types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FalloffKind {
+    /// A cosine: soft at both ends.
+    #[default]
+    Smooth,
+    /// Straight down to nothing.
+    Linear,
+    /// A dome: full far out, dropping steeply at the rim.
+    Spherical,
+    /// A spike: strong only at the very middle.
+    Tip,
+}
+
+/// The brush a shape is laid with: how strong, and how its effect fades.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Brush {
+    /// How much of the effect is laid, `0..=1`: for a smooth, a flatten or
+    /// noise, the share of the way to its target taken.
+    pub strength: f64,
+    /// The share of the radius the effect fades over, from the rim in:
+    /// `0` a hard edge, `1` fading from the very middle.
+    pub falloff: f64,
+    pub kind: FalloffKind,
+    /// For a smooth: the radius the mean height is read over, as a share of the brush's.
+    pub filter: f64,
+    /// For noise: how many metres one wave of it spans.
+    pub noise_scale: f64,
+    pub seed: u32,
+}
+
+impl Default for Brush {
+    /// The brush every shape was laid with before brushes had options: a
+    /// cosine from the middle to the rim, all of it.
+    fn default() -> Self {
+        Self { strength: 1.0, falloff: 1.0, kind: FalloffKind::Smooth, filter: 0.4, noise_scale: 8.0, seed: 1 }
+    }
+}
+
+impl Brush {
+    /// How much of the effect reaches `along` -- the distance from the
+    /// path over the radius: all of it inside the falloff, fading by the
+    /// brush's kind to nothing at the rim.
+    pub fn weight(&self, along: f64) -> f64 {
+        if along >= 1.0 {
+            return 0.0;
+        }
+        let falloff = self.falloff.clamp(0.0, 1.0);
+        let inner = 1.0 - falloff;
+        if along <= inner || falloff <= 1e-9 {
+            return 1.0;
+        }
+        let t = ((along - inner) / falloff).clamp(0.0, 1.0);
+        match self.kind {
+            FalloffKind::Smooth => 0.5 * (1.0 + (std::f64::consts::PI * t).cos()),
+            FalloffKind::Linear => 1.0 - t,
+            FalloffKind::Spherical => (1.0 - t * t).max(0.0).sqrt(),
+            FalloffKind::Tip => 1.0 - (1.0 - (1.0 - t) * (1.0 - t)).max(0.0).sqrt(),
+        }
+    }
 }
 
 /// The solid a shape stands for, round its path.
@@ -53,6 +122,8 @@ pub struct Shape {
     /// normal, so a point over the path has the whole depth under it. Empty,
     /// the depth is read by plain distance to the path.
     pub up: Vec<Vec3>,
+    /// How strong it is laid and how it fades to its rim.
+    pub brush: Brush,
 }
 
 /// Distance from `point` to the polyline `path`, measured with heights
@@ -106,7 +177,7 @@ fn across_and_along(point: Vec3, path: &[Vec3], up: &[Vec3]) -> (f64, f64) {
 impl Shape {
     /// A round capsule along `path`.
     pub fn capsule(effect: Effect, path: Vec<Vec3>, radius: f64) -> Self {
-        Self { effect, path, radius, form: Form::Swept { squash: 1.0 }, up: Vec::new() }
+        Self { effect, path, radius, form: Form::Swept { squash: 1.0 }, up: Vec::new(), brush: Brush::default() }
     }
 
     /// Signed distance to the shape: negative inside it. Bounded by the true
@@ -142,8 +213,7 @@ impl Shape {
     pub fn depth(&self, point: Vec3) -> f64 {
         let Form::Profile { height } = self.form else { return 0.0 };
         let across = if self.up.len() == self.path.len() { across_path(point, &self.path, &self.up) } else { to_path(point, &self.path, 1.0) };
-        let along = across / self.radius.max(1e-9);
-        if along >= 1.0 { 0.0 } else { height * 0.5 * (1.0 + (std::f64::consts::PI * along).cos()) }
+        height * self.brush.weight(across / self.radius.max(1e-9))
     }
 
     /// How thin the shape is at its thinnest: what the faces laid on it must
@@ -200,6 +270,9 @@ pub fn with_shapes(base: f64, point: Vec3, shapes: &[Shape], blend: f64) -> f64 
             // The surface moved out by the layer's depth, or in by it.
             Effect::Raise => field - shape.depth(point),
             Effect::Lower => field + shape.depth(point),
+            // The ground's own surface smoothed or roughened: the layer's
+            // business, which reads the surface itself; nothing in the volume.
+            Effect::Smooth | Effect::Noise => field,
         }
     })
 }

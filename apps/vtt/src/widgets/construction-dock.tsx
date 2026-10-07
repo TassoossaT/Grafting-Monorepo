@@ -60,8 +60,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
   } = props;
 
   const isTerrainSculptActive = activeTool === "terrain-sculpt";
-  // "elevate" and "fill" are older strokes the ball took over, "lower" and "carve" the same for digging.
-  const terrainStroke = terrainMode === "elevate" || terrainMode === "fill" ? "add" : terrainMode === "lower" || terrainMode === "carve" ? "dig" : terrainMode;
+  // "elevate" and "lower" are the older names of the same two strokes.
+  const terrainStroke = terrainMode === "elevate" ? "add" : terrainMode === "lower" ? "dig" : terrainMode;
 
   const isWallBrushActive = activeTool === "wall-brush";
   const isWallLineActive = activeTool === "wall-line";
@@ -167,9 +167,11 @@ export function ConstructionDock(props: ConstructionDockProps) {
       disabled: !ready,
       onClick: () => onToolChange("terrain-sculpt"),
       subItems: [
-        { key: "terrain-add", label: "Adicionar", icon: "⛰️", tooltip: "Adicionar terreno: uma bola de terra rolada por onde arrastar (no chão, na encosta ou na mesa); clique sobre a última bola para fazer uma ponte", active: isTerrainSculptActive && terrainStroke === "add", disabled: !ready, onClick: () => onTerrainModeChange("add") },
-        { key: "terrain-dig", label: "Remover", icon: "⛏️", tooltip: "Remover terreno: uma bola cavada por onde arrastar; clique na encosta, bola a bola, para abrir um túnel", active: isTerrainSculptActive && terrainStroke === "dig", disabled: !ready, onClick: () => onTerrainModeChange("dig") },
-        { key: "terrain-flatten", label: "Aplainar", icon: "▬", tooltip: "Aplainar: arraste para nivelar o chão", active: isTerrainSculptActive && terrainStroke === "flatten", disabled: !ready, onClick: () => onTerrainModeChange("flatten") },
+        { key: "terrain-add", label: "Adicionar", icon: "⛰️", tooltip: "Adicionar: arraste para erguer o chão sob o pincel", active: isTerrainSculptActive && terrainStroke === "add", disabled: !ready, onClick: () => onTerrainModeChange("add") },
+        { key: "terrain-dig", label: "Remover", icon: "⛏️", tooltip: "Remover: arraste para baixar o chão sob o pincel", active: isTerrainSculptActive && terrainStroke === "dig", disabled: !ready, onClick: () => onTerrainModeChange("dig") },
+        { key: "terrain-smooth", label: "Suavizar", icon: "〰️", tooltip: "Suavizar: arraste para alisar o relevo sob o pincel", active: isTerrainSculptActive && terrainStroke === "smooth", disabled: !ready, onClick: () => onTerrainModeChange("smooth") },
+        { key: "terrain-flatten", label: "Aplainar", icon: "▬", tooltip: "Aplainar: arraste para nivelar o chão na altura onde começou", active: isTerrainSculptActive && terrainStroke === "flatten", disabled: !ready, onClick: () => onTerrainModeChange("flatten") },
+        { key: "terrain-noise", label: "Ruído", icon: "🌫️", tooltip: "Ruído: arraste para dar irregularidade ao relevo sob o pincel", active: isTerrainSculptActive && terrainStroke === "noise", disabled: !ready, onClick: () => onTerrainModeChange("noise") },
       ],
     },
     {

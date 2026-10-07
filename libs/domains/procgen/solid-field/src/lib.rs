@@ -33,7 +33,7 @@ pub mod volume;
 
 pub use bed::Bed;
 pub use edit::{EditedSurface, Faces, SurfaceEdit, edit_surface};
-pub use field::{Effect, Form, Shape, smooth_min};
+pub use field::{Brush, Effect, FalloffKind, Form, Shape, smooth_min};
 pub use layer::{LayerEdit, layer_surface};
 pub use regenerate::{GivenPoint, Landing, Origin, RegeneratedSurface, Regeneration, regenerate_surface};
 pub use vector::Vec3;

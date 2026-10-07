@@ -1749,31 +1749,15 @@ touched, so moving it back and forth does not grow the face count.
 The `"lattice-regenerate"` reaction's executor: the ground grown back round
 the structure that cut it, on the ground's own surface. Returns the faces built.
 
-### `interface vtt.terrain-volume-edit.BallSample`
+### `interface vtt.terrain-volume-edit.TerrainBrush`
 
-One point the ball rolls over, and the way out of the surface there (up when nothing says).
+A terrain editor's brush: how strong, and how its effect fades to its rim. Omitted, all of it, a cosine from the middle.
 
-### `property vtt.terrain-volume-edit.BallSample.outward?: ConstructionPosition`
+### `property vtt.terrain-volume-edit.TerrainBrush.falloff?: number`
 
-### `property vtt.terrain-volume-edit.BallSample.point: ConstructionPosition`
+### `property vtt.terrain-volume-edit.TerrainBrush.falloffType?: "smooth" | "linear" | "spherical" | "tip"`
 
-### `function vtt.terrain-volume-edit.ballPath(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionPosition[]`
-
-Where the ball's middle runs, a stroke of it: each point of the stroke
-moved out of the surface there -- or into it, dug -- so the ball stands
-`height` out of it (or sinks that deep), at most nine tenths of its width.
-A cap (`ballShape`) is drawn as the half ball it grows into.
-
-### `function vtt.terrain-volume-edit.ballShape(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionVolumeShape | undefined`
-
-A ball of earth, `radius` round, rolled along a stroke: added standing
-`height` out of the surface under it, or dug that deep in. Over ground
-facing up, a ball no higher than it is round is a cap of earth on the
-ground -- a layer, the ground's own surface moved, `radius` wide where it
-meets the ground and `height` high: at `height = radius` the half ball
-itself, so the cap grows into the whole ball without a jump. Anywhere
-else -- a hillside's flank, a cliff, a ball set on the last one -- it is
-the ball itself, through the volume.
+### `property vtt.terrain-volume-edit.TerrainBrush.strength?: number`
 
 ### `function vtt.terrain-volume-edit.carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined`
 
@@ -1797,37 +1781,35 @@ A click without a drag is a ball standing out of the surface it was set
 on, `outward` from it: set on the side of the last ball, it grows the
 ground on sideways, and balls set one on another bridge a gap.
 
-### `function vtt.terrain-volume-edit.groundRunOn(runtime: { getRegionTopologiesInBounds: any }, samples: readonly BallSample[], reach: number): ConstructionVolumeShape | undefined`
-
-The ground run on over the bare table under a ball about to be added
-through the volume, where some of the ball's reach has no ground under it:
-a layer a couple of centimetres thin, resting on the table, `reach` round
-every point the ball rolls over. Laid first, it puts ground all round the
-ball, so the volume edit meets ground on every side of what it lays again
--- set on the ground's own edge, the volume edit's ring would be half held
-and half free, and the ground along the free half came back missing.
-`undefined` where ground stands under all of it already.
-
 ### `function vtt.terrain-volume-edit.layerLaid(edited: ConstructionTerrainRegeneration | undefined, ids: readonly string[], given: readonly string[]): LaidGround | undefined`
 
 The ground a layer laid (`layerTerrainSurface`), in the nodes it stands on: the patch's own, and the ground's and structures' round it (`given`, in that order).
 
-### `function vtt.terrain-volume-edit.levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number): readonly ConstructionVolumeShape[]`
+### `function vtt.terrain-volume-edit.levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number, brush: TerrainBrush): readonly ConstructionVolumeShape[]`
 
 Levelling along a stroke at the height it starts on: the column over the
 stroke's plan filled up to that level and cut down to it, `reach` above
-and below and no further -- never up to a cave's ceiling.
+and below and no further -- never up to a cave's ceiling -- by the brush's
+strength, fading by its falloff.
 
-### `function vtt.terrain-volume-edit.moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number): ConstructionVolumeShape | undefined`
+### `function vtt.terrain-volume-edit.moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number, brush: TerrainBrush): ConstructionVolumeShape | undefined`
 
 A layer of earth laid along a stroke -- or the trench dug along it:
-`height` deep where the stroke ran, thinning to nothing at the brush's
+`height` deep where the stroke ran, fading by the brush to nothing at its
 radius, over the ground it lies on -- a hillside, a cave's floor or its
 wall alike.
+
+### `function vtt.terrain-volume-edit.noiseShape(points: readonly ConstructionPosition[], radius: number, height: number, scale: number, seed: number, brush: TerrainBrush): ConstructionVolumeShape | undefined`
+
+Perlin noise `height` high laid on the ground along a stroke, a wave every `scale` metres.
 
 ### `function vtt.terrain-volume-edit.shapeDistance(point: ConstructionPosition, shape: ConstructionVolumeShape): number`
 
 Signed distance to a shape, negative inside -- the engine's own (`Shape::distance`).
+
+### `function vtt.terrain-volume-edit.smoothShape(points: readonly ConstructionPosition[], radius: number, filter: number, brush: TerrainBrush): ConstructionVolumeShape | undefined`
+
+The ground along a stroke drawn toward its mean height round each point, read over `filter` of the radius.
 
 ### `function vtt.terrain-volume-edit.volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[]`
 
@@ -9337,6 +9319,18 @@ Height step / intensity applied per stroke (in world Y units). Defaults to 0.5.
 How wide one terrain face should be, in world units.
 If omitted or undefined, derived proportionally from brushRadius.
 
+### `property vtt.tool-types.TerrainSculptParams.falloff?: number`
+
+The share of the brush's radius its effect fades over, from the rim in: `0` a hard edge, `1` fading from the middle.
+
+### `property vtt.tool-types.TerrainSculptParams.falloffType?: TerrainFalloffType`
+
+How the effect fades over the falloff.
+
+### `property vtt.tool-types.TerrainSculptParams.filterRadius?: number`
+
+For a smooth: the radius the mean height is read over, as a share of the brush's.
+
 ### `property vtt.tool-types.TerrainSculptParams.heightScale: number`
 
 Multiplies the sampled Perlin noise (native `[-1, 1]`) into world-space height units.
@@ -9361,6 +9355,10 @@ Relief manipulation mode:
 Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.TerrainSculptParams.seed: number`
+
+### `property vtt.tool-types.TerrainSculptParams.strength?: number`
+
+How much of a smooth, a flatten or noise is laid, `0..1`: the share of the way to its target.
 
 ### `property vtt.tool-types.TerrainSculptParams.targetSurface: "terrain" | "terrain-grass"`
 
@@ -9488,7 +9486,11 @@ open polyline (a wall's centerline while dragging); `"quad"` draws a
 filled footprint (a terrain brush's reach, a room stamp's proposed
 outline) as two triangles over 4 corner points.
 
-### `type vtt.tool-types.TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "carve" | "fill"`
+### `type vtt.tool-types.TerrainFalloffType = "smooth" | "linear" | "spherical" | "tip"`
+
+How a terrain brush's effect fades from its middle to its rim: a terrain editor's falloff types.
+
+### `type vtt.tool-types.TerrainSculptMode = "add" | "dig" | "smooth" | "flatten" | "noise" | "elevate" | "lower" | "carve" | "fill"`
 
 Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
 or carves into the ground and fills it in, in three dimensions, as an edit of the ground's own mesh: "carve" pushes in
@@ -11880,19 +11882,43 @@ A form swept along a path that changes the ground's solid:
   when omitted) -- or, with `column`, the column over the path's plan
   between two heights -- taken out or added;
 - `raise` / `lower`: a layer of earth `height` deep on the path, thinning by
-  a cosine to nothing at `radius`, laid over the ground or taken off it.
+  the brush's falloff to nothing at `radius`, laid over the ground or taken off it;
+- `smooth`: the ground drawn toward its mean height round each point;
+- `noise`: Perlin noise `height` high laid on it.
 
 ### `property vtt.construction-session-port.ConstructionVolumeShape.column?: { high: number; low: number }`
 
-### `property vtt.construction-session-port.ConstructionVolumeShape.effect: "carve" | "fill" | "raise" | "lower"`
+### `property vtt.construction-session-port.ConstructionVolumeShape.effect: "carve" | "fill" | "raise" | "lower" | "smooth" | "noise"`
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.falloff?: number`
+
+The share of the radius the effect fades over, from the rim in. Omitted: all of it.
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.falloffType?: "smooth" | "linear" | "spherical" | "tip"`
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.filter?: number`
+
+For a smooth: the radius its mean height is read over, as a share of the brush's.
 
 ### `property vtt.construction-session-port.ConstructionVolumeShape.height?: number`
+
+A layer's depth on the path; noise's height.
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.noiseScale?: number`
+
+For noise: how many metres one wave spans, and its seed.
 
 ### `property vtt.construction-session-port.ConstructionVolumeShape.path: readonly (readonly [number, number, number])[]`
 
 ### `property vtt.construction-session-port.ConstructionVolumeShape.radius: number`
 
+### `property vtt.construction-session-port.ConstructionVolumeShape.seed?: number`
+
 ### `property vtt.construction-session-port.ConstructionVolumeShape.squash?: number`
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.strength?: number`
+
+The brush (layer edits): how much of a smooth, a flatten or noise is laid, `0..1`. Omitted: all.
 
 ### `interface vtt.construction-session-port.RegionEditOutcome`
 

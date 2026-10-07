@@ -33,7 +33,13 @@ import type { ToolContext } from "../tools/core/tool-context.ts";
  */
 
 /** Whether a shape only moves the surface: a layer or a level, never a bore or an arch. */
-const movesSurface = (shape: ConstructionVolumeShape) => shape.effect === "raise" || shape.effect === "lower" || shape.column !== undefined;
+const movesSurface = (shape: ConstructionVolumeShape) => isLayer(shape) || shape.column !== undefined;
+
+/** Whether a shape only the layer knows how to lay: a smooth or noise, which the volume edit has no field for. */
+const onlyLayered = (shape: ConstructionVolumeShape) => shape.effect === "smooth" || shape.effect === "noise";
+
+/** Whether a shape moves the surface along it by a profile: a layer, a smooth, noise. */
+const isLayer = (shape: ConstructionVolumeShape) => shape.effect === "raise" || shape.effect === "lower" || shape.effect === "smooth" || shape.effect === "noise";
 
 /** How far off the stroke's own height, past its depth and the slope, a layer still reaches the ground. */
 const LAYER_HEIGHT_SLACK = 1;
@@ -48,6 +54,8 @@ const CONTEXT_MARGIN_FACES = 4;
 function thicknessOf(shape: ConstructionVolumeShape): number {
   // A layer blends into nothing: its own height is the scale it changes the ground at.
   if (shape.effect === "raise" || shape.effect === "lower") return Math.min(shape.radius, Math.abs(shape.height ?? shape.radius));
+  // A smooth and noise move the surface by little: the brush's own width is their scale.
+  if (shape.effect === "smooth" || shape.effect === "noise") return shape.radius;
   if (shape.column) return Math.min(shape.radius, Math.max(1e-3, (shape.column.high - shape.column.low) / 2));
   return shape.radius * Math.min(1, Math.max(1e-3, shape.squash ?? 1));
 }
@@ -89,7 +97,7 @@ export function shapeDistance(point: ConstructionPosition, shape: ConstructionVo
   // A layer reaches across the ground as far as its radius, and up or down
   // only as far as its depth and the ground's own slope there carry it: the
   // ground under an arch a stroke was laid over is another layer, metres down.
-  if (shape.effect === "raise" || shape.effect === "lower") {
+  if (isLayer(shape)) {
     const { across, y } = planToPath(point, shape.path);
     return Math.max(across - shape.radius, Math.abs(point.y - y) - Math.abs(shape.height ?? shape.radius) - across - LAYER_HEIGHT_SLACK);
   }
@@ -111,8 +119,17 @@ function ringOf(topology: ConstructionRegionTopology): readonly ConstructionNode
 /** How far down a face may turn and still be ground a layer rests on, as the share of its area that faces down in plan. */
 const FACING_DOWN_SHARE = 0.2;
 
+/**
+ * How large a face has to be, as a share of a face's size squared, to be
+ * taken for a sheet facing down. A smaller one is a sliver folded at the
+ * ground's foot -- a corner run down to the table and back -- and is laid
+ * again with the ground round it: left out, every stroke beside it laid
+ * ground over it in plan, and the graph refused each one.
+ */
+const SLIVER_SHARE = 0.05;
+
 /** Whether a face turns down, its underside up: the ground faces up counter-clockwise in plan. */
-function facesDown(topology: ConstructionRegionTopology): boolean {
+function facesDown(topology: ConstructionRegionTopology, faceSide: number): boolean {
   const ring = ringOf(topology);
   if (!ring) return false;
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
@@ -122,7 +139,8 @@ function facesDown(topology: ConstructionRegionTopology): boolean {
     planArea += a.x * b.z - b.x * a.z;
     normal = { x: normal.x + (a.y - b.y) * (a.z + b.z), y: normal.y + (a.z - b.z) * (a.x + b.x), z: normal.z + (a.x - b.x) * (a.y + b.y) };
   });
-  return planArea < -FACING_DOWN_SHARE * Math.hypot(normal.x, normal.y, normal.z);
+  const size = Math.hypot(normal.x, normal.y, normal.z);
+  return size >= 2 * SLIVER_SHARE * faceSide * faceSide && planArea < -FACING_DOWN_SHARE * size;
 }
 
 /** The face size of the ground being laid again: the median side of its faces. */
@@ -172,12 +190,12 @@ export function commitTerrainVolumeEdit(
   // layer or a level changes only what it covers, so it reaches a face
   // further; a bore or an arch is given more room to blend.
   const reachOf = (shape: ConstructionVolumeShape) =>
-    blend + (shape.effect === "raise" || shape.effect === "lower" ? LAYER_MARGIN_FACES : shape.column ? 1 : PATCH_MARGIN_FACES) * guess;
+    blend + (isLayer(shape) ? LAYER_MARGIN_FACES : shape.column ? 1 : PATCH_MARGIN_FACES) * guess;
   // A layer or a level rests on ground facing up, or a wall: never on the
   // underside of an arch over it, which would fold the faces laid again.
   const layer = shapes.every(movesSurface);
   const within = (topology: ConstructionRegionTopology, extra: (shape: ConstructionVolumeShape) => number) =>
-    !(layer && facesDown(topology)) && topology.nodes.some((node) => shapes.some((shape) => shapeDistance(node.position, shape) < extra(shape)));
+    !(layer && facesDown(topology, guess)) && topology.nodes.some((node) => shapes.some((shape) => shapeDistance(node.position, shape) < extra(shape)));
   // Grown from the ground under the stroke itself -- the face nearest each
   // point of every path -- never from whatever lies near in three dimensions:
   // through a thin roof, a tunnel's ceiling lies a metre under the hill a
@@ -224,9 +242,12 @@ export function commitTerrainVolumeEdit(
     };
     const label = `motor: ${layer ? "camada" : "volume"} (${patchFaces.length} faces refeitas, ${contextFaces.length} em volta)`;
     // A layer the surface's own way first; where that refuses -- ground
-    // folding every which way, an arch's flank -- through the volume.
+    // folding every which way, an arch's flank -- through the volume. Never
+    // a smooth or noise: the volume knows neither, and would only lay the
+    // patch again, folded where the surface was steep.
     const laid: LaidGround | undefined = timePhase(label, () =>
-      (layer ? layerLaid(ctx.runtime.layerTerrainSurface(request), patch.ids, [...context.ids, ...neighbours.ids]) : undefined) ?? volumeLaid(ctx.runtime.editTerrainVolume(request), patch.ids));
+      (layer ? layerLaid(ctx.runtime.layerTerrainSurface(request), patch.ids, [...context.ids, ...neighbours.ids]) : undefined) ??
+      (shapes.some(onlyLayered) ? undefined : volumeLaid(ctx.runtime.editTerrainVolume(request), patch.ids)));
     return laid ? { laid, patchFaces, contextFaces, faceSide } : undefined;
   };
   // A hole in the patch the edit closes over is laid again with it: tried as
@@ -235,24 +256,50 @@ export function commitTerrainVolumeEdit(
   const tries = [walked, grownInward(walked, nearby, 1), grownInward(walked, nearby, 2)];
   const done = tries.reduce<ReturnType<typeof attempt>>((found, patchFaces, index) => found ?? (index > 0 && patchFaces.length === tries[index - 1]!.length ? undefined : attempt(patchFaces)), undefined);
   if (!done) throw new Error("o núcleo recusou a edição");
-  const { laid, patchFaces, contextFaces, faceSide } = done;
-  const surfaceType = patchFaces[0]?.surfaceType ?? options.surfaceType ?? "terrain";
+  const commit = ({ laid, patchFaces, contextFaces, faceSide }: NonNullable<typeof done>) => {
+    const operationId = `${ctx.tableId}:terrain-volume:${ctx.nextSequence()}`;
+    let built = 0;
+    const { recorded } = ctx.runtime.transact(operationId, "local", () => {
+      built = commitGround(ctx.runtime, {
+        operationId,
+        tableId: ctx.tableId,
+        replaced: patchFaces,
+        around: contextFaces,
+        surfaceType: patchFaces[0]?.surfaceType ?? options.surfaceType ?? "terrain",
+        faceSide,
+        laid,
+      }).built;
+    });
+    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
+    return { faces: built };
+  };
+  try {
+    return commit(done);
+  } catch (error) {
+    // The graph refused a side of the rim: a face just past the patch walks
+    // against what was laid -- a cell folded in plan, left by an older edit.
+    // Laid again with the patch one ring wider, that face goes with it.
+    if (!REFUSED_SIDE.test(error instanceof Error ? error.message : String(error))) throw error;
+    const wider = ringWider(done.patchFaces, nearby, (topology) => !facesDown(topology, guess));
+    const again = wider.length > done.patchFaces.length ? attempt(wider) : undefined;
+    if (!again) throw error;
+    return commit(again);
+  }
+}
 
-  const operationId = `${ctx.tableId}:terrain-volume:${ctx.nextSequence()}`;
-  let built = 0;
-  const { recorded } = ctx.runtime.transact(operationId, "local", () => {
-    built = commitGround(ctx.runtime, {
-      operationId,
-      tableId: ctx.tableId,
-      replaced: patchFaces,
-      around: contextFaces,
-      surfaceType,
-      faceSide,
-      laid,
-    }).built;
-  });
-  if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
-  return { faces: built };
+/** A refusal by the graph of one side of the rim, which a patch a ring wider can lay past. */
+const REFUSED_SIDE = /no room on edge/;
+
+/** `patch` with every face of `ground` that shares a corner with it and `takes` allows. */
+function ringWider(
+  patch: readonly ConstructionRegionTopology[],
+  ground: readonly ConstructionRegionTopology[],
+  takes: (topology: ConstructionRegionTopology) => boolean,
+): ConstructionRegionTopology[] {
+  const key = (face: ConstructionRegionTopology) => face.surfaceKey.join("\u0000");
+  const members = new Set(patch.map(key));
+  const corners = new Set(patch.flatMap((face) => face.nodes.map((node) => node.id)));
+  return [...patch, ...ground.filter((face) => !members.has(key(face)) && takes(face) && face.nodes.some((node) => corners.has(node.id)))];
 }
 
 /** The ground a layer laid (`layerTerrainSurface`), in the nodes it stands on: the patch's own, and the ground's and structures' round it (`given`, in that order). */
@@ -352,144 +399,58 @@ export function fillShape(points: readonly ConstructionPosition[], radius: numbe
   };
 }
 
-/** How high a ball stands at most, as a share of how wide it is: higher, it would float off the surface it was set on. */
-const BALL_HIGHEST = 0.9;
-/** How far up the surface under every point of a stroke has to face for the ball to be a cap of earth on it, laid as a layer. */
-const BALL_CAP_UP = 0.75;
-
-/** One point the ball rolls over, and the way out of the surface there (up when nothing says). */
-export interface BallSample {
-  readonly point: ConstructionPosition;
-  readonly outward?: ConstructionPosition | undefined;
-}
-
-/** How far out of the surface the ball's middle stands, for a ball `radius` round standing `height` out of it. */
-const ballOffset = (radius: number, height: number) => Math.min(height, 2 * radius * BALL_HIGHEST) - radius;
-
-/** `samples` thinned to one every `step` in plan, the last kept. */
-function thinnedSamples(samples: readonly BallSample[], step: number): BallSample[] {
-  const kept: BallSample[] = [];
-  for (const sample of samples) {
-    const last = kept.at(-1);
-    if (!last || Math.hypot(sample.point.x - last.point.x, sample.point.z - last.point.z) >= step) kept.push(sample);
-  }
-  const end = samples.at(-1);
-  if (end && kept.at(-1) !== end && kept.length > 1) kept[kept.length - 1] = end;
-  return kept;
-}
-
-/**
- * Where the ball's middle runs, a stroke of it: each point of the stroke
- * moved out of the surface there -- or into it, dug -- so the ball stands
- * `height` out of it (or sinks that deep), at most nine tenths of its width.
- * A cap (`ballShape`) is drawn as the half ball it grows into.
- */
-export function ballPath(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionPosition[] {
-  const offset = Math.max(0, ballOffset(radius, height)) * (effect === "add" ? 1 : -1);
-  return thinnedSamples(samples, radius * PATH_STEP).map(({ point, outward }) => {
-    const out = outward ?? { x: 0, y: 1, z: 0 };
-    return { x: point.x + out.x * offset, y: point.y + out.y * offset, z: point.z + out.z * offset };
-  });
-}
-
-/**
- * A ball of earth, `radius` round, rolled along a stroke: added standing
- * `height` out of the surface under it, or dug that deep in. Over ground
- * facing up, a ball no higher than it is round is a cap of earth on the
- * ground -- a layer, the ground's own surface moved, `radius` wide where it
- * meets the ground and `height` high: at `height = radius` the half ball
- * itself, so the cap grows into the whole ball without a jump. Anywhere
- * else -- a hillside's flank, a cliff, a ball set on the last one -- it is
- * the ball itself, through the volume.
- */
-export function ballShape(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionVolumeShape | undefined {
-  const kept = thinnedSamples(samples, radius * PATH_STEP);
-  if (kept.length === 0) return undefined;
-  const standing = Math.min(height, 2 * radius * BALL_HIGHEST);
-  const capped = standing <= radius && kept.every(({ outward }) => (outward?.y ?? 1) >= BALL_CAP_UP);
-  if (capped) return { effect: effect === "add" ? "raise" : "lower", radius, height: standing, path: kept.map(({ point }) => [point.x, point.y, point.z] as const) };
-  return { effect: effect === "add" ? "fill" : "carve", radius, path: ballPath(effect, kept, radius, height).map((p) => [p.x, p.y, p.z] as const) };
-}
-
-/** Directions round a point of a stroke the bare table is looked for in. */
-const BARE_DIRECTIONS = 12;
-
-/** Whether ground stands over `point` in plan, of `faces`. */
-function coveredBy(faces: readonly ConstructionRegionTopology[], x: number, z: number): boolean {
-  return faces.some((face) => {
-    const at = new Map(face.nodes.map((node) => [node.id, node.position]));
-    const ring = (face.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined);
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const a = ring[i]!, b = ring[j]!;
-      if ((a.z > z) !== (b.z > z) && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
-    }
-    return inside;
-  });
-}
-
-/**
- * The ground run on over the bare table under a ball about to be added
- * through the volume, where some of the ball's reach has no ground under it:
- * a layer a couple of centimetres thin, resting on the table, `reach` round
- * every point the ball rolls over. Laid first, it puts ground all round the
- * ball, so the volume edit meets ground on every side of what it lays again
- * -- set on the ground's own edge, the volume edit's ring would be half held
- * and half free, and the ground along the free half came back missing.
- * `undefined` where ground stands under all of it already.
- */
-export function groundRunOn(
-  runtime: { getRegionTopologiesInBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }): readonly ConstructionRegionTopology[] },
-  samples: readonly BallSample[],
-  reach: number,
-): ConstructionVolumeShape | undefined {
-  const kept = thinnedSamples(samples, reach * PATH_STEP * 0.5);
-  if (kept.length === 0) return undefined;
-  const xs = kept.map(({ point }) => point.x), zs = kept.map(({ point }) => point.z);
-  const ground = runtime.getRegionTopologiesInBounds({ minX: Math.min(...xs) - reach, minZ: Math.min(...zs) - reach, maxX: Math.max(...xs) + reach, maxZ: Math.max(...zs) + reach })
-    .filter((face) => hasTrait(face.surfaceType, "ground"));
-  if (ground.length === 0) return undefined;
-  const bare = kept.some(({ point }) => Array.from({ length: BARE_DIRECTIONS + 1 }, (_, k) => k).some((k) => {
-    const angle = (2 * Math.PI * k) / BARE_DIRECTIONS, r = k === BARE_DIRECTIONS ? 0 : reach;
-    return !coveredBy(ground, point.x + Math.cos(angle) * r, point.z + Math.sin(angle) * r);
-  }));
-  if (!bare) return undefined;
-  return { effect: "raise", radius: reach, height: GROUND_RUN_ON_HEIGHT, path: kept.map(({ point }) => [point.x, point.y, point.z] as const) };
-}
-
-/** How thick the ground run on over the bare table under a ball is: next to nothing, a layer to rest the ball on. */
-const GROUND_RUN_ON_HEIGHT = 0.02;
-
 /** Where the volume a stroke would carve or fill runs, for its ghost: the very path the commit uses. */
 export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {
   const shape = mode === "carve" ? carveShape(points, radius) : fillShape(points, radius, rise);
   return shape ? shape.path.map(([x, y, z]) => ({ x, y, z })) : [];
 }
 
+/** A terrain editor's brush: how strong, and how its effect fades to its rim. Omitted, all of it, a cosine from the middle. */
+export interface TerrainBrush {
+  readonly strength?: number;
+  readonly falloff?: number;
+  readonly falloffType?: "smooth" | "linear" | "spherical" | "tip";
+}
+
 /**
  * A layer of earth laid along a stroke -- or the trench dug along it:
- * `height` deep where the stroke ran, thinning to nothing at the brush's
+ * `height` deep where the stroke ran, fading by the brush to nothing at its
  * radius, over the ground it lies on -- a hillside, a cave's floor or its
  * wall alike.
  */
-export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number): ConstructionVolumeShape | undefined {
+export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
   if (path.length === 0) return undefined;
-  return { effect, radius, height, path: path.map((p) => [p.x, p.y, p.z] as const) };
+  return { effect, radius, height, path: path.map((p) => [p.x, p.y, p.z] as const), ...brush };
 }
 
 /**
  * Levelling along a stroke at the height it starts on: the column over the
  * stroke's plan filled up to that level and cut down to it, `reach` above
- * and below and no further -- never up to a cave's ceiling.
+ * and below and no further -- never up to a cave's ceiling -- by the brush's
+ * strength, fading by its falloff.
  */
-export function levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number): readonly ConstructionVolumeShape[] {
+export function levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number, brush: TerrainBrush = {}): readonly ConstructionVolumeShape[] {
   const path = thinned(points, radius * PATH_STEP);
   if (path.length === 0) return [];
   const level = path[0]!.y;
   const flat = path.map((p) => [p.x, level, p.z] as const);
   return [
-    { effect: "fill", radius, path: flat, column: { low: level - reach, high: level } },
-    { effect: "carve", radius, path: flat, column: { low: level, high: level + reach } },
+    { effect: "fill", radius, path: flat, column: { low: level - reach, high: level }, ...brush },
+    { effect: "carve", radius, path: flat, column: { low: level, high: level + reach }, ...brush },
   ];
+}
+
+/** The ground along a stroke drawn toward its mean height round each point, read over `filter` of the radius. */
+export function smoothShape(points: readonly ConstructionPosition[], radius: number, filter: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+  if (path.length === 0) return undefined;
+  return { effect: "smooth", radius, height: 0, filter, path: path.map((p) => [p.x, p.y, p.z] as const), ...brush };
+}
+
+/** Perlin noise `height` high laid on the ground along a stroke, a wave every `scale` metres. */
+export function noiseShape(points: readonly ConstructionPosition[], radius: number, height: number, scale: number, seed: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+  if (path.length === 0) return undefined;
+  return { effect: "noise", radius, height, noiseScale: scale, seed, path: path.map((p) => [p.x, p.y, p.z] as const), ...brush };
 }

@@ -20,7 +20,10 @@ fn key(a: usize, b: usize) -> (usize, usize) {
 
 /// Every open border of `triangles` -- an edge no other triangle walks the
 /// other way -- chained into closed loops, each walked the way its triangles
-/// walk it.
+/// walk it. A border running into a dead end -- left by a triangle walked
+/// against its neighbours, a fold -- is dropped, and the walk taken back to
+/// the last corner with another way on: dropping the whole walk lost the
+/// loop it was on wherever it met the fold at a corner it passes twice.
 pub fn border_loops(triangles: &[[usize; 3]]) -> Vec<Vec<usize>> {
     let mut directed: HashSet<(usize, usize)> = HashSet::new();
     for &[a, b, c] in triangles {
@@ -40,18 +43,23 @@ pub fn border_loops(triangles: &[[usize; 3]]) -> Vec<Vec<usize>> {
     let mut loops = Vec::new();
     let mut starts: Vec<usize> = next.keys().copied().collect();
     starts.sort_unstable();
+    let mut take = |at: usize| next.get_mut(&at).and_then(|targets| targets.pop());
     for start in starts {
-        while let Some(first) = next.get_mut(&start).and_then(|targets| targets.pop()) {
+        while let Some(first) = take(start) {
             let mut walk = vec![start];
-            let mut here = first;
-            while here != start {
-                walk.push(here);
-                match next.get_mut(&here).and_then(|targets| targets.pop()) {
-                    Some(onward) => here = onward,
-                    None => break,
+            let mut here = Some(first);
+            while let Some(at) = here {
+                if at == start {
+                    break;
+                }
+                walk.push(at);
+                here = take(at);
+                while here.is_none() && walk.len() > 1 {
+                    walk.pop();
+                    here = take(*walk.last().unwrap_or(&start));
                 }
             }
-            if here == start && walk.len() >= 3 {
+            if here == Some(start) && walk.len() >= 3 {
                 loops.push(walk);
             }
         }

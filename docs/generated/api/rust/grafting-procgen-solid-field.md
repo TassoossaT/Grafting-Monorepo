@@ -8,6 +8,11 @@
 
 What a shape does to the solid it overlaps.
 
+### `pub enum grafting_procgen_solid_field::FalloffKind`
+
+How a brush's effect fades from its middle to its rim -- a terrain
+editor's own falloff types.
+
 ### `pub enum grafting_procgen_solid_field::Form`
 
 The solid a shape stands for, round its path.
@@ -19,6 +24,11 @@ What a corner of the result already is.
 ### `pub enum grafting_procgen_solid_field::field::Effect`
 
 What a shape does to the solid it overlaps.
+
+### `pub enum grafting_procgen_solid_field::field::FalloffKind`
+
+How a brush's effect fades from its middle to its rim -- a terrain
+editor's own falloff types.
 
 ### `pub enum grafting_procgen_solid_field::field::Form`
 
@@ -37,6 +47,17 @@ is the ground round it -- never laid again, only asked where solid is.
 
 Lays `patch` again with `edit` carved into or filled onto it. `context`
 is the ground round it -- never laid again, only asked where solid is.
+
+### `pub fn grafting_procgen_solid_field::field::Brush::default() -> Self`
+
+The brush every shape was laid with before brushes had options: a
+cosine from the middle to the rim, all of it.
+
+### `pub fn grafting_procgen_solid_field::field::Brush::weight(&self, along: f64) -> f64`
+
+How much of the effect reaches `along` -- the distance from the
+path over the radius: all of it inside the falloff, fading by the
+brush's kind to nothing at the rim.
 
 ### `pub fn grafting_procgen_solid_field::field::Shape::bounds(&self, blend: f64) -> (grafting_procgen_solid_field::vector::Vec3, grafting_procgen_solid_field::vector::Vec3)`
 
@@ -166,7 +187,10 @@ lies as it always did.
 
 Every open border of `triangles` -- an edge no other triangle walks the
 other way -- chained into closed loops, each walked the way its triangles
-walk it.
+walk it. A border running into a dead end -- left by a triangle walked
+against its neighbours, a fold -- is dropped, and the walk taken back to
+the last corner with another way on: dropping the whole walk lost the
+loop it was on wherever it met the fold at a corner it passes twice.
 
 ### `pub fn grafting_procgen_solid_field::trimesh::unfold(vertices: &mut [grafting_procgen_solid_field::vector::Vec3], triangles: &mut [[usize; 3]], locked: &[bool], locked_edges: &std::collections::hash::set::HashSet<(usize, usize)>, facing: &dyn core::ops::function::Fn(grafting_procgen_solid_field::vector::Vec3) -> grafting_procgen_solid_field::vector::Vec3, settle: &dyn core::ops::function::Fn(grafting_procgen_solid_field::vector::Vec3) -> grafting_procgen_solid_field::vector::Vec3)`
 
@@ -271,6 +295,28 @@ How far under the faces the ground comes to rest.
 
 The shoulder's width for every metre the ground is moved there.
 
+### `pub grafting_procgen_solid_field::Brush::falloff: f64`
+
+The share of the radius the effect fades over, from the rim in:
+`0` a hard edge, `1` fading from the very middle.
+
+### `pub grafting_procgen_solid_field::Brush::filter: f64`
+
+For a smooth: the radius the mean height is read over, as a share of the brush's.
+
+### `pub grafting_procgen_solid_field::Brush::kind: grafting_procgen_solid_field::field::FalloffKind`
+
+### `pub grafting_procgen_solid_field::Brush::noise_scale: f64`
+
+For noise: how many metres one wave of it spans.
+
+### `pub grafting_procgen_solid_field::Brush::seed: u32`
+
+### `pub grafting_procgen_solid_field::Brush::strength: f64`
+
+How much of the effect is laid, `0..=1`: for a smooth, a flatten or
+noise, the share of the way to its target taken.
+
 ### `pub grafting_procgen_solid_field::EditedSurface::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
 In the winding the faces handed in had.
@@ -294,6 +340,11 @@ Adds solid: a bridge, a ledge.
 
 Takes such a layer away: the trench dug along a stroke.
 
+### `pub grafting_procgen_solid_field::Effect::Noise`
+
+Roughens it: Perlin noise `Form::Profile` height high, at the brush's
+noise scale.
+
 ### `pub grafting_procgen_solid_field::Effect::Raise`
 
 Lays a layer of earth over the solid near the path: as deep as the
@@ -301,9 +352,30 @@ shape's `Form::Profile` height on it, thinning to nothing at its
 radius -- a pile following the ground it is laid on, a hillside or a
 cave's wall alike.
 
+### `pub grafting_procgen_solid_field::Effect::Smooth`
+
+Smooths the ground under the brush: each point drawn toward the
+ground's mean height round it, over the brush's filter radius.
+
 ### `pub grafting_procgen_solid_field::Faces::faces: alloc::vec::Vec<alloc::vec::Vec<usize>>`
 
 ### `pub grafting_procgen_solid_field::Faces::vertices: alloc::vec::Vec<grafting_procgen_solid_field::vector::Vec3>`
+
+### `pub grafting_procgen_solid_field::FalloffKind::Linear`
+
+Straight down to nothing.
+
+### `pub grafting_procgen_solid_field::FalloffKind::Smooth`
+
+A cosine: soft at both ends.
+
+### `pub grafting_procgen_solid_field::FalloffKind::Spherical`
+
+A dome: full far out, dropping steeply at the rim.
+
+### `pub grafting_procgen_solid_field::FalloffKind::Tip`
+
+A spike: strong only at the very middle.
 
 ### `pub grafting_procgen_solid_field::Form::Column`
 
@@ -400,6 +472,10 @@ structures close round (non-zero).
 The relaxation's strength in the chart, as the plane's generator takes it.
 
 ### `pub grafting_procgen_solid_field::Regeneration::seed: u32`
+
+### `pub grafting_procgen_solid_field::Shape::brush: grafting_procgen_solid_field::field::Brush`
+
+How strong it is laid and how it fades to its rim.
 
 ### `pub grafting_procgen_solid_field::Shape::effect: grafting_procgen_solid_field::field::Effect`
 
@@ -513,6 +589,28 @@ holds is a ring side, kept where it is.
 The table's height, where the edit may rest new ground on it: solid
 below it wherever no ground stands. `None` never reads the table.
 
+### `pub grafting_procgen_solid_field::field::Brush::falloff: f64`
+
+The share of the radius the effect fades over, from the rim in:
+`0` a hard edge, `1` fading from the very middle.
+
+### `pub grafting_procgen_solid_field::field::Brush::filter: f64`
+
+For a smooth: the radius the mean height is read over, as a share of the brush's.
+
+### `pub grafting_procgen_solid_field::field::Brush::kind: grafting_procgen_solid_field::field::FalloffKind`
+
+### `pub grafting_procgen_solid_field::field::Brush::noise_scale: f64`
+
+For noise: how many metres one wave of it spans.
+
+### `pub grafting_procgen_solid_field::field::Brush::seed: u32`
+
+### `pub grafting_procgen_solid_field::field::Brush::strength: f64`
+
+How much of the effect is laid, `0..=1`: for a smooth, a flatten or
+noise, the share of the way to its target taken.
+
 ### `pub grafting_procgen_solid_field::field::Effect::Carve`
 
 Takes solid away: a tunnel, a cave.
@@ -525,12 +623,38 @@ Adds solid: a bridge, a ledge.
 
 Takes such a layer away: the trench dug along a stroke.
 
+### `pub grafting_procgen_solid_field::field::Effect::Noise`
+
+Roughens it: Perlin noise `Form::Profile` height high, at the brush's
+noise scale.
+
 ### `pub grafting_procgen_solid_field::field::Effect::Raise`
 
 Lays a layer of earth over the solid near the path: as deep as the
 shape's `Form::Profile` height on it, thinning to nothing at its
 radius -- a pile following the ground it is laid on, a hillside or a
 cave's wall alike.
+
+### `pub grafting_procgen_solid_field::field::Effect::Smooth`
+
+Smooths the ground under the brush: each point drawn toward the
+ground's mean height round it, over the brush's filter radius.
+
+### `pub grafting_procgen_solid_field::field::FalloffKind::Linear`
+
+Straight down to nothing.
+
+### `pub grafting_procgen_solid_field::field::FalloffKind::Smooth`
+
+A cosine: soft at both ends.
+
+### `pub grafting_procgen_solid_field::field::FalloffKind::Spherical`
+
+A dome: full far out, dropping steeply at the rim.
+
+### `pub grafting_procgen_solid_field::field::FalloffKind::Tip`
+
+A spike: strong only at the very middle.
 
 ### `pub grafting_procgen_solid_field::field::Form::Column`
 
@@ -556,6 +680,10 @@ A capsule swept along the path, `squash` times as tall as it is wide:
 stroke, or the trench dug along one.
 
 ### `pub grafting_procgen_solid_field::field::Form::Swept::squash: f64`
+
+### `pub grafting_procgen_solid_field::field::Shape::brush: grafting_procgen_solid_field::field::Brush`
+
+How strong it is laid and how it fades to its rim.
 
 ### `pub grafting_procgen_solid_field::field::Shape::effect: grafting_procgen_solid_field::field::Effect`
 
@@ -843,6 +971,10 @@ is its mesh, and the next edit asks the mesh again.
 
 What one structure asks of the ground under it.
 
+### `pub struct grafting_procgen_solid_field::Brush`
+
+The brush a shape is laid with: how strong, and how its effect fades.
+
 ### `pub struct grafting_procgen_solid_field::EditedSurface`
 
 The faces laid in place of the ones handed in.
@@ -900,6 +1032,10 @@ caller's ground uses -- the same for every face.
 ### `pub struct grafting_procgen_solid_field::edit::SurfaceEdit`
 
 One edit: what to carve or fill, and the cells to lay the result in.
+
+### `pub struct grafting_procgen_solid_field::field::Brush`
+
+The brush a shape is laid with: how strong, and how its effect fades.
 
 ### `pub struct grafting_procgen_solid_field::field::Shape`
 

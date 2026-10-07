@@ -552,15 +552,28 @@ export interface ConstructionIrregularQuadGridRequest {
  *   when omitted) -- or, with `column`, the column over the path's plan
  *   between two heights -- taken out or added;
  * - `raise` / `lower`: a layer of earth `height` deep on the path, thinning by
- *   a cosine to nothing at `radius`, laid over the ground or taken off it.
+ *   the brush's falloff to nothing at `radius`, laid over the ground or taken off it;
+ * - `smooth`: the ground drawn toward its mean height round each point;
+ * - `noise`: Perlin noise `height` high laid on it.
  */
 export interface ConstructionVolumeShape {
-  readonly effect: "carve" | "fill" | "raise" | "lower";
+  readonly effect: "carve" | "fill" | "raise" | "lower" | "smooth" | "noise";
   readonly path: readonly (readonly [number, number, number])[];
   readonly radius: number;
   readonly squash?: number;
   readonly column?: { readonly low: number; readonly high: number };
+  /** A layer's depth on the path; noise's height. */
   readonly height?: number;
+  /** The brush (layer edits): how much of a smooth, a flatten or noise is laid, `0..1`. Omitted: all. */
+  readonly strength?: number;
+  /** The share of the radius the effect fades over, from the rim in. Omitted: all of it. */
+  readonly falloff?: number;
+  readonly falloffType?: "smooth" | "linear" | "spherical" | "tip";
+  /** For a smooth: the radius its mean height is read over, as a share of the brush's. */
+  readonly filter?: number;
+  /** For noise: how many metres one wave spans, and its seed. */
+  readonly noiseScale?: number;
+  readonly seed?: number;
 }
 
 /** Faces as indices into their own vertices, all wound the same way. */

@@ -361,7 +361,12 @@ export function conformGround(runtime: TerrainConformRuntime, fallout: CutFallou
       seed: seedOf(piece),
       beds: beds.map((reading) => reading.bed),
     }), indexedPatch.ids, [...context.ids, ...others.ids]));
-    if (!laid) throw new Error("o núcleo recusou assentar o chão sob a estrutura");
+    // Ground the engine cannot bring to rest stays as it is: the structure is
+    // laid all the same, never refused for the ground under it.
+    if (!laid) {
+      console.warn(`[terreno] o núcleo recusou assentar o chão sob a estrutura (${piece.length} faces); fica como estava`);
+      return;
+    }
     built += commitGround(runtime, {
       operationId: `${causeId}:rest-${index}`,
       tableId,

@@ -25,6 +25,7 @@ export type {
   PathKind,
   PreviewDescriptor,
   StructureEditParams,
+  TerrainFalloffType,
   TerrainSculptMode,
   TerrainSculptParams,
   ToolParamsByTool,

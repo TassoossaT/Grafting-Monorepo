@@ -4159,7 +4159,7 @@ export function shapeDistance(point: ConstructionPosition, shape: ConstructionVo
   // A layer reaches across the ground as far as its radius, and up or down
   // only as far as its depth and the ground's own slope there carry it: the
   // ground under an arch a stroke was laid over is another layer, metres down.
-  if (shape.effect === "raise" || shape.effect === "lower") {
+  if (isLayer(shape)) {
   const { across, y } = planToPath(point, shape.path);
 export function commitTerrainVolumeEdit(
   ctx: ToolContext,
@@ -4176,25 +4176,20 @@ export function carveShape(points: readonly ConstructionPosition[], radius: numb
   const path = thinned(points, radius * PATH_STEP);
 export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number, outward?: ConstructionPosition): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
-export interface BallSample {
-  readonly point: ConstructionPosition;
-  readonly outward?: ConstructionPosition | undefined;
-  }
-export function ballPath(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionPosition[] {
-  const offset = Math.max(0, ballOffset(radius, height)) * (effect === "add" ? 1 : -1);
-export function ballShape(effect: "add" | "dig", samples: readonly BallSample[], radius: number, height: number): ConstructionVolumeShape | undefined {
-  const kept = thinnedSamples(samples, radius * PATH_STEP);
-export function groundRunOn(
-  runtime: { getRegionTopologiesInBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }): readonly ConstructionRegionTopology[] },
-  samples: readonly BallSample[],
-  reach: number,
-  ): ConstructionVolumeShape | undefined {
-  const kept = thinnedSamples(samples, reach * PATH_STEP * 0.5);
 export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {
   const shape = mode === "carve" ? carveShape(points, radius) : fillShape(points, radius, rise);
-export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number): ConstructionVolumeShape | undefined {
+export interface TerrainBrush {
+  readonly strength?: number;
+  readonly falloff?: number;
+  readonly falloffType?: "smooth" | "linear" | "spherical" | "tip";
+  }
+export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
-export function levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number): readonly ConstructionVolumeShape[] {
+export function levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number, brush: TerrainBrush = {}): readonly ConstructionVolumeShape[] {
+  const path = thinned(points, radius * PATH_STEP);
+export function smoothShape(points: readonly ConstructionPosition[], radius: number, filter: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function noiseShape(points: readonly ConstructionPosition[], radius: number, height: number, scale: number, seed: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
 
 // src/composition/tabletop/tools/core/boundary-edges.ts
@@ -7670,7 +7665,8 @@ export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
   /**
   * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "carve" | "fill";
+export type TerrainSculptMode = "add" | "dig" | "smooth" | "flatten" | "noise" | "elevate" | "lower" | "carve" | "fill";
+export type TerrainFalloffType = "smooth" | "linear" | "spherical" | "tip";
 export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
   if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
   return faceSizeOverride;
@@ -7697,7 +7693,6 @@ export interface OpeningParams {
   readonly shape: OpeningShape;
 export function withOpeningKind(params: OpeningParams, kind: OpeningParams["openingKind"]): OpeningParams {
   return kind === "door" ? { ...params, openingKind: "door", height: Math.max(params.height, 2) } : { ...params, openingKind: "window" };
-export const OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>> = Object.freeze({ window: 0x7dd3fc, door: 0xd97706 });
 
 // src/features/edit-construction/topology/arc-follow.ts
 export function arcsFollowing(

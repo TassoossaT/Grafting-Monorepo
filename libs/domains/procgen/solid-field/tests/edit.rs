@@ -188,6 +188,7 @@ fn an_earth_bridge_filled_over_flat_ground_rises_from_it_on_the_same_ring() {
         radius: 1.2,
         form: Form::Swept { squash: 1.0 },
         up: Vec::new(),
+        brush: Default::default(),
     }];
     let blend = 0.5;
     let (patch, context, _) = split(&all, &shapes, 1.2 + blend + 2.0 * 2.0);
@@ -213,7 +214,7 @@ fn a_tunnel_whose_patch_reaches_only_past_its_axis_still_lays() {
 /// A layer of earth laid along a stroke, or taken away along it.
 fn mound(effect: Effect, path: Vec<Vec3>, radius: f64, height: f64) -> Shape {
     let effect = if effect == Effect::Fill { Effect::Raise } else { Effect::Lower };
-    Shape { effect, path, radius, form: Form::Profile { height }, up: Vec::new() }
+    Shape { effect, path, radius, form: Form::Profile { height }, up: Vec::new(), brush: Default::default() }
 }
 
 fn no_folds(name: &str, out: &EditedSurface) {
@@ -286,8 +287,8 @@ fn a_hillside_levelled_comes_out_flat_where_it_was_levelled() {
     let level = 3.0;
     let path = vec![Vec3::new(-2.0, level, -2.0), Vec3::new(2.0, level, 2.0)];
     let shapes = vec![
-        Shape { effect: Effect::Fill, path: path.clone(), radius: 3.0, form: Form::Column { low: level - 4.0, high: level }, up: Vec::new() },
-        Shape { effect: Effect::Carve, path, radius: 3.0, form: Form::Column { low: level, high: level + 4.0 }, up: Vec::new() },
+        Shape { effect: Effect::Fill, path: path.clone(), radius: 3.0, form: Form::Column { low: level - 4.0, high: level }, up: Vec::new(), brush: Default::default() },
+        Shape { effect: Effect::Carve, path, radius: 3.0, form: Form::Column { low: level, high: level + 4.0 }, up: Vec::new(), brush: Default::default() },
     ];
     let (patch, context, _) = split(&all, &shapes, 3.0 + 0.6 + 4.0);
     let out = edit_surface(&patch, &context, &SurfaceEdit { shapes, blend: 0.6, face_side: 2.0, seed: 3, table: None, neighbours: Faces::default() }).expect("levelled");

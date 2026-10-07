@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use grafting_procgen_solid_field::{Effect, Faces, Form, Shape, SurfaceEdit, Vec3, edit_surface};
+use grafting_procgen_solid_field::{Brush, FalloffKind, Effect, Faces, Form, Shape, SurfaceEdit, Vec3, edit_surface};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,9 +29,26 @@ pub struct ShapeDto {
     /// A column over the path's plan between these heights, instead of a swept shape.
     #[serde(default)]
     pub column: Option<ColumnDto>,
-    /// For `"raise"` and `"lower"`: how deep the layer is on the path.
+    /// For `"raise"` and `"lower"`: how deep the layer is on the path; for `"noise"`, how high its waves are.
     #[serde(default)]
     pub height: Option<f64>,
+    /// How much of the effect is laid, `0..=1` (a smooth, a flatten, noise). Omitted: all.
+    #[serde(default)]
+    pub strength: Option<f64>,
+    /// The share of the radius the effect fades over, from the rim in. Omitted: all of it.
+    #[serde(default)]
+    pub falloff: Option<f64>,
+    /// `"smooth"`, `"linear"`, `"spherical"` or `"tip"`. Omitted: smooth.
+    #[serde(default)]
+    pub falloff_type: Option<String>,
+    /// For `"smooth"`: the radius the mean height is read over, as a share of the brush's.
+    #[serde(default)]
+    pub filter: Option<f64>,
+    /// For `"noise"`: how many metres one wave spans.
+    #[serde(default)]
+    pub noise_scale: Option<f64>,
+    #[serde(default)]
+    pub seed: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,15 +112,34 @@ pub(crate) fn shapes_of(shapes: Vec<ShapeDto>) -> Result<Vec<Shape>, String> {
                 "fill" => Effect::Fill,
                 "raise" => Effect::Raise,
                 "lower" => Effect::Lower,
+                "smooth" => Effect::Smooth,
+                "noise" => Effect::Noise,
                 other => return Err(format!("unknown shape effect {other:?}")),
             };
             let form = match (shape.column, shape.height, effect) {
-                (_, Some(height), Effect::Raise | Effect::Lower) => Form::Profile { height },
-                (_, None, Effect::Raise | Effect::Lower) => return Err("a raise or lower needs its height".to_string()),
+                (_, Some(height), Effect::Raise | Effect::Lower | Effect::Noise) => Form::Profile { height },
+                (_, None, Effect::Raise | Effect::Lower | Effect::Noise) => return Err("a raise, lower or noise needs its height".to_string()),
+                (_, _, Effect::Smooth) => Form::Profile { height: 0.0 },
                 (Some(column), _, _) => Form::Column { low: column.low, high: column.high },
                 (None, _, _) => Form::Swept { squash: shape.squash.unwrap_or(1.0) },
             };
-            Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form, up: Vec::new() })
+            let defaults = Brush::default();
+            let kind = match shape.falloff_type.as_deref() {
+                None | Some("smooth") => FalloffKind::Smooth,
+                Some("linear") => FalloffKind::Linear,
+                Some("spherical") => FalloffKind::Spherical,
+                Some("tip") => FalloffKind::Tip,
+                Some(other) => return Err(format!("unknown falloff type {other:?}")),
+            };
+            let brush = Brush {
+                strength: shape.strength.unwrap_or(defaults.strength),
+                falloff: shape.falloff.unwrap_or(defaults.falloff),
+                kind,
+                filter: shape.filter.unwrap_or(defaults.filter),
+                noise_scale: shape.noise_scale.unwrap_or(defaults.noise_scale),
+                seed: shape.seed.unwrap_or(defaults.seed),
+            };
+            Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form, up: Vec::new(), brush })
         })
         .collect()
 }

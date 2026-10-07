@@ -27,7 +27,7 @@ fn ground(cell: f64, cells: usize, height: impl Fn(f64, f64) -> f64) -> Faces {
 }
 
 fn raise(path: Vec<Vec3>, radius: f64, height: f64) -> Shape {
-    Shape { effect: Effect::Raise, path, radius, form: Form::Profile { height }, up: Vec::new() }
+    Shape { effect: Effect::Raise, path, radius, form: Form::Profile { height }, up: Vec::new(), brush: Default::default() }
 }
 
 /// Twice the signed area of a face in plan: positive counter-clockwise.

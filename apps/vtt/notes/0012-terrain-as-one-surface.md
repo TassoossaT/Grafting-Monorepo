@@ -8,8 +8,8 @@
 
 The ground is **one oriented surface in 3D**, made of `ground` regions. **No code may assume one ground height per point of the plane.** There are only two engine operations:
 
-- **E1 `edit_surface`** — volume edit: the edits that change what is solid. The brush's ball uses it off flat ground (a flank, a cliff, a ball on the last ball).
-- **E3 `layer_surface`** — the surface moved. The ball as a cap on ground facing up, Aplainar, and **the ground brought to rest under structures** (beds, 2026-10-07) use it.
+- **E1 `edit_surface`** — volume edit: the edits that change what is solid. Since the brush became Flax's (2026-10-07) only `"carve"`/`"fill"` by name (tests' tunnels and arches) and a raise/lower/level the layer refuses use it.
+- **E3 `layer_surface`** — the surface moved. Every brush mode (Adicionar, Remover, Suavizar, Aplainar, Ruído) and **the ground brought to rest under structures** (beds, 2026-10-07) use it.
 - **E2 `regenerate_surface`** — relays the cells of a patch of surface, with the shape unchanged. No longer used by structures since the rest law (2026-10-07); still inside E3 for ground folding over itself.
 
 **Rest law (2026-10-07, owner):** a structure never cuts the ground. The ground is brought to rest just under it (see **Rest law** below); the ground stays one surface with no hole and no side shared with a structure.
@@ -251,17 +251,25 @@ Owner: the regrow is a dig/raise stroke with the tools that exist; holes between
 - **Measured:** the old many-roads sweep (hill, valley, flat, 9 roads each) went from refusals at the 3rd–7th road to 27/27; conform 70–210 ms a road; ground through a road ≤ 8 cm in the end state (13 cm transient).
 - Layer rings are now read off the patch's faces (fanned), not their ear-clipped triangles: a face folded on itself clipped to nothing and read as a hole.
 
-## The brush's ball (2026-10-07)
+## The brush (2026-10-07, Flax's sculpt tools)
 
-Owner: one tool for 2D and 3D, building and destroying with the ball. The dock offers **Adicionar**, **Remover** (both the ball) and **Aplainar**; Cavar 3D / Erguer 3D are gone from the dock (`"carve"`/`"fill"` modes stay callable by name: tests build tunnels and arches with them).
+Owner: one tool for 2D and 3D, **no ball** ("justamente a porcaria que eu mandei remover"), like Flax's terrain editing (docs.flaxengine.com/manual/terrain/editing.html). The ball (`ballShape`, `groundRunOn`) is deleted.
 
-- `ballShape` (`terrain-volume-edit.ts`): ball `brushRadius` round, standing `elevationStep` out of the surface the pointer sees (dug that deep for Remover), at most 0.9 × its width. On ground facing up (`outward.y ≥ 0.75` at every sample) and no higher than its radius it is a **cap** (E3 raise/lower, footprint = radius, height = step: at step = radius the half ball, so cap → ball has no jump); otherwise the ball itself through E1. Preview: the ball, rolled along the stroke.
-- **Edge erase fixed:** E1 with a ring partly held (a shape crossing the ground's open border onto the table) dropped a half disc of the new surface round each free end of the held chain (the ring clearance), and nothing covered it. Sparing that clearance in E1 broke the arch built ball by ball, so the tool instead **runs the ground on over the bare table first** (`groundRunOn`: a 2 cm E3 layer `radius + 3 faces` round the ball, only where some of that is bare). The ball then meets ground all round. Two undo steps.
+- **Modes** (dock): Adicionar (raise), Remover (lower), Suavizar (smooth), Aplainar (flatten), Ruído (noise). `"carve"`/`"fill"` stay callable by name.
+- **Brush** (`Brush` in `solid-field/src/field.rs`, wire `strength`/`falloff`/`falloffType`/`filter`/`noiseScale`/`seed` on the shape): size = `brushRadius`; falloff = share of the radius eased; kinds Smooth (cosine), Linear, Spherical, Tip. Raise/lower move `height × weight`; smooth pulls each point toward the mean of the old surface over a disc `filter × radius` (1 + 8 + 12 samples) by `weight × strength`; noise adds `height × Perlin(x/scale, z/scale) × weight × strength` (`noise` crate); flatten is the column with the brush's weight on top.
+- All modes through E3. Only Adicionar rests ground on the bare table (`table`); Aplainar on the bare table used to be refused by the engine.
+- **Random-click hardening** (`test/terrain-random.test.mjs`, 120 random strokes of every mode, size, falloff and kind per seed, every stroke must succeed). Owner hit "no room on edge ... faces the other way" clicking at random; causes, all fixed:
+  - **Folded slivers kept out of the patch.** A sliver folded down to the table and back (area ~0.007 m²) read as a face turned down, so no layer ever took it, and every stroke beside it laid ground over it. Faces smaller than `SLIVER_SHARE` 0.05 × face² are never "facing down".
+  - **`border_loops` lost a whole loop at a fold.** A border dead-ending (a face walked against its neighbours) made the walk drop everything it had walked, so a patch with one fold at a pinched corner had no rim ("nada onde a camada assentar"), and the stroke fell to E1. It now backs up to the last corner with another way on.
+  - **Smooth and noise never fall to E1** (E1 has no field for them and only laid the patch again, folded where steep).
+  - **Plan path up to 5 % turned** (`TURNED_SHARE_TOLERATED` 0.01 → 0.05). Patches 1–5 % turned (ear-clipped bent faces) went to the surface path, which moves along one tilted normal and folded metres of ground in plan; laid in plan instead, older folds are flattened out by the next stroke.
+  - **A side refused by the graph** ("no room on edge"): the stroke is laid again once with the patch one ring wider (`ringWider`), taking the bad face beyond the rim with it.
+- Strokes still apply on release, not every frame as in Flax. Flax's Holes mode is not implemented.
 
 ## Open
 
 - **Rest law:** a floor raised off flat ground and moved back and forth leaves a bank each time; the ground round it grows ~5 faces a move (204 → 247 over eight), slowing. Legacy ground cut before the rest law keeps its holes (nothing fills them). A structure removed leaves the ground shaped (earthwork), by design.
-- **E1 stitch at a partly held ring** still drops the band past a chain's free end when called without `groundRunOn` (legacy `"fill"` over the edge).
+- **E1 stitch at a partly held ring** still drops the band past a chain's free end (legacy `"fill"` over the ground's edge; the dock no longer reaches it).
 - **Shared wasm `pkg`:** `libs/domains/procgen/construction-wasm/pkg` is a junction shared by every worktree and the main checkout; any session's `construction-wasm:build` overwrites it with its own branch's engine. Tests and the dev server load whichever built last.
 - A few strokes in 20 leave one sliver cell at a cloud's rim on the table, turned over in plan, where the reach meets the old rim nearly tangentially.
 - **E1 can return a surface that crosses itself.** A bridge leaves a few dozen crossing triangle pairs at its flanks. Digging 6 m into a narrow spike under an arch leaves thousands, takes 1–2 s, and goes through E1 because the layer refuses a patch that is not a disk. The crossings start at the stitch: the zipper joins the ring to a read border that runs metres off it, and unfolding doubles them. Since the sign comes from the band, later strokes are no longer refused over such ground. Refusing on the stitch's longest side was tried and dropped, because an ordinary bridge stitches across 14–17 cells at a corner of the map and the remesh mends it. The fix is the one under the ridge item below: cut the read mesh along the ring.

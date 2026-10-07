@@ -512,6 +512,7 @@ dependencies = [
  "fast-surface-nets",
  "grafting-procgen-irregular-grid",
  "i_overlay",
+ "noise",
 ]
 
 [[package]]

@@ -100,7 +100,7 @@ test("an arch built ball by ball from both ends stays hollow once closed, and ta
   const fixture = setup();
   try {
     const { runtime } = fixture;
-    stroke(fixture, [0, 0], [0, 0], { brushRadius: 26 });
+    stroke(fixture, [0, 0], [0, 0], { brushRadius: 26, falloff: 1 });
     const base = sheetsAt(runtime, 0, 0).at(-1);
     const arc = (degrees, side) => [side * 18 * Math.cos((degrees * Math.PI) / 180), base + 18 * Math.sin((degrees * Math.PI) / 180), 0];
     // Each ball set on the side of the last one that faces where the arch
@@ -140,7 +140,7 @@ for (const order of [["under", "over"], ["over", "under"], ["across", "over"]]) 
     const fixture = setup();
     try {
       const { runtime } = fixture;
-      stroke(fixture, [-20, 0], [20, 0], { brushRadius: 10 });
+      stroke(fixture, [-20, 0], [20, 0], { brushRadius: 10, falloff: 1 });
       stroke(fixture, [-8, 0], [8, 0], { mode: "fill", brushRadius: 2, elevationStep: 6 });
       assert.ok(sheetsAt(runtime, 0, 0).length >= 3, "a hollow bridge");
       const deck = (x) => sheetsAt(runtime, x, 0).at(-1), floor = (x, z) => sheetsAt(runtime, x, z)[0];

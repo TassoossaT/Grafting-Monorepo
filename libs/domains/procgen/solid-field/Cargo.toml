@@ -12,3 +12,4 @@ crate-type = ["rlib"]
 grafting-procgen-irregular-grid = { path = "../irregular-grid" }
 fast-surface-nets = "0.2"
 i_overlay = "=8.1.0"
+noise = "0.9"

@@ -27,6 +27,8 @@ use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
 
+use noise::{NoiseFn, Perlin};
+
 use crate::bed::{Bed, BedIndex, Sheets, bedded, settled_under};
 use crate::edit::{Faces, newell};
 use crate::field::{Effect, Form, Shape};
@@ -54,7 +56,7 @@ pub struct LayerEdit {
 
 /// How much of the faces may lie turned over in plan, as a share of their
 /// area there, for the plan still to be where they are laid.
-const TURNED_SHARE_TOLERATED: f64 = 0.01;
+const TURNED_SHARE_TOLERATED: f64 = 0.05;
 /// Sides of the circle a layer's reach is drawn with on the bare table.
 const REACH_SIDES: usize = 32;
 /// The shortest side a corner the boolean made may leave, as a share of a face.
@@ -97,11 +99,6 @@ fn plan_to_path(point: Vec2, path: &[Vec3]) -> (f64, usize, f64) {
     best
 }
 
-/// A cosine from one at `0` to nothing at `1`.
-fn cosine(along: f64) -> f64 {
-    if along >= 1.0 { 0.0 } else { 0.5 * (1.0 + (std::f64::consts::PI * along.max(0.0)).cos()) }
-}
-
 fn smoothstep(t: f64) -> f64 {
     let t = t.clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -110,18 +107,61 @@ fn smoothstep(t: f64) -> f64 {
 /// `point` with every shape applied in order, `up` the way a layer lifts it.
 /// A layer is as deep as its profile at the point's distance across the
 /// ground from the path; a level pulls the point's height to it within its
-/// column, easing off over `blend` round its radius.
-fn moved(point: Vec3, shapes: &[Shape], blend: f64, up: &dyn Fn(&Shape, Vec3) -> (Vec3, f64)) -> Vec3 {
+/// column, by the brush's strength and falloff; a smooth draws it toward
+/// the mean height of the ground round it (`height_at`, the old surface in
+/// plan -- `None` where the faces fold over in plan, and a smooth does
+/// nothing there); noise lifts or sinks it by Perlin noise.
+fn moved(point: Vec3, shapes: &[Shape], blend: f64, up: &dyn Fn(&Shape, Vec3) -> (Vec3, f64), height_at: Option<&dyn Fn(Vec2) -> Option<f64>>) -> Vec3 {
     shapes.iter().fold(point, |at, shape| match (shape.effect, shape.form) {
         (Effect::Raise | Effect::Lower, Form::Profile { height }) => {
             let (direction, across) = up(shape, at);
-            let depth = height * cosine(across / shape.radius.max(1e-9));
+            let depth = height * shape.brush.weight(across / shape.radius.max(1e-9));
             at + direction * if shape.effect == Effect::Raise { depth } else { -depth }
+        }
+        (Effect::Smooth, _) => {
+            let Some(height_at) = height_at else { return at };
+            let (across, ..) = plan_to_path(plan(at), &shape.path);
+            let weight = shape.brush.weight(across / shape.radius.max(1e-9)) * shape.brush.strength.clamp(0.0, 1.0);
+            if weight <= 0.0 {
+                return at;
+            }
+            // The mean over a disc of the filter's radius round the point: its
+            // middle, and two rings of samples.
+            let reach = (shape.brush.filter.max(0.05) * shape.radius).max(1e-3);
+            let mut sum = 0.0;
+            let mut count = 0.0;
+            for (ring, r) in [(1usize, 0.0), (8, 0.5 * reach), (12, reach)] {
+                for k in 0..ring {
+                    let angle = std::f64::consts::TAU * k as f64 / ring as f64;
+                    if let Some(y) = height_at(Vec2::new(at.x + r * angle.cos(), at.z + r * angle.sin())) {
+                        sum += y;
+                        count += 1.0;
+                    }
+                }
+            }
+            if count == 0.0 {
+                return at;
+            }
+            Vec3::new(at.x, at.y + (sum / count - at.y) * weight, at.z)
+        }
+        (Effect::Noise, Form::Profile { height }) => {
+            let (across, ..) = plan_to_path(plan(at), &shape.path);
+            let weight = shape.brush.weight(across / shape.radius.max(1e-9)) * shape.brush.strength.clamp(0.0, 1.0);
+            if weight <= 0.0 {
+                return at;
+            }
+            let scale = shape.brush.noise_scale.max(0.1);
+            let wave = Perlin::new(shape.brush.seed).get([at.x / scale, at.z / scale]);
+            Vec3::new(at.x, at.y + height * wave * weight, at.z)
         }
         (effect, Form::Column { low, high }) => {
             let (across, ..) = plan_to_path(plan(at), &shape.path);
+            // The rim eased over `blend` as ever, the brush's own falloff and
+            // strength on top.
             let ease = blend.max(1e-6);
-            let weight = 1.0 - smoothstep((across - (shape.radius - ease)) / (2.0 * ease));
+            let weight = (1.0 - smoothstep((across - (shape.radius - ease)) / (2.0 * ease)))
+                * shape.brush.weight(across / shape.radius.max(1e-9))
+                * shape.brush.strength.clamp(0.0, 1.0);
             match effect {
                 Effect::Fill if at.y < high && at.y >= low => Vec3::new(at.x, at.y + (high - at.y) * weight, at.z),
                 Effect::Carve if at.y > low && at.y <= high => Vec3::new(at.x, at.y - (at.y - low) * weight, at.z),
@@ -638,7 +678,8 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
             continue;
         }
         let base = locator.height(point, face_side * 0.5).or(edit.table).unwrap_or(0.0);
-        vertices.push(bedded(moved(Vec3::new(point.x, base, point.y), &edit.shapes, edit.blend, &vertical), &beds, &sheets));
+        let height_at = |at: Vec2| locator.height(at, face_side * 0.5);
+        vertices.push(bedded(moved(Vec3::new(point.x, base, point.y), &edit.shapes, edit.blend, &vertical, Some(&height_at)), &beds, &sheets));
     }
     // A corner on a side somebody holds -- the patch's rim, the ground or a
     // structure beside it -- lies on that side, named with its two ends.
@@ -832,7 +873,7 @@ fn layer_on_surface(patch: &Faces, triangles: &[[usize; 3]], context: &Faces, ed
     };
     let beds: Vec<BedIndex> = edit.beds.iter().map(BedIndex::new).collect();
     let sheets = Sheets::new(&[patch, context], face_side);
-    let displaced: Vec<Vec3> = support.iter().enumerate().map(|(v, &p)| if rim.contains(&v) { p } else { bedded(moved(p, &edit.shapes, edit.blend, &across), &beds, &sheets) }).collect();
+    let displaced: Vec<Vec3> = support.iter().enumerate().map(|(v, &p)| if rim.contains(&v) { p } else { bedded(moved(p, &edit.shapes, edit.blend, &across, None), &beds, &sheets) }).collect();
 
     // The holes in the patch -- structures standing in it -- gone round,
     // never capped: the ground goes round them as they are.
