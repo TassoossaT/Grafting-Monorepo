@@ -49,6 +49,13 @@ const LAYER_MARGIN_FACES = 0.25;
 const PATCH_MARGIN_FACES = 2;
 /** How far past the faces laid again, in faces, the ground asked where solid is reaches. */
 const CONTEXT_MARGIN_FACES = 4;
+/**
+ * How far past the faces a layer lays again, in faces, the ground round them
+ * is read: the layer meets only the faces beside its patch. Read as far as a
+ * volume edit's, a small stroke read most of the map and handed it all to the
+ * engine.
+ */
+const LAYER_CONTEXT_MARGIN_FACES = 1;
 
 /** How thin a shape is at its thinnest, the scale its blend is taken from: the engine's `Shape::thickness`, but a layer by its height too. */
 function thicknessOf(shape: ConstructionVolumeShape): number {
@@ -177,7 +184,7 @@ export function commitTerrainVolumeEdit(
   const widest = Math.max(...shapes.map((shape) => shape.radius));
   const guess = options.faceSide ?? 2;
   const margin = blend + PATCH_MARGIN_FACES * guess;
-  const outer = widest + margin + CONTEXT_MARGIN_FACES * guess;
+  const outer = widest + margin + (shapes.every(movesSurface) ? LAYER_CONTEXT_MARGIN_FACES : CONTEXT_MARGIN_FACES) * guess;
   const standing = ctx.runtime.getRegionTopologiesInBounds({
     minX: Math.min(...xs) - outer, minZ: Math.min(...zs) - outer, maxX: Math.max(...xs) + outer, maxZ: Math.max(...zs) + outer,
   });
@@ -225,7 +232,12 @@ export function commitTerrainVolumeEdit(
   const neighbours = indexedFaces(structures);
   const attempt = (patchFaces: readonly ConstructionRegionTopology[]) => {
     const patchKeys = new Set(patchFaces.map((face) => face.surfaceKey.join("\u0000")));
-    const contextFaces = nearby.filter((topology) => !patchKeys.has(topology.surfaceKey.join("\u0000")));
+    // A layer meets only the ground beside its patch -- sharing a corner with
+    // it, or within its reach, where a layer run on over the table must not
+    // cover it. Handed every face read, the engine took in most of the map.
+    const corners = new Set(patchFaces.flatMap((face) => face.nodes.map((node) => node.id)));
+    const contextFaces = nearby.filter((topology) => !patchKeys.has(topology.surfaceKey.join("\u0000")) &&
+      (!layer || topology.nodes.some((node) => corners.has(node.id) || shapes.some((shape) => planToPath(node.position, shape.path).across < shape.radius + blend + guess))));
     // The ground's own face size; the engine lays finer where the shape is narrow.
     const faceSide = options.faceSide ?? (patchFaces.length > 0 ? faceSideOf(patchFaces) : options.emptyFaceSide ?? 2);
     const patch = indexedFaces(patchFaces);
@@ -253,8 +265,22 @@ export function commitTerrainVolumeEdit(
   // A hole in the patch the edit closes over is laid again with it: tried as
   // walked first, then grown inward from its holes a ring at a time -- a
   // patch no larger than the last one tried is the same refusal, never asked twice.
-  const tries = [walked, grownInward(walked, nearby, 1), grownInward(walked, nearby, 2)];
-  const done = tries.reduce<ReturnType<typeof attempt>>((found, patchFaces, index) => found ?? (index > 0 && patchFaces.length === tries[index - 1]!.length ? undefined : attempt(patchFaces)), undefined);
+  // The patch with the islands of ground it closes round taken in first:
+  // left out -- small faces folded by an older stroke -- each was a hole the
+  // new ground went round in fine cells, a hundred holes laid six times the
+  // faces, and every stroke after it over that ground cost more. Each next
+  // patch is worked out only when the one before it was refused.
+  const tries: (() => readonly ConstructionRegionTopology[])[] = [() => grownInward(walked, nearby, 1), () => walked, () => grownInward(walked, nearby, 2)];
+  let done: ReturnType<typeof attempt>;
+  let last = -1;
+  for (const next of tries) {
+    const patchFaces = next();
+    // A patch no larger than the last one tried is the same refusal, never asked twice.
+    if (patchFaces.length === last) continue;
+    last = patchFaces.length;
+    done = attempt(patchFaces);
+    if (done) break;
+  }
   if (!done) throw new Error("o núcleo recusou a edição");
   const commit = ({ laid, patchFaces, contextFaces, faceSide }: NonNullable<typeof done>) => {
     const operationId = `${ctx.tableId}:terrain-volume:${ctx.nextSequence()}`;

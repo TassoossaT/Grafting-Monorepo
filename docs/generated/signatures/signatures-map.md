@@ -4436,9 +4436,11 @@ export const graphNodeOf = (sample: Pick<PointerSample, "node" | "nodeId">): str
 // src/composition/tabletop/tools/core/pointer-ray.ts
 export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
   const exact = exactAtHeight(sample, y);
-export function withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample {
+export function surfaceKeyOfRef(surfaceRef: string): ConstructionSurfaceKey {
+  const parts = surfaceRef.split(",");
+export function withFacePlane(sample: PointerSample, faceOf: (surfaceKey: ConstructionSurfaceKey) => ConstructionRegionTopology | undefined): PointerSample {
   if (sample.surfaceRef === undefined) return sample;
-  const topology = topologies.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
+  const topology = faceOf(surfaceKeyOfRef(sample.surfaceRef));
 
 // src/composition/tabletop/tools/core/pointer-scale.ts
 export function metersPerPixelAt(hit: Pick<PointerSample, "point" | "ray">, viewportHeight: number, fovDegrees: number): number | undefined {

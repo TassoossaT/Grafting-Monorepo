@@ -419,7 +419,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const hit = runtime.pick(viewId, x, y);
       if (hit === undefined) return undefined;
       const tool = toolFor(activeTool);
-      const placed = withFacePlane(hit, runtime.getAllRegionTopologies());
+      const placed = withFacePlane(hit, (surfaceKey) => runtime.getRegionTopology(surfaceKey));
       // Ctrl (Cmd) places freely: what the ruler catches is shown, not taken.
       const free = event.ctrlKey === true || event.metaKey === true;
       freeHandRef.current = free;

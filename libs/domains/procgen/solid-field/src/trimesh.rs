@@ -25,12 +25,19 @@ fn key(a: usize, b: usize) -> (usize, usize) {
 /// the last corner with another way on: dropping the whole walk lost the
 /// loop it was on wherever it met the fold at a corner it passes twice.
 pub fn border_loops(triangles: &[[usize; 3]]) -> Vec<Vec<usize>> {
-    let mut directed: HashSet<(usize, usize)> = HashSet::new();
-    for &[a, b, c] in triangles {
-        for edge in [(a, b), (b, c), (c, a)] {
-            directed.insert(edge);
-        }
-    }
+    chained(triangles.iter().flat_map(|&[a, b, c]| [(a, b), (b, c), (c, a)]))
+}
+
+/// [`border_loops`] of faces of any number of corners, read off their own
+/// sides: a face's triangles would lay a diagonal over a side of a face that
+/// folds on itself, and take that side off the border.
+pub fn face_border_loops(faces: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    chained(faces.iter().filter(|face| face.len() >= 3).flat_map(|face| (0..face.len()).map(move |k| (face[k], face[(k + 1) % face.len()]))))
+}
+
+/// The sides walked by `edges` that no other walks the other way, chained into loops.
+fn chained(edges: impl IntoIterator<Item = (usize, usize)>) -> Vec<Vec<usize>> {
+    let directed: HashSet<(usize, usize)> = edges.into_iter().filter(|(a, b)| a != b).collect();
     let mut next: HashMap<usize, Vec<usize>> = HashMap::new();
     for &(a, b) in &directed {
         if !directed.contains(&(b, a)) {
@@ -59,7 +66,7 @@ pub fn border_loops(triangles: &[[usize; 3]]) -> Vec<Vec<usize>> {
                     here = take(*walk.last().unwrap_or(&start));
                 }
             }
-            if here == Some(start) && walk.len() >= 3 {
+                    if here == Some(start) && walk.len() >= 3 {
                 loops.push(walk);
             }
         }

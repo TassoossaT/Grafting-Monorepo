@@ -34,7 +34,7 @@ use crate::edit::{Faces, newell};
 use crate::field::{Effect, Form, Shape};
 use crate::mesh_distance::MeshDistance;
 use crate::regenerate::{GivenPoint, Landing, Origin, RegeneratedSurface, Regeneration, regenerate_surface, triangles_of};
-use crate::trimesh::border_loops;
+use crate::trimesh::{border_loops, face_border_loops};
 use crate::vector::Vec3;
 
 /// One stroke: layers raised or lowered (`Form::Profile`), or columns a level
@@ -172,17 +172,18 @@ fn moved(point: Vec3, shapes: &[Shape], blend: f64, up: &dyn Fn(&Shape, Vec3) ->
     })
 }
 
-/// Every face of `faces` fanned from its first corner: its own sides, each
-/// once, whatever its shape -- the patch's border as its faces draw it.
-fn fanned(faces: &Faces) -> Vec<[usize; 3]> {
-    faces.faces.iter().filter(|face| face.len() >= 3).flat_map(|face| (1..face.len() - 1).map(move |k| [face[0], face[k], face[k + 1]])).collect()
-}
-
-/// The narrowest a shape is: what the faces laid on it must be finer than.
+/// The narrowest a shape is: what the faces laid on it must be finer than --
+/// never finer than [`FINEST_FACE_SHARE`] of the face asked for. Laid as fine
+/// as a narrow stroke wanted (a quarter metre for a small, tall one), the
+/// ground grew denser with every small stroke, and every stroke after it
+/// over that ground read and laid hundreds of faces again.
 fn face_side_for(edit: &LayerEdit) -> f64 {
     let narrowest = edit.shapes.iter().map(Shape::thickness).fold(f64::INFINITY, f64::min);
-    edit.face_side.max(0.25).min(narrowest * SHAPE_FACE_SHARE).max(0.25)
+    edit.face_side.max(0.25).min(narrowest * SHAPE_FACE_SHARE).max(edit.face_side * FINEST_FACE_SHARE).max(0.25)
 }
+
+/// The finest face a layer lays, as a share of the face asked for.
+const FINEST_FACE_SHARE: f64 = 0.4;
 
 /// Lays `patch` again with `edit` applied to it. `context` is the ground
 /// round it and `neighbours` the structures standing in it: a layer laid
@@ -195,15 +196,8 @@ pub fn layer_surface(patch: &Faces, context: &Faces, neighbours: &Faces, edit: &
     });
     // Flat in plan: next to nothing turned over, and nothing lying over
     // anything else -- a tunnel's floor under the hill over it both face up.
-    let flat = positive.min(negative) <= (positive + negative) * TURNED_SHARE_TOLERATED && {
-        let pieces = plan_polygons(&Faces { vertices: patch.vertices.clone(), faces: triangles.iter().map(|t| t.to_vec()).collect() });
-        let covered: f64 = pieces
-            .overlay(&Vec::<Vec<Contour>>::new(), OverlayRule::Subject, FillRule::NonZero)
-            .iter()
-            .flat_map(|piece| piece.iter().map(|c| ring_area(&c.iter().map(|p| Vec2::new(p[0], p[1])).collect::<Vec<_>>())))
-            .sum();
-        covered >= positive.max(negative) * (1.0 - TURNED_SHARE_TOLERATED)
-    };
+    let flat = positive.min(negative) <= (positive + negative) * TURNED_SHARE_TOLERATED
+        && overlapping_area(&patch.vertices, &triangles) <= positive.max(negative) * TURNED_SHARE_TOLERATED;
     let laid = if triangles.is_empty() || flat {
         layer_in_plan(patch, &triangles, positive >= negative, context, neighbours, edit)?
     } else {
@@ -447,6 +441,70 @@ fn reach_contours(shape: &Shape) -> Vec<Vec<Contour>> {
     shapes
 }
 
+/// How much of `triangles`' area in plan lies over or under another of them:
+/// each triangle whose middle another covers, by its area. A bucket grid
+/// finds the others near, so it costs next to nothing a stroke -- the union
+/// of the triangles it replaced took seconds on a patch of a thousand faces.
+fn overlapping_area(vertices: &[Vec3], triangles: &[[usize; 3]]) -> f64 {
+    if triangles.is_empty() {
+        return 0.0;
+    }
+    let corners = |t: &[usize; 3]| [plan(vertices[t[0]]), plan(vertices[t[1]]), plan(vertices[t[2]])];
+    let side = triangles.iter().map(|t| { let [a, b, c] = corners(t); (b.x - a.x).hypot(b.y - a.y).max((c.x - a.x).hypot(c.y - a.y)) }).sum::<f64>() / triangles.len() as f64;
+    let cell = side.max(1e-6);
+    let key = |p: Vec2| ((p.x / cell).floor() as i64, (p.y / cell).floor() as i64);
+    let mut buckets: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+    for (index, t) in triangles.iter().enumerate() {
+        let [a, b, c] = corners(t);
+        let (low, high) = (key(Vec2::new(a.x.min(b.x).min(c.x), a.y.min(b.y).min(c.y))), key(Vec2::new(a.x.max(b.x).max(c.x), a.y.max(b.y).max(c.y))));
+        for x in low.0..=high.0 {
+            for z in low.1..=high.1 {
+                buckets.entry((x, z)).or_default().push(index);
+            }
+        }
+    }
+    triangles
+        .iter()
+        .enumerate()
+        .filter_map(|(index, t)| {
+            let [a, b, c] = corners(t);
+            let area = cross_2d(a, b, c) * 0.5;
+            if area.abs() < 1e-12 {
+                return None;
+            }
+            let middle = Vec2::new((a.x + b.x + c.x) / 3.0, (a.y + b.y + c.y) / 3.0);
+            let covered = buckets.get(&key(middle)).is_some_and(|near| near.iter().any(|&other| {
+                if other == index {
+                    return false;
+                }
+                let [p, q, r] = corners(&triangles[other]);
+                let (d1, d2, d3) = (cross_2d(p, q, middle), cross_2d(q, r, middle), cross_2d(r, p, middle));
+                (d1 > 0.0 && d2 > 0.0 && d3 > 0.0) || (d1 < 0.0 && d2 < 0.0 && d3 < 0.0)
+            }));
+            covered.then_some(area.abs())
+        })
+        .sum()
+}
+
+/// The patch's outline in plan: its border loops, the rim counter-clockwise
+/// and its holes clockwise -- what the union of its faces in plan is,
+/// wherever no sheet of it lies over another, and where one does, the
+/// union of these rings by their winding still covers each place once.
+/// The union of its triangles one by one took seconds on a patch of a
+/// thousand faces, twice a stroke.
+fn plan_outline(patch: &Faces, counter_clockwise: bool) -> Vec<Contour> {
+    face_border_loops(&patch.faces)
+        .into_iter()
+        .map(|ring| {
+            let mut contour: Contour = ring.iter().map(|&v| [patch.vertices[v].x, patch.vertices[v].z]).collect();
+            if !counter_clockwise {
+                contour.reverse();
+            }
+            contour
+        })
+        .collect()
+}
+
 /// `faces` each as a counter-clockwise polygon in plan.
 fn plan_polygons(faces: &Faces) -> Vec<Vec<Contour>> {
     faces
@@ -562,7 +620,7 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
     // The patch's own rings in plan: its rim and the holes structures make in
     // it -- read off its faces, never off their triangles: a face folded on
     // itself clips to nothing, and its place would read as a hole.
-    let loops = border_loops(&fanned(patch));
+    let loops = face_border_loops(&patch.faces);
     // Every corner the new ground may come to stand on, by one numbering: the
     // patch's own, then the ground's round it, then the structures'. A layer
     // run on out over the table meets the ground and structures beside it on
@@ -606,8 +664,9 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
     // One boolean, never two: the patch and the reach together, less what
     // else stands -- a second boolean over the first's rounded corners
     // leaves slivers along the patch's rim.
-    let own: Vec<Vec<Contour>> = plan_polygons(&Faces { vertices: patch.vertices.clone(), faces: triangles.iter().map(|t| t.to_vec()).collect() });
-    let own_area: f64 = own.iter().map(|piece| ring_area(&piece[0].iter().map(|p| Vec2::new(p[0], p[1])).collect::<Vec<_>>())).sum();
+    let outline = plan_outline(patch, counter_clockwise);
+    let own_area: f64 = outline.iter().map(|ring| ring_area(&ring.iter().map(|p| Vec2::new(p[0], p[1])).collect::<Vec<_>>())).sum();
+    let own: Vec<Vec<Contour>> = if outline.is_empty() { Vec::new() } else { vec![outline] };
     let joined: Vec<Vec<Contour>> = match edit.table {
         Some(_) if !raised.is_empty() => {
             let mut subject = own.clone();
@@ -829,7 +888,7 @@ fn layer_on_surface(patch: &Faces, triangles: &[[usize; 3]], context: &Faces, ed
     let out = if rising < 0.0 { -1.0 } else { 1.0 };
 
     let mut support = patch.vertices.clone();
-    let rim: HashSet<usize> = border_loops(&fanned(patch)).into_iter().flatten().collect();
+    let rim: HashSet<usize> = face_border_loops(&patch.faces).into_iter().flatten().collect();
     let fine = refined(&mut support, triangles.to_vec(), face_side * 0.5, 3);
     // The ground's normal under every point of each path.
     let surface = MeshDistance::new(support.clone(), &fine.iter().map(|t| t.to_vec()).collect::<Vec<_>>(), face_side);

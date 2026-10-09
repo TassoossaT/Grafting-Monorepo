@@ -566,7 +566,7 @@ for (const camera of [{ x: 4, y: 14, z: -10 }, { x: 4, y: 8, z: -8 }, { x: -4, y
         const d = { x: hit.x - camera.x, y: hit.y - camera.y, z: hit.z - camera.z };
         const n = Math.hypot(d.x, d.y, d.z);
         // As the pointer gives it: the face read at the exact hit, then the hit snapped.
-        const sample = withFacePlane({ point: hit, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey), ray: { origin: camera, direction: { x: d.x / n, y: d.y / n, z: d.z / n } } }, runtime.getAllRegionTopologies());
+        const sample = withFacePlane({ point: hit, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey), ray: { origin: camera, direction: { x: d.x / n, y: d.y / n, z: d.z / n } } }, (surfaceKey) => runtime.getRegionTopology(surfaceKey));
         return { ...sample, point: { x: Math.round(x), y: hit.y, z: Math.round(z) } };
       };
       const [start, current] = [over(3, 1), over(6, 2.9)];

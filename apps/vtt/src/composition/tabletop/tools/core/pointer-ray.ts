@@ -1,6 +1,5 @@
 import { faceRings, planeOf } from "../../../../features/edit-construction/index.ts";
-import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
+import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "../../../../ports/index.ts";
 import type { PointerSample } from "./tool-context.ts";
 
 /**
@@ -42,14 +41,27 @@ function crossing(ray: NonNullable<PointerSample["ray"]>, normal: ConstructionPo
 }
 
 /**
+ * The key of the face a pick's `surfaceRef` names -- the key's parts, sorted
+ * and joined (`surfaceRefFromNodeSet`): for a region, `["@region", id]`.
+ */
+export function surfaceKeyOfRef(surfaceRef: string): ConstructionSurfaceKey {
+  const parts = surfaceRef.split(",");
+  const at = parts.indexOf("@region");
+  if (at < 0) return parts;
+  return ["@region", parts.filter((_, index) => index !== at).join(",")];
+}
+
+/**
  * `sample` knowing the face it is on: that face's slope, through the exact
  * point the pointer hit -- read before the hit is snapped to the grid, and
  * right on uneven faces too, the ground or a road, whose slope differs from
- * place to place. The pointer gives every sample this.
+ * place to place. The pointer gives every sample this, so `faceOf` reads the
+ * one face it is on: every face of the map read on every pointer move cost
+ * tens of milliseconds a move on a map of a thousand faces.
  */
-export function withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample {
+export function withFacePlane(sample: PointerSample, faceOf: (surfaceKey: ConstructionSurfaceKey) => ConstructionRegionTopology | undefined): PointerSample {
   if (sample.surfaceRef === undefined) return sample;
-  const topology = topologies.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
+  const topology = faceOf(surfaceKeyOfRef(sample.surfaceRef));
   const plane = topology && planeOf(faceRings(topology)[0] ?? []);
   return plane ? { ...sample, face: { normal: plane.normal, centre: sample.point } } : sample;
 }

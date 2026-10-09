@@ -266,6 +266,18 @@ Owner: one tool for 2D and 3D, **no ball** ("justamente a porcaria que eu mandei
   - **A side refused by the graph** ("no room on edge"): the stroke is laid again once with the patch one ring wider (`ringWider`), taking the bad face beyond the rim with it.
 - Strokes still apply on release, not every frame as in Flax. Flax's Holes mode is not implemented.
 
+## Stroke cost (2026-10-08)
+
+Owner: terrain editing "muito lento e ineficiente"; the cause was the read, not the engine. Measured on a map of ~400 ground faces, one stroke went from 47–138 ms to 10–24 ms (`test/terrain-stroke-reach.test.mjs` holds the reach):
+- **Context read 4 faces past the stroke** (a volume edit's margin) for layers too: a stroke laying 40–70 faces handed the engine 150–320 more. Layers now read 1 face past (`LAYER_CONTEXT_MARGIN_FACES`) and hand only the ground sharing a corner with the patch or within its reach: 9–41.
+- **Every pointer move read every face of the map** (`withFacePlane` took all topologies to find the one hit). It now reads the hit face by key (`surfaceKeyOfRef`).
+- **Small strokes laid faces down to 0.25 m**, so the ground grew denser and every later stroke over it cost more. A layer now lays no finer than half the face asked (`FINEST_FACE_SHARE`).
+- **Islands the patch closes round are taken in on the first try** (`grownInward(walked, 1)`, then `walked`, then two rings). Left out, small faces an older stroke folded were each a hole the new ground went round in fine cells: one Aplainar of radius 2.5 had a rim of 121 corners and over a hundred holes, laid 6500 faces from 1061, and the strokes after it over that ground took 40–130 s. The next tries are worked out only after a refusal.
+- **The engine unioned every triangle of the patch in plan** (`plan_polygons` over ear-clipped triangles, then an `i_overlay` union), twice a stroke: once to check the patch lies flat, once for its area and the run-on over the table. On ground dense from earlier small strokes (1400 faces, 5250 triangles) that was 9.5 s each, 19 s a stroke; random clicking hit 40–180 s strokes. The flat check now asks whether a triangle's middle lies in another (`overlapping_area`, a bucket grid) and the area union takes the border loops (`plan_outline`): the same patch lays in 0.23 s.
+- **Border loops read off the faces' own sides** (`face_border_loops`), not their fanned triangles: a fan diagonal of a face folded on itself fell on a side of the rim, cancelled it, opened the rim into a chain, and the whole patch was refused ("nada onde a camada assentar").
+
+**Draw brush (pattern 2, sculptor's Draw: push along the surface's mean normal)** was tried and set aside: simple cases worked (a ledge out of a cliff, a hole through a hill), but sideways pushes left folds that refused ~30 % of later random strokes, including strokes from above. The attempt is kept outside the repo (worktree `target/pattern2-full.patch`); not merged.
+
 ## Open
 
 - **Rest law:** a floor raised off flat ground and moved back and forth leaves a bank each time; the ground round it grows ~5 faces a move (204 → 247 over eight), slowing. Legacy ground cut before the rest law keeps its holes (nothing fills them). A structure removed leaves the ground shaped (earthwork), by design.

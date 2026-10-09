@@ -192,6 +192,12 @@ against its neighbours, a fold -- is dropped, and the walk taken back to
 the last corner with another way on: dropping the whole walk lost the
 loop it was on wherever it met the fold at a corner it passes twice.
 
+### `pub fn grafting_procgen_solid_field::trimesh::face_border_loops(faces: &[alloc::vec::Vec<usize>]) -> alloc::vec::Vec<alloc::vec::Vec<usize>>`
+
+[`border_loops`] of faces of any number of corners, read off their own
+sides: a face's triangles would lay a diagonal over a side of a face that
+folds on itself, and take that side off the border.
+
 ### `pub fn grafting_procgen_solid_field::trimesh::unfold(vertices: &mut [grafting_procgen_solid_field::vector::Vec3], triangles: &mut [[usize; 3]], locked: &[bool], locked_edges: &std::collections::hash::set::HashSet<(usize, usize)>, facing: &dyn core::ops::function::Fn(grafting_procgen_solid_field::vector::Vec3) -> grafting_procgen_solid_field::vector::Vec3, settle: &dyn core::ops::function::Fn(grafting_procgen_solid_field::vector::Vec3) -> grafting_procgen_solid_field::vector::Vec3)`
 
 Unfolds what flips alone cannot: every free corner of a triangle facing

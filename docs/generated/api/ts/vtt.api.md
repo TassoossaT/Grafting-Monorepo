@@ -2305,12 +2305,19 @@ hit. Without a ray -- or one that never reaches there in front of the
 camera -- the hit point, at `y`. Exact but for what the ruler caught
 (`sample.ruled`): the pointer's own ray is never rounded, only ruled.
 
-### `function vtt.pointer-ray.withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample`
+### `function vtt.pointer-ray.surfaceKeyOfRef(surfaceRef: string): ConstructionSurfaceKey`
+
+The key of the face a pick's `surfaceRef` names -- the key's parts, sorted
+and joined (`surfaceRefFromNodeSet`): for a region, `["@region", id]`.
+
+### `function vtt.pointer-ray.withFacePlane(sample: PointerSample, faceOf: (surfaceKey: ConstructionSurfaceKey) => ConstructionRegionTopology | undefined): PointerSample`
 
 `sample` knowing the face it is on: that face's slope, through the exact
 point the pointer hit -- read before the hit is snapped to the grid, and
 right on uneven faces too, the ground or a road, whose slope differs from
-place to place. The pointer gives every sample this.
+place to place. The pointer gives every sample this, so `faceOf` reads the
+one face it is on: every face of the map read on every pointer move cost
+tens of milliseconds a move on a map of a thousand faces.
 
 ### `function vtt.pointer-scale.metersPerPixelAt(hit: Pick<PointerSample, "point" | "ray">, viewportHeight: number, fovDegrees: number): number | undefined`
 
