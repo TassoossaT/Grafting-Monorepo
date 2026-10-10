@@ -153,7 +153,16 @@ pub fn build_constrained_quad_grid(
     seed: u32,
     relax_options: &RelaxOptions,
 ) -> Option<ConstrainedQuadGrid> {
-    let (triangles, seams, seams_kept) = match constrained::triangulate_keeping_seams(options) {
+    build_quad_grid(options, seed, relax_options, true).or_else(|| build_quad_grid(options, seed, relax_options, false))
+}
+
+/// [`build_constrained_quad_grid`], keeping the contours' seams whole when
+/// `keep_seams` -- `None` where a cell came out past the contours: a point
+/// held out of the triangulation lay off its seam on the far side, and the
+/// cells beside the seam wrapped round past the ring.
+fn build_quad_grid(options: &constrained::ConstrainedOptions, seed: u32, relax_options: &RelaxOptions, keep_seams: bool) -> Option<ConstrainedQuadGrid> {
+    let kept = if keep_seams { constrained::triangulate_keeping_seams(options) } else { None };
+    let (triangles, seams, seams_kept) = match kept {
         Some((triangles, seams)) => (triangles, seams, true),
         None => (constrained::triangulate_constrained(options)?, Vec::new(), false),
     };
@@ -197,6 +206,24 @@ pub fn build_constrained_quad_grid(
     // A face left whole needs no centre, and a seam bordering no ground puts
     // its held points nowhere; neither is a node anyone should declare.
     let (welded, sources) = without_unused_vertices(welded, sources);
+
+    if seams_kept {
+        let ground = constrained::within_rings(options);
+        let past = welded.faces.iter().any(|face| {
+            let centre = face.iter().fold(Vec2::new(0.0, 0.0), |sum, &v| Vec2::new(sum.x + welded.vertices[v].x, sum.y + welded.vertices[v].y));
+            // Wound against the grid: a sliver of seam points alone, past a
+            // seam whose held points bulged out of it.
+            let area: f64 = (0..face.len()).map(|k| { let (p, q) = (welded.vertices[face[k]], welded.vertices[face[(k + 1) % face.len()]]); p.x * q.y - q.x * p.y }).sum();
+            area <= 0.0 || !ground(Vec2::new(centre.x / face.len() as f64, centre.y / face.len() as f64))
+        });
+        // A point the contours hold that no cell came back with: a seam
+        // that bordered no ground put its held points nowhere.
+        let held: HashSet<u32> = sources.iter().flatten().copied().collect();
+        let lost = options.boundary.iter().chain(&options.holes).flatten().filter_map(|p| p.source).any(|source| !held.contains(&source));
+        if past || lost {
+            return None;
+        }
+    }
 
     let on_contour: Vec<ContourNode> = (0..welded.vertices.len())
         .filter(|&index| sources[index].is_none())

@@ -574,6 +574,12 @@ export interface ConstructionVolumeShape {
   /** For noise: how many metres one wave spans, and its seed. */
   readonly noiseScale?: number;
   readonly seed?: number;
+  /**
+   * For a raise or a lower: the way the brush pushes, out of the surface it
+   * was drawn on -- a wall's, a cliff's -- the surface moved along it, not
+   * up. Omitted: up.
+   */
+  readonly direction?: readonly [number, number, number];
 }
 
 /** Faces as indices into their own vertices, all wound the same way. */

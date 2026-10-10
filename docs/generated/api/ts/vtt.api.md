@@ -1753,11 +1753,21 @@ the structure that cut it, on the ground's own surface. Returns the faces built.
 
 A terrain editor's brush: how strong, and how its effect fades to its rim. Omitted, all of it, a cosine from the middle.
 
+### `property vtt.terrain-volume-edit.TerrainBrush.direction?: ConstructionPosition`
+
+For a raise or a lower: the way it pushes, out of the surface it is drawn on. Omitted: up.
+
 ### `property vtt.terrain-volume-edit.TerrainBrush.falloff?: number`
 
 ### `property vtt.terrain-volume-edit.TerrainBrush.falloffType?: "smooth" | "linear" | "spherical" | "tip"`
 
 ### `property vtt.terrain-volume-edit.TerrainBrush.strength?: number`
+
+### `function vtt.terrain-volume-edit.brushWay(runtime: { getRegionTopologiesInBounds: any }, point: ConstructionPosition, reach: number, facing: ConstructionPosition): ConstructionPosition | undefined`
+
+The way a brush drawn at `point` pushes: out of the ground's faces round
+it, within `reach`, each by its area -- the faces facing the way `facing`
+says only, never the far side of a wall. `undefined` with no face there.
 
 ### `function vtt.terrain-volume-edit.carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined`
 
@@ -4094,6 +4104,12 @@ A renderer-neutral circular brush outline shared by terrain and surface transfor
 Preview-only outline of the same circular brush swept over ordered samples.
 Positions are explicit segment pairs because the render port's `segments`
 primitive does not imply a line strip.
+
+### `function vtt.preview-shapes.discWireframe(path: readonly ConstructionPosition[], radius: number, normal: ConstructionPosition, color: number, opacity: number): PreviewDescriptor`
+
+A brush's disc swept along `path`, square to `normal` -- the way it
+pushes: a ring round each point and two lines down its sides, the flat
+ghost of a brush drawn on a wall.
 
 ### `function vtt.preview-shapes.footprintQuad(corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition], color: number, opacity: number): PreviewDescriptor`
 
@@ -11894,6 +11910,12 @@ A form swept along a path that changes the ground's solid:
 - `noise`: Perlin noise `height` high laid on it.
 
 ### `property vtt.construction-session-port.ConstructionVolumeShape.column?: { high: number; low: number }`
+
+### `property vtt.construction-session-port.ConstructionVolumeShape.direction?: readonly [number, number, number]`
+
+For a raise or a lower: the way the brush pushes, out of the surface it
+was drawn on -- a wall's, a cliff's -- the surface moved along it, not
+up. Omitted: up.
 
 ### `property vtt.construction-session-port.ConstructionVolumeShape.effect: "carve" | "fill" | "raise" | "lower" | "smooth" | "noise"`
 

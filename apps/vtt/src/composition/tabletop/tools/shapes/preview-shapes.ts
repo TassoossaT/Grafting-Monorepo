@@ -436,6 +436,42 @@ export function circularBrushStrokeOutline(
 const VOLUME_RING_SIDES = 24;
 
 /**
+ * A brush's disc swept along `path`, square to `normal` -- the way it
+ * pushes: a ring round each point and two lines down its sides, the flat
+ * ghost of a brush drawn on a wall.
+ */
+export function discWireframe(path: readonly ConstructionPosition[], radius: number, normal: ConstructionPosition, color: number, opacity = 0.75): PreviewDescriptor {
+  const positions: number[] = [];
+  const add = (a: ConstructionPosition, b: ConstructionPosition) => positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  const length = Math.hypot(normal.x, normal.y, normal.z) || 1;
+  const n = { x: normal.x / length, y: normal.y / length, z: normal.z / length };
+  // Two directions square to the normal: one level, one as upright as it allows.
+  const level = Math.hypot(n.x, n.z) > 1e-6 ? { x: -n.z / Math.hypot(n.x, n.z), y: 0, z: n.x / Math.hypot(n.x, n.z) } : { x: 1, y: 0, z: 0 };
+  const other = { x: n.y * level.z - n.z * level.y, y: n.z * level.x - n.x * level.z, z: n.x * level.y - n.y * level.x };
+  const at = (p: ConstructionPosition, angle: number): ConstructionPosition => ({
+    x: p.x + (level.x * Math.cos(angle) + other.x * Math.sin(angle)) * radius,
+    y: p.y + (level.y * Math.cos(angle) + other.y * Math.sin(angle)) * radius,
+    z: p.z + (level.z * Math.cos(angle) + other.z * Math.sin(angle)) * radius,
+  });
+  for (const point of path) {
+    for (let i = 0; i < VOLUME_RING_SIDES; i++) add(at(point, (2 * Math.PI * i) / VOLUME_RING_SIDES), at(point, (2 * Math.PI * (i + 1)) / VOLUME_RING_SIDES));
+  }
+  for (let i = 0; i + 1 < path.length; i++) {
+    const [a, b] = [path[i]!, path[i + 1]!];
+    const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    // The sides: square to the span within the disc's plane.
+    const side = { x: n.y * d.z - n.z * d.y, y: n.z * d.x - n.x * d.z, z: n.x * d.y - n.y * d.x };
+    const s = Math.hypot(side.x, side.y, side.z);
+    if (s < 1e-9) continue;
+    for (const sign of [1, -1]) {
+      const o = { x: (side.x / s) * radius * sign, y: (side.y / s) * radius * sign, z: (side.z / s) * radius * sign };
+      add({ x: a.x + o.x, y: a.y + o.y, z: a.z + o.z }, { x: b.x + o.x, y: b.y + o.y, z: b.z + o.z });
+    }
+  }
+  return { kind: "segments", color, opacity, positions: Float32Array.from(positions) };
+}
+
+/**
  * A capsule swept along `path` -- every point within `radius` of it -- drawn
  * as a wire volume: three great circles round each point of the path, rings
  * across each span every so often and four lines down its sides. A wire

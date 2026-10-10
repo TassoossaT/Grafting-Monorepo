@@ -115,6 +115,15 @@ lands on one: that point would be a node the contour's owner has to adopt.
 survive as one edge -- two contours crossing through it -- in which case
 the caller has to triangulate without seams.
 
+### `pub fn grafting_procgen_irregular_grid::constrained::within_rings(options: &grafting_procgen_irregular_grid::constrained::ConstrainedOptions) -> impl core::ops::function::Fn(grafting_procgen_irregular_grid::mesh::Vec2) -> bool`
+
+Ground is what the boundary encloses and no hole takes back.
+
+The one rule, applied to seeds before the triangulation and to faces
+after it, so the two can never disagree about where the ground is.
+Whether `point` is ground by the rings exactly as `options` hands them --
+every point of every ring, none held out.
+
 ### `pub fn grafting_procgen_irregular_grid::geometry::centroid_of(points: &[grafting_procgen_irregular_grid::mesh::Vec2]) -> grafting_procgen_irregular_grid::mesh::Vec2`
 
 The average of a set of points.

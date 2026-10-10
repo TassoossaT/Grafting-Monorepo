@@ -201,3 +201,43 @@ test("Ruído roughens level ground under the brush only", () => {
     assert.ok(Math.abs(top(runtime, 0, 12) - far) < 1e-6, "past it untouched");
   } finally { fixture.session.free(); }
 });
+
+/** Where a ray from the side, level at `y` along +x at `z`, first meets the ground: the cliff's face there. */
+const faceAt = (runtime, y, z = 0) => pointerAt(runtime, [-40, y, z], [40, y, z]);
+
+/** A cliff: a plateau `height` high and `radius` round at the origin, its flank near upright. */
+function cliff(fixture, radius = 6, height = 8) {
+  sculpt(fixture, [{ point: { x: 0, y: 0, z: 0 } }], { mode: "add", brushRadius: radius, elevationStep: height, falloff: 0.2 });
+}
+
+test("Adicionar painted on a cliff's flank grows it out sideways -- painted again on the tip, a ledge with nothing under it", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    cliff(fixture);
+    const before = faceAt(runtime, 5).point.x;
+    for (let k = 0; k < 4; k++) sculpt(fixture, [faceAt(runtime, 5)], { mode: "add", brushRadius: 2, elevationStep: 1.5 });
+    const after = faceAt(runtime, 5).point.x;
+    assert.ok(after < before - 1, `the flank at 5 m came out from ${before.toFixed(2)} to ${after.toFixed(2)}`);
+    // A ledge: ground over a point past the old foot, with no ground under it down to the table.
+    const x = before - 2;
+    const sheets = sheetsAt(runtime, x, 0);
+    assert.ok(sheets.length >= 2 && sheets[0] > 1, `a ledge over the bare table at x ${x.toFixed(2)}: ${sheets.map((y) => y.toFixed(2))}`);
+  } finally { fixture.session.free(); }
+});
+
+test("Remover painted on a cliff's flank digs into it sideways -- dug again, a hole on into the hill", () => {
+  const fixture = setup();
+  try {
+    const { runtime } = fixture;
+    cliff(fixture);
+    const before = faceAt(runtime, 4).point.x;
+    for (let k = 0; k < 4; k++) sculpt(fixture, [faceAt(runtime, 4)], { mode: "dig", brushRadius: 2, elevationStep: 1.5 });
+    const after = faceAt(runtime, 4).point.x;
+    assert.ok(after > before + 2, `the flank at 4 m went in from ${before.toFixed(2)} to ${after.toFixed(2)}`);
+    // The hill still stands over the hole: ground over it above, and under it below.
+    const sheets = sheetsAt(runtime, before + 1.5, 0);
+    assert.ok(sheets.length >= 3, `the hill over the hole and its floor under it: ${sheets.map((y) => y.toFixed(2))}`);
+    assert.ok(Math.abs(top(runtime, 0, 0) - 8) < 0.5, `the plateau's top stays where it was: ${top(runtime, 0, 0)}`);
+  } finally { fixture.session.free(); }
+});

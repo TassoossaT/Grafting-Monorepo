@@ -4156,11 +4156,19 @@ export function regrowGround(runtime: TerrainRegrowRuntime, fallout: CutFallout,
 
 // src/composition/tabletop/terrain/terrain-volume-edit.ts
 export function shapeDistance(point: ConstructionPosition, shape: ConstructionVolumeShape): number {
-  // A layer reaches across the ground as far as its radius, and up or down
-  // only as far as its depth and the ground's own slope there carry it: the
-  // ground under an arch a stroke was laid over is another layer, metres down.
-  if (isLayer(shape)) {
-  const { across, y } = planToPath(point, shape.path);
+  // A brush pushed out of a wall reaches across the wall as far as its
+  // radius, and in front of it or behind only as far as its depth and its
+  // radius carry it.
+  if (isLayer(shape) && shape.direction) {
+  const { across, along } = againstWay(point, shape.path, shape.direction);
+export function brushWay(
+  runtime: { getRegionTopologiesInBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }): readonly ConstructionRegionTopology[] },
+  point: ConstructionPosition,
+  reach: number,
+  facing: ConstructionPosition,
+  ): ConstructionPosition | undefined {
+  let x = 0, y = 0, z = 0;
+  for (const face of runtime.getRegionTopologiesInBounds({ minX: point.x - reach, minZ: point.z - reach, maxX: point.x + reach, maxZ: point.z + reach })) {
 export function commitTerrainVolumeEdit(
   ctx: ToolContext,
   shapes: readonly ConstructionVolumeShape[],
@@ -4182,6 +4190,8 @@ export interface TerrainBrush {
   readonly strength?: number;
   readonly falloff?: number;
   readonly falloffType?: "smooth" | "linear" | "spherical" | "tip";
+  /** For a raise or a lower: the way it pushes, out of the surface it is drawn on. Omitted: up. */
+  readonly direction?: ConstructionPosition;
   }
 export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
   const path = thinned(points, radius * PATH_STEP);
@@ -5235,6 +5245,9 @@ export function circularBrushStrokeOutline(
   ): PreviewDescriptor {
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
+export function discWireframe(path: readonly ConstructionPosition[], radius: number, normal: ConstructionPosition, color: number, opacity = 0.75): PreviewDescriptor {
+  const positions: number[] = [];
+  const add = (a: ConstructionPosition, b: ConstructionPosition) => positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
 export function capsuleWireframe(
   path: readonly ConstructionPosition[],
   radius: number,

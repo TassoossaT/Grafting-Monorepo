@@ -93,6 +93,10 @@ const TURNED_SHARE_TOLERATED: f64 = 0.01;
 /// How far off a side, as a share of a face, a corner the generator put on
 /// it in the chart may lie on the surface and still be on that side.
 const LANDING_REACH: f64 = 0.25;
+/// How many times the corners handed in the rings the chart's boolean gives
+/// may hold, past [`SHREDDED_LEAST`], before the ground is taken as shredded.
+const SHREDDED_SHARE: usize = 4;
+const SHREDDED_LEAST: usize = 1_000;
 /// Rounds of the membrane laid over a hole before the chart is made.
 const MEMBRANE_ROUNDS: usize = 400;
 /// Sweeps the mean-value embedding may take to settle, at most.
@@ -113,10 +117,23 @@ pub(crate) fn triangles_of(vertices: &[Vec3], faces: &[Vec<usize>]) -> Vec<[usiz
     for face in faces {
         normal = normal + polygon_normal(vertices, face);
     }
+    // A diagonal running where another face has a side -- two faces folded
+    // so a corner pair of one is a side of the other -- laid that side twice
+    // the same way round, and the patch read as no disk: clipped elsewhere
+    // where the face allows.
+    let sides: HashSet<(usize, usize)> = faces.iter().flat_map(|face| (0..face.len()).map(move |k| (face[k].min(face[(k + 1) % face.len()]), face[k].max(face[(k + 1) % face.len()])))).collect();
+    let none = HashSet::new();
     let triangles = faces
         .iter()
         .filter(|face| face.len() >= 3)
-        .flat_map(|face| ears(vertices, face, normal).unwrap_or_else(|| ears(vertices, face, polygon_normal(vertices, face)).unwrap_or_else(|| fan(face))))
+        .flat_map(|face| {
+            let own = polygon_normal(vertices, face);
+            ears(vertices, face, normal, &sides)
+                .or_else(|| ears(vertices, face, own, &sides))
+                .or_else(|| ears(vertices, face, normal, &none))
+                .or_else(|| ears(vertices, face, own, &none))
+                .unwrap_or_else(|| fan(face))
+        })
         .filter(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2])
         .collect::<Vec<_>>();
     without_cancelling(triangles)
@@ -148,7 +165,8 @@ fn polygon_normal(vertices: &[Vec3], face: &[usize]) -> Vec3 {
 
 /// `face` cut into triangles by ear clipping on the plane across `normal`,
 /// wound as it is; `None` where the face does not wind round that normal simply.
-fn ears(vertices: &[Vec3], face: &[usize], normal: Vec3) -> Option<Vec<[usize; 3]>> {
+/// No ear is clipped whose new diagonal is one of `forbidden`.
+fn ears(vertices: &[Vec3], face: &[usize], normal: Vec3, forbidden: &HashSet<(usize, usize)>) -> Option<Vec<[usize; 3]>> {
     if normal.length() < 1e-12 {
         return None;
     }
@@ -170,6 +188,7 @@ fn ears(vertices: &[Vec3], face: &[usize], normal: Vec3) -> Option<Vec<[usize; 3
             let (a, b, c) = (left[(k + n - 1) % n], left[k], left[(k + 1) % n]);
             let (pa, pb, pc) = (flat(a), flat(b), flat(c));
             signed_area_2d(pa, pb, pc) > 1e-12
+                && !forbidden.contains(&(a.min(c), a.max(c)))
                 && left.iter().all(|&q| {
                     if q == a || q == b || q == c {
                         return true;
@@ -213,7 +232,7 @@ fn signed_area_2d(a: Vec2, b: Vec2, c: Vec2) -> f64 {
 fn cap(ring: &[usize], vertices: &mut Vec<Vec3>, triangles: &mut Vec<[usize; 3]>, face_side: f64, normal: Vec3) -> Result<(), String> {
     // The patch walks a hole's rim against its own winding; the cap walks it back.
     let reversed: Vec<usize> = ring.iter().rev().copied().collect();
-    match ears(vertices, &reversed, normal) {
+    match ears(vertices, &reversed, normal, &HashSet::new()) {
         Some(cut) => {
             triangles.extend(cut);
             Ok(())
@@ -340,7 +359,7 @@ fn chart(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize]) -> Vec<Ve
     {
         return mended;
     }
-    embedding(vertices, triangles, outer, &rim)
+    embedding(vertices, triangles, outer, Some(&rim))
 }
 
 /// Rounds the rim's crossings are smoothed out in, and the interior's folds.
@@ -543,15 +562,16 @@ fn rim_on_hull(vertices: &[Vec3], outer: &[usize], rim: &[Vec2]) -> Option<Vec<V
     Some(placed)
 }
 
-/// Floater's mean-value embedding: the ring round the hull of its own
-/// projection by arc length ([`rim_on_hull`]) -- else a circle -- every
+/// Floater's mean-value embedding: the ring round the hull of its
+/// projection `rim` by arc length ([`rim_on_hull`]) -- else, or with no
+/// `rim`, a circle -- every
 /// other vertex where its mean-value weights put it. One to one for any disk.
-fn embedding(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize], rim: &[Vec2]) -> Vec<Vec2> {
+fn embedding(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize], rim: Option<&[Vec2]>) -> Vec<Vec2> {
     let length = perimeter(outer, vertices);
     let radius = length / std::f64::consts::TAU;
     let mut chart = vec![Vec2::new(0.0, 0.0); vertices.len()];
     let mut fixed = vec![false; vertices.len()];
-    let on_hull = rim_on_hull(vertices, outer, rim);
+    let on_hull = rim.and_then(|rim| rim_on_hull(vertices, outer, rim));
     let mut walked = 0.0;
     for (i, &v) in outer.iter().enumerate() {
         let angle = std::f64::consts::TAU * walked / length;
@@ -577,6 +597,11 @@ fn embedding(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize], rim: 
         around[i].push((j, weights[&(i, j)]));
     }
     let free: Vec<usize> = (0..vertices.len()).filter(|&v| !fixed[v] && !around[v].is_empty()).collect();
+    // Solved as the linear system it is; corner by corner, a patch of a few
+    // thousand corners took over ten seconds to settle.
+    if let Some(solved) = embedding_solved(&chart, &around, &free, radius) {
+        return solved;
+    }
     for _ in 0..EMBEDDING_SWEEPS {
         let mut moved: f64 = 0.0;
         for &v in &free {
@@ -593,6 +618,79 @@ fn embedding(vertices: &[Vec3], triangles: &[[usize; 3]], outer: &[usize], rim: 
     }
     chart
 }
+
+/// The mean-value embedding's corners `free` solved for at once: each the
+/// weighted mean of its neighbours (`around`), the rest fixed where `chart`
+/// has them -- `(I - P) x = b` by BiCGSTAB (van der Vorst), once a
+/// coordinate. `None` where it does not settle.
+fn embedding_solved(chart: &[Vec2], around: &[Vec<(usize, f64)>], free: &[usize], radius: f64) -> Option<Vec<Vec2>> {
+    let mut index = vec![usize::MAX; chart.len()];
+    for (k, &v) in free.iter().enumerate() {
+        index[v] = k;
+    }
+    let rows: Vec<(f64, &Vec<(usize, f64)>)> = free.iter().map(|&v| (around[v].iter().map(|&(_, w)| w).sum::<f64>(), &around[v])).collect();
+    let apply = |x: &[f64]| -> Vec<f64> {
+        rows.iter().enumerate().map(|(k, &(total, row))| x[k] - row.iter().filter(|&&(j, _)| index[j] != usize::MAX).map(|&(j, w)| w * x[index[j]]).sum::<f64>() / total).collect()
+    };
+    let dot = |a: &[f64], b: &[f64]| a.iter().zip(b).map(|(x, y)| x * y).sum::<f64>();
+    let mut out = chart.to_vec();
+    for axis in 0..2 {
+        let coordinate = |p: Vec2| if axis == 0 { p.x } else { p.y };
+        let b: Vec<f64> = rows.iter().map(|&(total, row)| row.iter().filter(|&&(j, _)| index[j] == usize::MAX).map(|&(j, w)| w * coordinate(chart[j])).sum::<f64>() / total).collect();
+        let norm_b = dot(&b, &b).sqrt().max(radius * 1e-12);
+        let mut x: Vec<f64> = free.iter().map(|&v| coordinate(chart[v])).collect();
+        let ax = apply(&x);
+        let mut r: Vec<f64> = b.iter().zip(&ax).map(|(b, a)| b - a).collect();
+        let r_hat = r.clone();
+        let (mut rho, mut alpha, mut omega) = (1.0, 1.0, 1.0);
+        let mut v = vec![0.0; x.len()];
+        let mut p = vec![0.0; x.len()];
+        let mut settled = dot(&r, &r).sqrt() <= norm_b * EMBEDDING_TOLERANCE;
+        for _ in 0..EMBEDDING_ITERATIONS {
+            if settled {
+                break;
+            }
+            let rho_next = dot(&r_hat, &r);
+            if rho_next.abs() < 1e-300 {
+                return None;
+            }
+            let beta = (rho_next / rho) * (alpha / omega);
+            for k in 0..p.len() {
+                p[k] = r[k] + beta * (p[k] - omega * v[k]);
+            }
+            v = apply(&p);
+            alpha = rho_next / dot(&r_hat, &v);
+            let s: Vec<f64> = r.iter().zip(&v).map(|(r, v)| r - alpha * v).collect();
+            if dot(&s, &s).sqrt() <= norm_b * EMBEDDING_TOLERANCE {
+                for k in 0..x.len() {
+                    x[k] += alpha * p[k];
+                }
+                settled = true;
+                break;
+            }
+            let t = apply(&s);
+            omega = dot(&t, &s) / dot(&t, &t);
+            for k in 0..x.len() {
+                x[k] += alpha * p[k] + omega * s[k];
+                r[k] = s[k] - omega * t[k];
+            }
+            rho = rho_next;
+            settled = dot(&r, &r).sqrt() <= norm_b * EMBEDDING_TOLERANCE;
+        }
+        if !settled || x.iter().any(|c| !c.is_finite()) {
+            return None;
+        }
+        for (k, &vertex) in free.iter().enumerate() {
+            if axis == 0 { out[vertex].x = x[k] } else { out[vertex].y = x[k] }
+        }
+    }
+    Some(out)
+}
+
+/// How far the embedding's residual falls, as a share of its right side, before it is settled.
+const EMBEDDING_TOLERANCE: f64 = 1e-9;
+/// Iterations of BiCGSTAB the embedding may take, at most, a coordinate.
+const EMBEDDING_ITERATIONS: usize = 5_000;
 
 /// Triangles of the chart bucketed by where they lie, to find the one under a point.
 struct Locator<'a> {
@@ -752,7 +850,13 @@ fn barycentric(point: Vec3, a: Vec3, b: Vec3, c: Vec3) -> [f64; 3] {
 /// lay out, and every copy comes back as the corner it is.
 pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<RegeneratedSurface, String> {
     let (open, alias) = unpinched(patch);
-    let mut laid = regenerate_disk(&open, regeneration)?;
+    // Laid on the projection, a rim folding in it lost corners to the
+    // boolean, and the ground beside them was left touching the new at a
+    // point: laid again on the embedding, which never folds.
+    let mut laid = match regenerate_disk(&open, regeneration, false)? {
+        laid if keeps_rim(&open, &laid) => laid,
+        _ => regenerate_disk(&open, regeneration, true)?,
+    };
     let named = |origin: Origin| match origin {
         Origin::Patch(v) => Origin::Patch(alias[v]),
         given => given,
@@ -767,22 +871,13 @@ pub fn regenerate_surface(patch: &Faces, regeneration: &Regeneration) -> Result<
     Ok(laid)
 }
 
-/// `patch` with every corner its rim runs through twice taken once per fan
-/// of faces round it, and for every vertex the one of `patch` it is.
+/// `patch` with every corner two fans of faces meet at taken once per fan,
+/// and for every vertex the one of `patch` it is: a corner the rim runs
+/// through twice, and one inside where two sheets of ground touch at a point
+/// only -- each fan closed round it, no side shared -- which left the patch
+/// no disk however its holes were capped.
 fn unpinched(patch: &Faces) -> (Faces, Vec<usize>) {
-    let mut directed: HashSet<(usize, usize)> = HashSet::new();
-    for face in &patch.faces {
-        for k in 0..face.len() {
-            directed.insert((face[k], face[(k + 1) % face.len()]));
-        }
-    }
-    let mut leaving: HashMap<usize, usize> = HashMap::new();
-    for &(a, b) in &directed {
-        if !directed.contains(&(b, a)) {
-            *leaving.entry(a).or_default() += 1;
-        }
-    }
-    let mut pinched: Vec<usize> = leaving.into_iter().filter(|&(_, n)| n > 1).map(|(v, _)| v).collect();
+    let mut pinched: Vec<usize> = patch.faces.iter().flatten().copied().collect::<HashSet<usize>>().into_iter().collect();
     pinched.sort_unstable();
     let mut vertices = patch.vertices.clone();
     let mut alias: Vec<usize> = (0..vertices.len()).collect();
@@ -832,8 +927,32 @@ fn unpinched(patch: &Faces) -> (Faces, Vec<usize>) {
     (Faces { vertices, faces }, alias)
 }
 
-/// [`regenerate_surface`] for a patch whose rim touches itself nowhere.
-fn regenerate_disk(patch: &Faces, regeneration: &Regeneration) -> Result<RegeneratedSurface, String> {
+/// Whether every corner of `patch`'s rim -- and of its holes -- stands on the
+/// rim of what `laid` gives: a corner faces closed round lies under ground
+/// folded past the rim.
+fn keeps_rim(patch: &Faces, laid: &RegeneratedSurface) -> bool {
+    let mut sides: HashMap<(usize, usize), usize> = HashMap::new();
+    for face in &laid.faces {
+        for k in 0..face.len() {
+            let (a, b) = (face[k], face[(k + 1) % face.len()]);
+            *sides.entry((a.min(b), a.max(b))).or_default() += 1;
+        }
+    }
+    let on_rim: HashSet<usize> = sides
+        .into_iter()
+        .filter(|&(_, n)| n == 1)
+        .flat_map(|((a, b), _)| [a, b])
+        .filter_map(|v| match laid.origin[v] {
+            Some(Origin::Patch(p)) | Some(Origin::Given(p)) => Some(p),
+            None => None,
+        })
+        .collect();
+    border_loops(&triangles_of(&patch.vertices, &patch.faces)).iter().flatten().all(|v| on_rim.contains(v))
+}
+
+/// [`regenerate_surface`] for a patch whose rim touches itself nowhere,
+/// charted on the mean-value embedding when `embedded`.
+fn regenerate_disk(patch: &Faces, regeneration: &Regeneration, embedded: bool) -> Result<RegeneratedSurface, String> {
     let face_side = regeneration.face_side.max(0.05);
     let patch_triangles = triangles_of(&patch.vertices, &patch.faces);
     if patch_triangles.is_empty() {
@@ -867,7 +986,10 @@ fn regenerate_disk(patch: &Faces, regeneration: &Regeneration) -> Result<Regener
         return Err("a terra a refazer não é um disco".to_string());
     }
 
-    let mut flat = chart(&support, &triangles, &outer);
+    // The embedding's rim on a circle: on the hull, rim corners in a row
+    // lay straight along one of its sides, and the triangulation put a
+    // sliver past them, laid as ground outside the rim.
+    let mut flat = if embedded { embedding(&support, &triangles, &outer, None) } else { chart(&support, &triangles, &outer) };
     // Scaled so a face of the chart is a face of the surface, on the whole.
     let surface_area: f64 = triangles.iter().map(|&t| area_normal(&support, t).length() * 0.5).sum();
     let chart_area: f64 = triangles.iter().map(|&[a, b, c]| signed_area_2d(flat[a], flat[b], flat[c])).sum();
@@ -959,6 +1081,12 @@ fn regenerate_disk(patch: &Faces, regeneration: &Regeneration) -> Result<Regener
     } else {
         ground_less_holes(&boundary[0], &holes, &known, near)?
     };
+    // Holes crossing one another in the chart -- ground tangled into
+    // sheets touching at points -- came out of the boolean as tens of
+    // thousands of shreds, and the grid laid over them never finished.
+    if ground_boundary.iter().chain(&ground_holes).map(Vec::len).sum::<usize>() > known.len() * SHREDDED_SHARE + SHREDDED_LEAST {
+        return Err("a terra a refazer se desfaz em pedaços no mapa".to_string());
+    }
     let relax = RelaxOptions { iterations: RelaxOptions::standard().iterations, strength: regeneration.relax_strength, pin_boundary: false, pinned_targets: Default::default() };
     let rings: Vec<Vec<ConstraintPoint>> = ground_boundary.iter().chain(&ground_holes).cloned().collect();
     let boundary_count = ground_boundary.len();
@@ -989,7 +1117,7 @@ fn regenerate_disk(patch: &Faces, regeneration: &Regeneration) -> Result<Regener
         let (p, q) = (ring[node.location.segment].position, ring[(node.location.segment + 1) % ring.len()].position);
         // The side somebody holds this piece of the contour runs along: a
         // structure's before the rim, where the two meet.
-        let Some(&(_, _, from, to, _)) = sides
+        let Some(&(_, _, from, to, hole)) = sides
             .iter()
             .filter(|side| on_segment(p, side.0, side.1) && on_segment(q, side.0, side.1))
             .max_by_key(|side| side.4)
@@ -1011,11 +1139,43 @@ fn regenerate_disk(patch: &Faces, regeneration: &Regeneration) -> Result<Regener
         // standing over the corner: in plan the foot of a step lies on the
         // side along its top, a metre over it, and taken for a corner on that
         // side the ground there would split it under a face running the whole of it.
-        if on_side.distance(lifted) > face_side * LANDING_REACH {
+        // On the patch's own rim the corner lands whatever: left off it, the
+        // side it stands on stayed whole beside it and opened a crack.
+        if hole && on_side.distance(lifted) > face_side * LANDING_REACH {
             continue;
         }
         vertices[node.vertex] = on_side;
         landed.push(Landing { vertex: node.vertex, from: from_origin, to: to_origin });
+    }
+
+    // A corner of the grid on the rim the generator did not find there -- off
+    // the contour by more than its weld -- lands on the side between the rim
+    // corners either side of it all the same: left free, the side beside it
+    // stayed whole and opened a crack.
+    let landed_already: HashSet<usize> = landed.iter().map(|l| l.vertex).collect();
+    let grid_triangles: Vec<[usize; 3]> = grid.mesh.faces.iter().filter(|f| f.len() >= 3).flat_map(|f| (1..f.len() - 1).map(move |k| [f[0], f[k], f[k + 1]])).collect();
+    for ring in border_loops(&grid_triangles) {
+        let named: Vec<usize> = (0..ring.len()).filter(|&k| origin[ring[k]].is_some()).collect();
+        if named.len() < 2 {
+            continue;
+        }
+        for (i, &start) in named.iter().enumerate() {
+            let end = named[(i + 1) % named.len()];
+            let (a, b) = (ring[start], ring[end]);
+            let (Some(from), Some(to)) = (origin[a], origin[b]) else { continue };
+            let mut k = (start + 1) % ring.len();
+            while k != end {
+                let v = ring[k];
+                if !landed_already.contains(&v) {
+                    let (pa, pb) = (vertices[a], vertices[b]);
+                    let along = pb - pa;
+                    let t = if along.dot(along) > 0.0 { ((vertices[v] - pa).dot(along) / along.dot(along)).clamp(0.0, 1.0) } else { 0.0 };
+                    vertices[v] = pa.lerp(pb, t);
+                    landed.push(Landing { vertex: v, from, to });
+                }
+                k = (k + 1) % ring.len();
+            }
+        }
     }
 
     // The chart's frame has the patch's own normal, so counter-clockwise there

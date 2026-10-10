@@ -57,6 +57,13 @@ pub struct LayerEdit {
 /// How much of the faces may lie turned over in plan, as a share of their
 /// area there, for the plan still to be where they are laid.
 const TURNED_SHARE_TOLERATED: f64 = 0.05;
+/// How much of a brush's patch may lie turned from it, as a share of its
+/// area in plan, for it still to be laid as the brush sees it.
+const SEEN_TURNED_SHARE_TOLERATED: f64 = 0.3;
+/// How far up a brush's own way has to point for it to push straight up:
+/// pointing less far up -- out of a cliff, ground steeper than 60° -- it
+/// pushes the surface itself along that way, never the plan.
+const UPRIGHT: f64 = 0.5;
 /// Sides of the circle a layer's reach is drawn with on the bare table.
 const REACH_SIDES: usize = 32;
 /// The shortest side a corner the boolean made may leave, as a share of a face.
@@ -189,6 +196,35 @@ const FINEST_FACE_SHARE: f64 = 0.4;
 /// round it and `neighbours` the structures standing in it: a layer laid
 /// out over the bare table never covers either.
 pub fn layer_surface(patch: &Faces, context: &Faces, neighbours: &Faces, edit: &LayerEdit) -> Result<RegeneratedSurface, String> {
+    // A brush pushed out of a wall: the same edit, in a frame turned so its
+    // way is up -- the wall is ground there, laid by the plan's own way.
+    if let Some(way) = edit.shapes.iter().find(|shape| shape.up.len() == shape.path.len()).and_then(|shape| shape.up.first().copied()).filter(|up| up.y < UPRIGHT) {
+        // The surface's own vertices pushed along the way and the faces laid
+        // again on its own chart, which never crosses itself however the
+        // ground folds as the brush sees it; seen along the way where that
+        // refuses.
+        let triangles = triangles_of(&patch.vertices, &patch.faces);
+        let on_surface = layer_on_surface(patch, &triangles, context, edit).map(rim_unsplit).ok().filter(|laid| rim_kept(patch, context, edit.table, laid));
+        return whole(patch, context, edit.table, match on_surface {
+            Some(laid) => laid,
+            None => layer_turned(patch, context, neighbours, edit, way)?,
+        });
+    }
+    whole(patch, context, edit.table, layer_laid(patch, context, neighbours, edit, false)?)
+}
+
+/// `laid`, refused where its rim is not the patch's own whole: the ground
+/// beside would touch the new at a point, and every stroke over it after
+/// was refused.
+fn whole(patch: &Faces, context: &Faces, table: Option<f64>, laid: RegeneratedSurface) -> Result<RegeneratedSurface, String> {
+    if rim_kept(patch, context, table, &laid) { Ok(laid) } else { Err("a borda da terra refeita não volta inteira".to_string()) }
+}
+
+/// [`layer_surface`] with the brush pushing up. `seen` is a brush's patch
+/// turned so its way is up: a sheet of it over another is laid as the one
+/// the brush sees -- the fold taken flat into it -- and a patch turned over
+/// is refused, never laid on the surface's own chart.
+fn layer_laid(patch: &Faces, context: &Faces, neighbours: &Faces, edit: &LayerEdit, seen: bool) -> Result<RegeneratedSurface, String> {
     let triangles = triangles_of(&patch.vertices, &patch.faces);
     let (positive, negative) = triangles.iter().fold((0.0, 0.0), |(p, n), &[a, b, c]| {
         let area = cross_2d(plan(patch.vertices[a]), plan(patch.vertices[b]), plan(patch.vertices[c])) * 0.5;
@@ -197,13 +233,93 @@ pub fn layer_surface(patch: &Faces, context: &Faces, neighbours: &Faces, edit: &
     // Flat in plan: next to nothing turned over, and nothing lying over
     // anything else -- a tunnel's floor under the hill over it both face up.
     let flat = positive.min(negative) <= (positive + negative) * TURNED_SHARE_TOLERATED
-        && overlapping_area(&patch.vertices, &triangles) <= positive.max(negative) * TURNED_SHARE_TOLERATED;
-    let laid = if triangles.is_empty() || flat {
-        layer_in_plan(patch, &triangles, positive >= negative, context, neighbours, edit)?
+        && (seen || overlapping_area(&patch.vertices, &triangles) <= positive.max(negative) * TURNED_SHARE_TOLERATED);
+    // A brush pushed out of a wall, its patch turned so its way is up, lays
+    // the sheet it sees though the patch folds in plan, short of most of it
+    // turned away; a stroke from above over ground folding in plan is laid
+    // on the surface's own chart, as ever.
+    let turned_over = positive.min(negative) > (positive + negative) * SEEN_TURNED_SHARE_TOLERATED;
+    let laid = if triangles.is_empty() || flat || (seen && !turned_over) {
+        // Seen by a brush on a wall, faces may lie over others though none
+        // is turned: the rim is asked whether it crosses itself all the same.
+        let in_plan = layer_in_plan(patch, &triangles, positive >= negative, context, neighbours, edit, !flat || seen)?;
+        // A rim nearly folded in plan -- within what flat allows -- had cells
+        // laid past it, and corners of it left under them: the ground beside
+        // touched the new at a point. On the surface's own chart instead.
+        if triangles.is_empty() || rim_kept(patch, context, edit.table, &in_plan) { in_plan } else { layer_on_surface(patch, &triangles, context, edit)? }
+    } else if seen {
+        return Err("o pincel não vê a terra dali: ela se vira para longe dele".to_string());
     } else {
         layer_on_surface(patch, &triangles, context, edit)?
     };
     Ok(rim_unsplit(laid))
+}
+
+/// Whether any two sides of `rings` cross, short of meeting at a corner.
+fn rings_cross(rings: &[Vec<ConstraintPoint>]) -> bool {
+    let sides: Vec<(Vec2, Vec2)> = rings.iter().flat_map(|ring| (0..ring.len()).map(move |k| (ring[k].position, ring[(k + 1) % ring.len()].position))).collect();
+    let crosses = |(a, b): (Vec2, Vec2), (c, d): (Vec2, Vec2)| {
+        let shared = |p: Vec2, q: Vec2| (p.x - q.x).abs() < 1e-9 && (p.y - q.y).abs() < 1e-9;
+        if shared(a, c) || shared(a, d) || shared(b, c) || shared(b, d) {
+            return false;
+        }
+        let (d1, d2) = (cross_2d(c, d, a), cross_2d(c, d, b));
+        let (d3, d4) = (cross_2d(a, b, c), cross_2d(a, b, d));
+        d1 * d2 < 0.0 && d3 * d4 < 0.0
+    };
+    (0..sides.len()).any(|i| (i + 1..sides.len()).any(|j| crosses(sides[i], sides[j])))
+}
+
+/// `edit` laid with its brushes pushing along `way` -- out of a wall, a
+/// cliff, the underside of a ledge -- as a sculptor's draw brush does: the
+/// patch, the ground round it and the strokes turned so `way` is up, laid as
+/// ground facing up is, and turned back. The patch faces `way` (the tabletop
+/// takes no face turned from it), so turned it lies flat in plan, and the
+/// plan's own grid lays it: the surface moved straight along `way`, never
+/// folded. The table and the beds are no part of a brush on a wall.
+fn layer_turned(patch: &Faces, context: &Faces, neighbours: &Faces, edit: &LayerEdit, way: Vec3) -> Result<RegeneratedSurface, String> {
+    // A frame turning as the world's does -- `a`, `way`, `b` like x, y, z --
+    // so a face's winding, and with it the side it faces, is kept.
+    let up = way.normalized();
+    let seed = if up.x.abs() < 0.9 { Vec3::new(1.0, 0.0, 0.0) } else { Vec3::new(0.0, 0.0, 1.0) };
+    let a = (seed - up * seed.dot(up)).normalized();
+    let b = a.cross(up);
+    let into = |p: Vec3| Vec3::new(p.dot(a), p.dot(up), p.dot(b));
+    let back = |p: Vec3| a * p.x + up * p.y + b * p.z;
+    let turned = |faces: &Faces| Faces { vertices: faces.vertices.iter().map(|&p| into(p)).collect(), faces: faces.faces.clone() };
+    let shapes = edit.shapes.iter().map(|shape| Shape { path: shape.path.iter().map(|&p| into(p)).collect(), up: Vec::new(), ..shape.clone() }).collect();
+    // Laid in plan only, as the brush sees it: never on the surface's own
+    // chart, which spread a patch folding along the way into tens of
+    // thousands of faces.
+    let laid = layer_laid(&turned(patch), &turned(context), &turned(neighbours), &LayerEdit { shapes, table: None, beds: Vec::new(), ..edit.clone() }, true)?;
+    Ok(RegeneratedSurface { vertices: laid.vertices.into_iter().map(back).collect(), ..laid })
+}
+
+/// Whether every corner of `patch`'s rim -- its holes' too -- the ground
+/// round it (`context`) also holds stands on the rim of `laid`: a corner with
+/// faces laid all round it lies under ground laid past the rim. With a
+/// `table` to run on over, a corner on the ground's own free edge may go
+/// under the ground run on; with none, every corner of the rim stays on it.
+fn rim_kept(patch: &Faces, context: &Faces, table: Option<f64>, laid: &RegeneratedSurface) -> bool {
+    let key = |p: Vec3| ((p.x * 1e4).round() as i64, (p.y * 1e4).round() as i64, (p.z * 1e4).round() as i64);
+    let shared: HashSet<(i64, i64, i64)> = context.faces.iter().flatten().map(|&v| key(context.vertices[v])).collect();
+    let mut sides: HashMap<(usize, usize), usize> = HashMap::new();
+    for face in &laid.faces {
+        for k in 0..face.len() {
+            let (a, b) = (face[k], face[(k + 1) % face.len()]);
+            *sides.entry((a.min(b), a.max(b))).or_default() += 1;
+        }
+    }
+    let on_rim: HashSet<usize> = sides
+        .into_iter()
+        .filter(|&(_, n)| n == 1)
+        .flat_map(|((a, b), _)| [a, b])
+        .filter_map(|v| match laid.origin[v] {
+            Some(Origin::Patch(p)) => Some(p),
+            _ => None,
+        })
+        .collect();
+    face_border_loops(&patch.faces).iter().flatten().filter(|&&v| table.is_none() || shared.contains(&key(patch.vertices[v]))).all(|v| on_rim.contains(v))
 }
 
 /// `laid` with every side of the ring whole again: a corner the grid put on
@@ -211,6 +327,9 @@ pub fn layer_surface(patch: &Faces, context: &Faces, neighbours: &Faces, edit: &
 /// one. The ground beyond the ring then meets the new ground on its own
 /// sides, node for node -- never asked to split one, which a structure's
 /// sealed side refuses and the graph's adoption of many does not survive.
+/// The most corners a cell [`rim_unsplit`] joins may have.
+const UNSPLIT_CORNERS_MOST: usize = 10;
+
 fn rim_unsplit(laid: RegeneratedSurface) -> RegeneratedSurface {
     let back: HashSet<Origin> = laid.origin.iter().flatten().copied().collect();
     let dropped: HashSet<usize> = laid.landed.iter().filter(|l| back.contains(&l.from) && back.contains(&l.to)).map(|l| l.vertex).collect();
@@ -218,6 +337,11 @@ fn rim_unsplit(laid: RegeneratedSurface) -> RegeneratedSurface {
         return laid;
     }
     let mut faces: Vec<Option<Vec<usize>>> = laid.faces.into_iter().map(Some).collect();
+    // Corners kept on their side after all: joining the cells round them
+    // would have made one past `UNSPLIT_CORNERS_MOST` -- a strip of cells
+    // along a long side joined into one of a hundred corners, laid over
+    // another, which no stroke after could lay again.
+    let mut kept: HashSet<usize> = HashSet::new();
     for &x in &dropped {
         loop {
             let around: Vec<usize> = (0..faces.len()).filter(|&f| faces[f].as_ref().is_some_and(|face| face.contains(&x))).collect();
@@ -231,6 +355,10 @@ fn rim_unsplit(laid: RegeneratedSurface) -> RegeneratedSurface {
                 }).map(|g| (f, g, p))
             });
             let Some((f, g, p)) = pair else { break };
+            if faces[f].as_ref().map_or(0, Vec::len) + faces[g].as_ref().map_or(0, Vec::len) - 2 > UNSPLIT_CORNERS_MOST {
+                kept.insert(x);
+                break;
+            }
             let (first, second) = (faces[f].take().unwrap(), faces[g].take().unwrap());
             let facing = newell(&laid.vertices, &first) + newell(&laid.vertices, &second);
             // `first` from `p` round to `x`, then `second` on from `x` to just short of `p`.
@@ -252,6 +380,9 @@ fn rim_unsplit(laid: RegeneratedSurface) -> RegeneratedSurface {
             faces[f] = outer.next();
             faces.extend(outer.map(Some));
         }
+        if kept.contains(&x) {
+            continue;
+        }
         // One cell holds `x` now, lying straight on the side: it goes.
         for face in faces.iter_mut().flatten() {
             face.retain(|&v| v != x);
@@ -264,7 +395,7 @@ fn rim_unsplit(laid: RegeneratedSurface) -> RegeneratedSurface {
     let mut vertices = Vec::new();
     let mut origin = Vec::new();
     for (v, &point) in laid.vertices.iter().enumerate() {
-        if !dropped.contains(&v) && (used.contains(&v) || laid.origin[v].is_some()) {
+        if (!dropped.contains(&v) || kept.contains(&v)) && (used.contains(&v) || laid.origin[v].is_some()) {
             renumber[v] = vertices.len();
             vertices.push(point);
             origin.push(laid.origin[v]);
@@ -386,6 +517,9 @@ impl<'a> PlanLocator<'a> {
     fn height(&self, point: Vec2, near: f64) -> Option<f64> {
         let key = ((point.x / self.cell).floor() as i64, (point.y / self.cell).floor() as i64);
         let mut nearest: Option<(f64, f64)> = None;
+        // Over a point two sheets cover, the highest: the one a brush pushing
+        // up sees. Ground laid flat in plan has one only.
+        let mut highest: Option<f64> = None;
         for dx in -1..=1 {
             for dz in -1..=1 {
                 for &t in self.buckets.get(&(key.0 + dx, key.1 + dz)).map_or(&[][..], Vec::as_slice) {
@@ -395,7 +529,9 @@ impl<'a> PlanLocator<'a> {
                     let (wa, wb, wc) = (cross_2d(q, r, point) / area, cross_2d(r, p, point) / area, cross_2d(p, q, point) / area);
                     let y = |wa: f64, wb: f64, wc: f64| self.vertices[a].y * wa + self.vertices[b].y * wb + self.vertices[c].y * wc;
                     if wa >= -1e-9 && wb >= -1e-9 && wc >= -1e-9 {
-                        return Some(y(wa, wb, wc));
+                        let here = y(wa, wb, wc);
+                        highest = Some(highest.map_or(here, |h: f64| h.max(here)));
+                        continue;
                     }
                     // Clamped onto the triangle, for a point just past the rim.
                     let (ca, cb, cc) = (wa.max(0.0), wb.max(0.0), wc.max(0.0));
@@ -409,7 +545,7 @@ impl<'a> PlanLocator<'a> {
                 }
             }
         }
-        nearest.map(|(_, y)| y)
+        highest.or(nearest.map(|(_, y)| y))
     }
 }
 
@@ -604,9 +740,44 @@ fn without_spikes(mut ring: Vec<ConstraintPoint>, near: f64, short: f64) -> Vec<
     }
 }
 
+/// The faces of `ground` a layer run on over the table meets: those facing
+/// up with no face of it turned down under them -- the ground resting on the
+/// table. A ledge overhanging the table, and the ground over it, the layer
+/// runs on under: cut out of it, the layer's rim went round the ledge's
+/// shadow, met the ledge at its corners in the air, and left two sheets
+/// touching there. `counter_clockwise` is the ground's way up in plan.
+fn resting(ground: &Faces, counter_clockwise: bool) -> Faces {
+    let up = if counter_clockwise { 1.0 } else { -1.0 };
+    let area = |face: &Vec<usize>| (0..face.len()).map(|k| cross_2d(Vec2::new(0.0, 0.0), plan(ground.vertices[face[k]]), plan(ground.vertices[face[(k + 1) % face.len()]]))).sum::<f64>() * 0.5 * up;
+    let turned_down: Vec<&Vec<usize>> = ground.faces.iter().filter(|face| face.len() >= 3 && area(face) < 0.0).collect();
+    let inside = |point: Vec2, face: &Vec<usize>| {
+        let mut crossings = false;
+        for k in 0..face.len() {
+            let (a, b) = (plan(ground.vertices[face[k]]), plan(ground.vertices[face[(k + 1) % face.len()]]));
+            if (a.y > point.y) != (b.y > point.y) && point.x < a.x + (point.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+                crossings = !crossings;
+            }
+        }
+        crossings
+    };
+    let faces = ground
+        .faces
+        .iter()
+        .filter(|face| {
+            if face.len() < 3 || area(face) <= 0.0 {
+                return false;
+            }
+            let centre = face.iter().fold(Vec3::default(), |sum, &v| sum + ground.vertices[v]) * (1.0 / face.len() as f64);
+            !turned_down.iter().any(|down| down.iter().map(|&v| ground.vertices[v].y).fold(f64::INFINITY, f64::min) < centre.y && inside(plan(centre), down))
+        })
+        .cloned()
+        .collect();
+    Faces { vertices: ground.vertices.clone(), faces }
+}
+
 /// The plan's way: the patch, and the bare table a layer reaches past it,
 /// laid in plan and lifted.
-fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwise: bool, context: &Faces, neighbours: &Faces, edit: &LayerEdit) -> Result<RegeneratedSurface, String> {
+fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwise: bool, context: &Faces, neighbours: &Faces, edit: &LayerEdit, folds: bool) -> Result<RegeneratedSurface, String> {
     let face_side = face_side_for(edit);
     // With no faces to say, the ground round them does; with none at all, the
     // tabletop's own winding -- counter-clockwise in plan.
@@ -681,7 +852,7 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
                 };
                 Faces { vertices: faces.vertices.clone(), faces: faces.faces.iter().filter(|face| face.len() >= 3 && !over_patch(face)).cloned().collect() }
             };
-            let others: Vec<Vec<Contour>> = [beside(context), beside(neighbours)].iter().flat_map(plan_polygons).collect();
+            let others: Vec<Vec<Contour>> = [resting(&beside(context), counter_clockwise), beside(neighbours)].iter().flat_map(plan_polygons).collect();
             subject.overlay(&others, OverlayRule::Difference, FillRule::NonZero)
         }
         _ => Vec::new(),
@@ -705,6 +876,12 @@ fn layer_in_plan(patch: &Faces, triangles: &[[usize; 3]], patch_counter_clockwis
     };
     if boundary.is_empty() {
         return Err("nada onde a camada assentar".to_string());
+    }
+    // A patch folding in plan whose rim crosses itself -- the fold at its
+    // edge -- has no inside to lay a grid in: laid anyway, the cells along
+    // the crossing came out turned against the ground beside them.
+    if folds && rings_cross(&boundary.iter().chain(&holes).cloned().collect::<Vec<_>>()) {
+        return Err("a borda da terra a refazer se cruza vista pelo pincel".to_string());
     }
 
     let relax = RelaxOptions { iterations: RelaxOptions::standard().iterations, strength: RELAX_STRENGTH, pin_boundary: false, pinned_targets: Default::default() };
@@ -899,9 +1076,12 @@ fn layer_on_surface(patch: &Faces, triangles: &[[usize; 3]], context: &Faces, ed
             shape
                 .path
                 .iter()
-                .map(|&at| match surface.closest(at) {
-                    Some((_, t)) => (normal(&support, t) * out).normalized(),
-                    None => Vec3::new(0.0, 1.0, 0.0),
+                .enumerate()
+                .map(|(k, &at)| match (shape.up.get(k), surface.closest(at)) {
+                    // The brush's own way where it says one.
+                    (Some(&up), _) if shape.up.len() == shape.path.len() => up,
+                    (_, Some((_, t))) => (normal(&support, t) * out).normalized(),
+                    _ => Vec3::new(0.0, 1.0, 0.0),
                 })
                 .collect()
         })
@@ -936,19 +1116,18 @@ fn layer_on_surface(patch: &Faces, triangles: &[[usize; 3]], context: &Faces, ed
 
     // The holes in the patch -- structures standing in it -- gone round,
     // never capped: the ground goes round them as they are.
-    let loops = border_loops(&fine);
-    let perimeter = |ring: &Vec<usize>| (0..ring.len()).map(|k| displaced[ring[k]].distance(displaced[ring[(k + 1) % ring.len()]])).sum::<f64>();
-    let outer = (0..loops.len()).max_by(|&a, &b| perimeter(&loops[a]).total_cmp(&perimeter(&loops[b]))).ok_or("a terra a refazer não tem borda")?;
-    let holes: Vec<Vec<GivenPoint>> = loops
-        .iter()
-        .enumerate()
-        .filter(|&(i, _)| i != outer)
-        .map(|(_, ring)| ring.iter().map(|&v| GivenPoint { position: displaced[v], id: v }).collect())
-        .collect();
-    let laid = regenerate_surface(
-        &Faces { vertices: displaced, faces: fine.iter().map(|t| t.to_vec()).collect() },
-        &Regeneration { holes, face_side, seed: edit.seed, relax_strength: RELAX_STRENGTH },
-    )?;
+    // Pieces of the patch apart from one another -- two hills one stroke
+    // joins -- are each a disk of their own, laid on their own.
+    let mut laid = RegeneratedSurface { vertices: Vec::new(), faces: Vec::new(), origin: Vec::new(), landed: Vec::new(), refinement_complete: true };
+    for piece in pieces_of(&fine) {
+        let one = lay_piece(&displaced, &piece, face_side, edit.seed)?;
+        let offset = laid.vertices.len();
+        laid.vertices.extend(one.vertices);
+        laid.faces.extend(one.faces.into_iter().map(|face| face.into_iter().map(|v| v + offset).collect()));
+        laid.origin.extend(one.origin);
+        laid.landed.extend(one.landed.into_iter().map(|l| Landing { vertex: l.vertex + offset, ..l }));
+        laid.refinement_complete &= one.refinement_complete;
+    }
     // Corners of the rim and of the holes alike are the patch's own vertices.
     let as_patch = |origin: Origin| match origin {
         Origin::Patch(v) | Origin::Given(v) => Origin::Patch(v),
@@ -958,4 +1137,74 @@ fn layer_on_surface(patch: &Faces, triangles: &[[usize; 3]], context: &Faces, ed
         landed: laid.landed.into_iter().map(|l| Landing { vertex: l.vertex, from: as_patch(l.from), to: as_patch(l.to) }).collect(),
         ..laid
     })
+}
+
+/// `triangles` split into the pieces whose triangles share sides.
+fn pieces_of(triangles: &[[usize; 3]]) -> Vec<Vec<[usize; 3]>> {
+    let mut by_side: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+    for (t, &[a, b, c]) in triangles.iter().enumerate() {
+        for (p, q) in [(a, b), (b, c), (c, a)] {
+            by_side.entry((p.min(q), p.max(q))).or_default().push(t);
+        }
+    }
+    let mut piece = vec![usize::MAX; triangles.len()];
+    let mut pieces: Vec<Vec<[usize; 3]>> = Vec::new();
+    for start in 0..triangles.len() {
+        if piece[start] != usize::MAX {
+            continue;
+        }
+        let id = pieces.len();
+        piece[start] = id;
+        let mut stack = vec![start];
+        let mut members = Vec::new();
+        while let Some(t) = stack.pop() {
+            members.push(triangles[t]);
+            let [a, b, c] = triangles[t];
+            for (p, q) in [(a, b), (b, c), (c, a)] {
+                for &u in &by_side[&(p.min(q), p.max(q))] {
+                    if piece[u] == usize::MAX {
+                        piece[u] = id;
+                        stack.push(u);
+                    }
+                }
+            }
+        }
+        pieces.push(members);
+    }
+    pieces
+}
+
+/// One piece of a patch, its corners already moved (`displaced`), laid
+/// again on its own chart: its holes -- structures standing in it -- gone
+/// round, never capped.
+fn lay_piece(displaced: &[Vec3], fine: &[[usize; 3]], face_side: f64, seed: u32) -> Result<RegeneratedSurface, String> {
+    let loops = border_loops(fine);
+    let perimeter = |ring: &Vec<usize>| (0..ring.len()).map(|k| displaced[ring[k]].distance(displaced[ring[(k + 1) % ring.len()]])).sum::<f64>();
+    let outer = (0..loops.len()).max_by(|&a, &b| perimeter(&loops[a]).total_cmp(&perimeter(&loops[b]))).ok_or("a terra a refazer não tem borda")?;
+    // A loop meeting the rim at a corner and wound as the rim is -- the rim
+    // touching itself -- is the rim, not a hole: taken out as one, the
+    // corners of the rim round it went. A hole meeting it, wound the other
+    // way, stays a hole.
+    let facing = fine.iter().fold(Vec3::default(), |sum, &[a, b, c]| sum + (displaced[b] - displaced[a]).cross(displaced[c] - displaced[a]));
+    let winding = |ring: &Vec<usize>| (0..ring.len()).fold(Vec3::default(), |sum, k| sum + displaced[ring[k]].cross(displaced[ring[(k + 1) % ring.len()]])).dot(facing);
+    let rim_way = winding(&loops[outer]).signum();
+    let mut rim_loops: HashSet<usize> = HashSet::from([outer]);
+    loop {
+        let on_rim: HashSet<usize> = rim_loops.iter().flat_map(|&i| loops[i].iter().copied()).collect();
+        let more: Vec<usize> = (0..loops.len()).filter(|i| !rim_loops.contains(i) && winding(&loops[*i]).signum() == rim_way && loops[*i].iter().any(|v| on_rim.contains(v))).collect();
+        if more.is_empty() {
+            break;
+        }
+        rim_loops.extend(more);
+    }
+    let holes: Vec<Vec<GivenPoint>> = loops
+        .iter()
+        .enumerate()
+        .filter(|&(i, _)| !rim_loops.contains(&i))
+        .map(|(_, ring)| ring.iter().map(|&v| GivenPoint { position: displaced[v], id: v }).collect())
+        .collect();
+    regenerate_surface(
+        &Faces { vertices: displaced.to_vec(), faces: fine.iter().map(|t| t.to_vec()).collect() },
+        &Regeneration { holes, face_side, seed, relax_strength: RELAX_STRENGTH },
+    )
 }

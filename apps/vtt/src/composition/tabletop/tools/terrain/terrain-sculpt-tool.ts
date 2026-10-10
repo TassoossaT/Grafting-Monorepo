@@ -2,8 +2,8 @@ import { DEFAULT_TOOL_PARAMS, deriveFaceSize, hasTrait } from "../../../../featu
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type { ConstructionPosition, ConstructionVolumeShape } from "@/ports";
 
-import { capsuleWireframe } from "../shapes/preview-shapes.ts";
-import { carveShape, commitTerrainVolumeEdit, fillShape, levelShapes, moundShape, noiseShape, smoothShape, type TerrainBrush } from "../../terrain/terrain-volume-edit.ts";
+import { capsuleWireframe, discWireframe } from "../shapes/preview-shapes.ts";
+import { brushWay, carveShape, commitTerrainVolumeEdit, fillShape, levelShapes, moundShape, noiseShape, smoothShape, type TerrainBrush } from "../../terrain/terrain-volume-edit.ts";
 import { timeCommit } from "../../commit-timing.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
@@ -17,6 +17,12 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
  * - **Adicionar** lays a layer of earth along the stroke, **Remover** takes
  *   one off: `elevationStep` deep where the stroke ran, fading by the brush,
  *   over the ground it lies on -- a hillside, a cave's floor, its wall.
+ *   Like a sculptor's draw brush (Blender's Draw), it pushes the way the
+ *   surface under it faces -- the mean of its faces' normals round where the
+ *   stroke starts, the faces facing the camera only: on a hilltop up, out of
+ *   a cliff sideways. Painted again on the tip, the ground grows on into a
+ *   ledge, an overhang, a bridge; dug again into a wall, a hole goes on into
+ *   a cave and through.
  * - **Suavizar** draws the ground toward its mean height round each point,
  *   read over `filterRadius` of the brush.
  * - **Aplainar** levels the ground under the stroke at the height it starts
@@ -37,6 +43,33 @@ const VOLUME_GHOST_COLOR = 0xe2e8f0;
 
 /** The table's height: new ground laid on the bare table rests on it. */
 const TABLE_HEIGHT = 0;
+
+/** How far round where a stroke starts the faces it reads its way off reach, as a share of the brush's radius. */
+const WAY_REACH = 0.5;
+
+/**
+ * How far up a brush's way has to point for it to push straight up, as the
+ * ground always did: less far up -- a cliff, ground steeper than 60° -- it
+ * pushes out of it. Pushed out of every slope past 32°, strokes from above
+ * on a hill pushed sideways and the ground grew three times the faces. The
+ * engine's own (`layer.rs::UPRIGHT`).
+ */
+const UPRIGHT = 0.5;
+
+/** How far round where a stroke starts the faces it reads its way off reach, at least. */
+const WAY_REACH_LEAST = 0.75;
+
+/**
+ * The way a raise or a lower drawn from `sample` pushes: out of the ground
+ * round it, toward the camera; `undefined` -- straight up -- on ground facing
+ * up, or where no ground is.
+ */
+function wayOf(ctx: ToolContext, sample: PointerSample | undefined, radius: number): ConstructionPosition | undefined {
+  const facing = outwardOf(sample);
+  if (!sample || !facing) return undefined;
+  const way = brushWay(ctx.runtime, sample.point, Math.max(WAY_REACH_LEAST, radius * WAY_REACH), facing) ?? facing;
+  return way.y < UPRIGHT ? way : undefined;
+}
 
 /** How far above and below its level a levelling stroke reaches, at least. */
 const LEVEL_REACH_STEPS = 2;
@@ -77,10 +110,12 @@ const brushOf = (params: TerrainSculptParams): TerrainBrush => ({
  * starts to where it ends -- are kept for whoever asks for them by name; the
  * dock offers the brush.
  */
-function strokeShapes(params: TerrainSculptParams, samples: readonly PointerSample[]): readonly ConstructionVolumeShape[] {
+function strokeShapes(params: TerrainSculptParams, samples: readonly PointerSample[], ctx: ToolContext): readonly ConstructionVolumeShape[] {
   const points = samples.map((sample) => sample.point);
   const step = params.elevationStep ?? 2;
-  const brush = brushOf(params);
+  const pushes = ["add", "elevate", "dig", "lower"].includes(params.mode ?? "add");
+  const direction = pushes ? wayOf(ctx, samples[0], params.brushRadius) : undefined;
+  const brush = { ...brushOf(params), ...(direction ? { direction } : {}) };
   const one = (shape: ConstructionVolumeShape | undefined) => (shape ? [shape] : []);
   switch (params.mode ?? "add") {
     case "add":
@@ -116,11 +151,13 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   // Every stroke shows the volume it would take or add under the pointer before it starts.
   previewOnHover: () => true,
 
-  previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
-    const shapes = strokeShapes(params, gesture.samples);
+  previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
+    const shapes = strokeShapes(params, gesture.samples, ctx);
     const shape = shapes[0];
     if (!shape) return undefined;
     const path = shape.path.map(([x, y, z]) => ({ x, y, z }));
+    // A brush pushing out of a wall is drawn as its disc, square to its way.
+    if (shape.direction) return discWireframe(path, shape.radius, { x: shape.direction[0], y: shape.direction[1], z: shape.direction[2] }, VOLUME_GHOST_COLOR, 0.75);
     // The brush is drawn as its reach along the ground: the stroke's plan,
     // flat; a bore or an arch as its own volume.
     const flat = shape.column !== undefined || shape.effect === "raise" || shape.effect === "lower" || shape.effect === "smooth" || shape.effect === "noise";
@@ -147,7 +184,7 @@ const DONE: Record<string, string> = {
  * the ring round them kept.
  */
 function volumeStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
-  const shapes = strokeShapes(params, gesture.samples);
+  const shapes = strokeShapes(params, gesture.samples, ctx);
   if (shapes.length === 0) {
     ctx.reportFeedback({ tone: "info", message: "Nada a cavar ou erguer aqui." });
     return;

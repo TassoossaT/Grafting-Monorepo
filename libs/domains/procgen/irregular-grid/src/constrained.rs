@@ -552,6 +552,13 @@ pub fn locate_on_contour(
 ///
 /// The one rule, applied to seeds before the triangulation and to faces
 /// after it, so the two can never disagree about where the ground is.
+/// Whether `point` is ground by the rings exactly as `options` hands them --
+/// every point of every ring, none held out.
+pub fn within_rings(options: &ConstrainedOptions) -> impl Fn(Vec2) -> bool {
+    let (boundary, holes) = (RingWinding::of(&options.boundary), RingWinding::of(&options.holes));
+    move |point| is_ground(&boundary, &holes, point)
+}
+
 fn is_ground(boundary_winding: &RingWinding, hole_winding: &RingWinding, point: Vec2) -> bool {
     boundary_winding.contains(point) && !hole_winding.contains(point)
 }

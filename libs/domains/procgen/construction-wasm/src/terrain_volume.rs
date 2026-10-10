@@ -49,6 +49,11 @@ pub struct ShapeDto {
     pub noise_scale: Option<f64>,
     #[serde(default)]
     pub seed: Option<u32>,
+    /// For `"raise"` and `"lower"`: the way the brush pushes, out of the
+    /// surface it was drawn on -- a wall's, a cliff's. Omitted: up, or the
+    /// ground's own normal where it folds over.
+    #[serde(default)]
+    pub direction: Option<[f64; 3]>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -139,7 +144,12 @@ pub(crate) fn shapes_of(shapes: Vec<ShapeDto>) -> Result<Vec<Shape>, String> {
                 noise_scale: shape.noise_scale.unwrap_or(defaults.noise_scale),
                 seed: shape.seed.unwrap_or(defaults.seed),
             };
-            Ok(Shape { effect, path: shape.path.into_iter().map(point).collect(), radius: shape.radius, form, up: Vec::new(), brush })
+            let path: Vec<_> = shape.path.into_iter().map(point).collect();
+            let up = match shape.direction.map(point) {
+                Some(way) if way.length() > 1e-9 => vec![way.normalized(); path.len()],
+                _ => Vec::new(),
+            };
+            Ok(Shape { effect, path, radius: shape.radius, form, up, brush })
         })
         .collect()
 }
