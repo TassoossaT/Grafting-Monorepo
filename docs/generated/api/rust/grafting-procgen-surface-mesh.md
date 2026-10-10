@@ -183,6 +183,13 @@ Sweep from `from` to `to` in the given direction, always non-negative.
 The normal of the first triangle with real area -- what the winding says
 the face is facing.
 
+### `pub fn grafting_procgen_surface_mesh::planar::fan_mesh(outer: &[[f32; 3]]) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
+
+The fan of a loop's own corners round its first, in three dimensions:
+the mesh of last resort for a face that flattens onto no plane without
+folding; none for a loop enclosing nothing. Normals are the loop's own,
+by Newell's method.
+
 ### `pub fn grafting_procgen_surface_mesh::planar::triangulate_contour_loops<'a>(outer: &[[f32; 3]], holes: impl core::iter::traits::collect::IntoIterator<Item = &'a alloc::vec::Vec<[f32; 3]>>) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
 
 Triangulates a planar surface consisting of an outer boundary loop and

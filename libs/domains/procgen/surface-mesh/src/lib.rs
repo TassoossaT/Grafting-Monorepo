@@ -147,13 +147,21 @@ pub fn triangulate_region_with(
         .collect::<Option<Vec<_>>>();
     // A loop that is degenerate or crosses itself is resolved into simple
     // pieces first; a valid face never reaches that path.
-    if let (Some(outers), Some(holes)) = (outers, holes)
-        && !sanitize::any_self_crossing(outers.iter().chain(&holes))
-        && let Some(meshes) = planar_meshes(&outers, &holes, fill)
+    if let (Some(outers), Some(holes)) = (&outers, &holes)
+        && !sanitize::any_self_crossing(outers.iter().chain(holes))
+        && let Some(meshes) = planar_meshes(outers, holes, fill)
     {
         return Some(meshes);
     }
-    sanitize::sanitized_planar_meshes(topology, region, &mut resolve_position)
+    sanitize::sanitized_planar_meshes(topology, region, &mut resolve_position).or_else(|| {
+        // A face lying on no plane -- a cell of ground laid over a tunnel's
+        // vault -- may flatten onto none without folding. With one loop and no
+        // holes it still has a mesh: the fan of its own corners.
+        match (outers.as_deref(), holes.as_deref()) {
+            (Some([outer]), Some([])) => planar::fan_mesh(outer).map(|mesh| vec![mesh]),
+            _ => None,
+        }
+    })
 }
 
 /// Meshes a flat face from its already-valid tessellated loops.

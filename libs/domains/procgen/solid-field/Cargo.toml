@@ -1,0 +1,15 @@
+[package]
+name = "grafting-procgen-solid-field"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Carving into ground and filling it in, in three dimensions, as an edit of the ground mesh itself: signed distance to its faces, shapes carved or filled, the new surface stitched to the ring left standing and laid with the irregular quad grid steps over the surface."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+grafting-procgen-irregular-grid = { path = "../irregular-grid" }
+fast-surface-nets = "0.2"
+i_overlay = "=8.1.0"
+noise = "0.9"

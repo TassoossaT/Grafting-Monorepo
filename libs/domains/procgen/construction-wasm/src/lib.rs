@@ -19,6 +19,9 @@ mod region_annotations;
 mod region_props;
 mod region_overlay;
 mod session;
+mod terrain_layer;
+mod terrain_regenerate;
+mod terrain_volume;
 #[cfg(test)]
 mod pin_tests;
 #[cfg(test)]

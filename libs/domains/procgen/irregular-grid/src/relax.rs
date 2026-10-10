@@ -82,27 +82,9 @@ fn relax_cells(vertices: &[Vec2], cells: &[&[usize]], options: &RelaxOptions) ->
 
         for cell in cells {
             let corners: Vec<Vec2> = cell.iter().map(|&index| current[index]).collect();
-            let centre = centroid_of(&corners);
-            let sides = corners.len() as f64;
-            let turn = std::f64::consts::TAU / sides;
-
-            // Average the corners after undoing each one's turn.
-            let mut frame_x = 0.0;
-            let mut frame_y = 0.0;
-            for (position, corner) in corners.iter().enumerate() {
-                let dx = corner.x - centre.x;
-                let dy = corner.y - centre.y;
-                let angle = position as f64 * turn;
-                frame_x += dx * angle.cos() - dy * angle.sin();
-                frame_y += dx * angle.sin() + dy * angle.cos();
-            }
-            frame_x /= sides;
-            frame_y /= sides;
-
-            for (position, &index) in cell.iter().enumerate() {
-                let angle = -(position as f64) * turn;
-                sum_x[index] += centre.x + (frame_x * angle.cos() - frame_y * angle.sin());
-                sum_y[index] += centre.y + (frame_x * angle.sin() + frame_y * angle.cos());
+            for (&index, target) in cell.iter().zip(regular_cell_targets(&corners)) {
+                sum_x[index] += target.x;
+                sum_y[index] += target.y;
                 counts[index] += 1;
             }
         }
@@ -128,6 +110,40 @@ fn relax_cells(vertices: &[Vec2], cells: &[&[usize]], options: &RelaxOptions) ->
     }
 
     current
+}
+
+/// Where each corner of a cell sits on the regular polygon that cell is
+/// nearest: every corner rotated back by its own turn about the centre and
+/// averaged gives the polygon's one free corner, which turned forward again
+/// places each of the others. The rule every relaxation here pulls toward --
+/// on the plane, or on a surface with the cell laid flat in its own plane.
+pub fn regular_cell_targets(corners: &[Vec2]) -> Vec<Vec2> {
+    let centre = centroid_of(corners);
+    let sides = corners.len() as f64;
+    let turn = std::f64::consts::TAU / sides;
+
+    // Average the corners after undoing each one's turn.
+    let mut frame_x = 0.0;
+    let mut frame_y = 0.0;
+    for (position, corner) in corners.iter().enumerate() {
+        let dx = corner.x - centre.x;
+        let dy = corner.y - centre.y;
+        let angle = position as f64 * turn;
+        frame_x += dx * angle.cos() - dy * angle.sin();
+        frame_y += dx * angle.sin() + dy * angle.cos();
+    }
+    frame_x /= sides;
+    frame_y /= sides;
+
+    (0..corners.len())
+        .map(|position| {
+            let angle = -(position as f64) * turn;
+            Vec2::new(
+                centre.x + (frame_x * angle.cos() - frame_y * angle.sin()),
+                centre.y + (frame_x * angle.sin() + frame_y * angle.cos()),
+            )
+        })
+        .collect()
 }
 
 /// Vertices on an edge belonging to exactly one quad.

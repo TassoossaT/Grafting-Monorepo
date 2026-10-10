@@ -11,6 +11,7 @@ import type {
   OpeningSide,
   PathBrushParams,
   StructureEditParams,
+  TerrainFalloffType,
   TerrainSculptMode,
   TerrainSculptParams,
   ToolParamsByTool,
@@ -204,32 +205,37 @@ function TerrainSculptFields(props: {
   readonly onChange: (next: TerrainSculptParams) => void;
 }) {
   const { params, onChange } = props;
-  const currentMode = params.mode ?? "add";
-  const isDig = currentMode === "dig" || currentMode === "lower";
-  const isAdd = currentMode === "add" || currentMode === "elevate";
-  const elevationStep = params.elevationStep ?? 2.0;
+  const mode = params.mode ?? "add";
+  const isAdd = mode === "add" || mode === "elevate";
+  const isDig = mode === "dig" || mode === "lower";
 
-  const elevationLabel = isAdd
-    ? "Incremento de altura (+m)"
-    : isDig
-      ? "Profundidade do corte (-m)"
-      : "Intensidade do nivelamento";
-
-  // Which stroke -- add, remove, flatten -- is picked in the dock below the map; here only how it acts.
+  // Which stroke is picked in the dock below the map; here only the brush.
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
+      {sliderRow("Tamanho do pincel", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
-      {sliderRow(elevationLabel, elevationStep, 0.2, 20.0, 0.2, (step) =>
-        onChange({ ...params, elevationStep: step }),
-      )}
-      {sliderRow("Rugosidade do chão novo (ruído)", params.heightScale, 0, 5, 0.25, (heightScale) =>
-        onChange({ ...params, heightScale }),
-      )}
-      {sliderRow("Suavidade do relevo", params.noiseScale, 0.02, 0.4, 0.01, (noiseScale) =>
-        onChange({ ...params, noiseScale }),
-      )}
+      {isAdd || isDig
+        ? sliderRow(isAdd ? "Altura (+m)" : "Profundidade (-m)", params.elevationStep ?? 2, 0.2, 20, 0.2, (elevationStep) => onChange({ ...params, elevationStep }))
+        : sliderRow("Força", params.strength ?? 0.5, 0.05, 1, 0.05, (strength) => onChange({ ...params, strength }))}
+      {sliderRow("Borda suave (falloff)", params.falloff ?? 0.5, 0, 1, 0.05, (falloff) => onChange({ ...params, falloff }))}
+      <label style={{ fontSize: "0.78rem" }}>
+        Tipo de borda{" "}
+        <select value={params.falloffType ?? "smooth"} onChange={(event) => onChange({ ...params, falloffType: event.currentTarget.value as TerrainFalloffType })}>
+          <option value="smooth">Suave</option>
+          <option value="linear">Linear</option>
+          <option value="spherical">Esférica</option>
+          <option value="tip">Ponta</option>
+        </select>
+      </label>
+      {mode === "smooth"
+        ? sliderRow("Raio do filtro", params.filterRadius ?? 0.4, 0.1, 1, 0.05, (filterRadius) => onChange({ ...params, filterRadius }))
+        : null}
+      {mode === "flatten"
+        ? sliderRow("Alcance acima e abaixo (m)", params.elevationStep ?? 2, 0.2, 20, 0.2, (elevationStep) => onChange({ ...params, elevationStep }))
+        : null}
+      {mode === "noise" ? sliderRow("Amplitude do ruído (m)", params.heightScale, 0.1, 5, 0.1, (heightScale) => onChange({ ...params, heightScale })) : null}
+      {mode === "noise" ? sliderRow("Escala do ruído", params.noiseScale, 0.02, 1, 0.01, (noiseScale) => onChange({ ...params, noiseScale })) : null}
     </div>
   );
 }

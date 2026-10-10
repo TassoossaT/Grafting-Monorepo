@@ -546,6 +546,130 @@ export interface ConstructionIrregularQuadGridRequest {
   readonly refinement?: ConstructionGridRefinementOptions;
 }
 
+/**
+ * A form swept along a path that changes the ground's solid:
+ * - `carve` / `fill`: a capsule, `squash` times as tall as it is wide (round
+ *   when omitted) -- or, with `column`, the column over the path's plan
+ *   between two heights -- taken out or added;
+ * - `raise` / `lower`: a layer of earth `height` deep on the path, thinning by
+ *   the brush's falloff to nothing at `radius`, laid over the ground or taken off it;
+ * - `smooth`: the ground drawn toward its mean height round each point;
+ * - `noise`: Perlin noise `height` high laid on it.
+ */
+export interface ConstructionVolumeShape {
+  readonly effect: "carve" | "fill" | "raise" | "lower" | "smooth" | "noise";
+  readonly path: readonly (readonly [number, number, number])[];
+  readonly radius: number;
+  readonly squash?: number;
+  readonly column?: { readonly low: number; readonly high: number };
+  /** A layer's depth on the path; noise's height. */
+  readonly height?: number;
+  /** The brush (layer edits): how much of a smooth, a flatten or noise is laid, `0..1`. Omitted: all. */
+  readonly strength?: number;
+  /** The share of the radius the effect fades over, from the rim in. Omitted: all of it. */
+  readonly falloff?: number;
+  readonly falloffType?: "smooth" | "linear" | "spherical" | "tip";
+  /** For a smooth: the radius its mean height is read over, as a share of the brush's. */
+  readonly filter?: number;
+  /** For noise: how many metres one wave spans, and its seed. */
+  readonly noiseScale?: number;
+  readonly seed?: number;
+  /**
+   * For a raise or a lower: the way the brush pushes, out of the surface it
+   * was drawn on -- a wall's, a cliff's -- the surface moved along it, not
+   * up. Omitted: up.
+   */
+  readonly direction?: readonly [number, number, number];
+}
+
+/** Faces as indices into their own vertices, all wound the same way. */
+export interface ConstructionIndexedFaces {
+  readonly vertices: readonly (readonly [number, number, number])[];
+  readonly faces: readonly (readonly number[])[];
+}
+
+/** One edit of the ground's own mesh: the faces it lays again, the ground round them, and what to carve or fill. */
+export interface ConstructionTerrainVolumeEditRequest {
+  /** The faces laid again. */
+  readonly patch: ConstructionIndexedFaces;
+  /** The ground round them -- never laid again, only asked where solid is. */
+  readonly context?: ConstructionIndexedFaces;
+  readonly shapes: readonly ConstructionVolumeShape[];
+  /** How far a shape blends into the ground, rounding its lip. */
+  readonly blend?: number;
+  /** How wide one finished face should be. */
+  readonly faceSide: number;
+  readonly seed?: number;
+  /** The table's height, where new ground may rest on the bare table. Omitted never reads the table. */
+  readonly table?: number;
+  /** Structures standing round the patch: never solid, never laid again; the sides of it they hold are kept. */
+  readonly neighbours?: ConstructionIndexedFaces;
+  /** {@link ConstructionSessionPort.layerTerrainSurface} only: structures the ground is brought to rest under, after the shapes. */
+  readonly beds?: readonly ConstructionGroundBed[];
+}
+
+/**
+ * A structure the ground rests under instead of being cut for it: brought up
+ * to `sink` under its faces where it lay at most `below` under that, down to
+ * it where it rose at most `above` over it, and eased back over a shoulder
+ * `margin` past the faces' rim and `slope` wide for every metre moved (at
+ * least `shoulder`). Ground farther off -- under a bridge -- is left alone.
+ */
+export interface ConstructionGroundBed {
+  readonly faces: ConstructionIndexedFaces;
+  readonly sink: number;
+  readonly below: number;
+  readonly above: number;
+  readonly margin: number;
+  readonly slope: number;
+  readonly shoulder: number;
+}
+
+/** The faces laid in place of the patch: the ring round it kept, node for node. */
+export interface ConstructionTerrainVolumeEdit {
+  readonly vertices: readonly (readonly [number, number, number])[];
+  /** In the winding the patch's faces had. */
+  readonly faces: readonly (readonly number[])[];
+  /** Index-aligned with `vertices`: the patch vertex a corner of the ring is. */
+  readonly source: readonly (number | null)[];
+}
+
+/** A point of a structure's ring the regenerated ground goes round, by the caller's own index. */
+export interface ConstructionGivenPoint {
+  readonly position: readonly [number, number, number];
+  readonly id: number;
+}
+
+/** One repair of the ground on its own surface: the patch laid again, the rings it goes round. */
+export interface ConstructionTerrainRegenerateRequest {
+  /** The faces laid again: a disk, holes allowed -- a hole is laid over unless a ring keeps it. */
+  readonly patch: ConstructionIndexedFaces;
+  /** Closed rings where structures rest on the ground: no ground inside. */
+  readonly holes?: readonly (readonly ConstructionGivenPoint[])[];
+  /** How wide one finished face should be, measured on the surface. */
+  readonly faceSide: number;
+  readonly seed?: number;
+  /** The generator's relaxation strength. Omitted takes 0.7. */
+  readonly relaxStrength?: number;
+}
+
+/** What a corner of regenerated ground already was: a patch vertex, or a given point by its id. */
+export type ConstructionSurfaceOrigin =
+  | { readonly kind: "patch"; readonly index: number }
+  | { readonly kind: "given"; readonly index: number };
+
+/** The faces laid in place of the patch, on its own surface. */
+export interface ConstructionTerrainRegeneration {
+  readonly vertices: readonly (readonly [number, number, number])[];
+  /** In the winding the patch's faces had. */
+  readonly faces: readonly (readonly number[])[];
+  /** Index-aligned with `vertices`. */
+  readonly origin: readonly (ConstructionSurfaceOrigin | null)[];
+  /** New corners lying on a side somebody holds, with that side's two ends. */
+  readonly landed: readonly { readonly vertex: number; readonly from: ConstructionSurfaceOrigin; readonly to: ConstructionSurfaceOrigin }[];
+  readonly refinementComplete: boolean;
+}
+
 /** One corner the generator put along a contour the caller supplied. */
 export interface ConstructionGridContourNode {
   /** Index into {@link ConstructionIrregularQuadGrid.vertices}. */
@@ -762,6 +886,27 @@ export interface ConstructionSessionPort extends BezierPort {
   generateIrregularQuadGrid(
     request: ConstructionIrregularQuadGridRequest,
   ): ConstructionIrregularQuadGrid | undefined;
+  /**
+   * Carves into the ground or fills it in, as an edit of the ground's own
+   * mesh: the patch laid again with irregular cells over the surface, the
+   * ring of nodes round it kept. Pure. `undefined` where the engine refuses.
+   */
+  editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined;
+  /**
+   * Lays a layer of earth on the ground, takes one off it, or levels it --
+   * `raise`, `lower` and column shapes only: the patch's own surface moved
+   * and laid again with the plane's irregular grid, the ring of nodes round
+   * it kept; with `table`, a layer past the ground rests on the bare table.
+   * Pure. Answers like {@link regenerateTerrainSurface}; `undefined` where
+   * the engine refuses.
+   */
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined;
+  /**
+   * Lays a patch of ground again on its own surface, its shape unchanged,
+   * going round the structures' rings. Pure. `undefined` where the engine
+   * refuses.
+   */
+  regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined;
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;

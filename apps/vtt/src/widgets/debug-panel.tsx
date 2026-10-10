@@ -18,6 +18,8 @@ interface PanelElementChange {
 
 /** One change of the map, as the panel draws it. */
 export interface DebugPanelChange {
+  /** Unique per record: a refused stroke leaves the revision where it was. */
+  readonly id: number;
   readonly revision: number;
   readonly label: string;
   readonly ms?: number;
@@ -197,7 +199,7 @@ export function DebugPanel(props: DebugPanelProps) {
           <section>
             <span className="gm-debug-panel-heading">Últimas mudanças</span>
             {stats.changes.length === 0 ? <Row label="Nenhuma ainda" value="" /> : null}
-            {[...stats.changes].reverse().map((record, index) => <ChangeEntry key={record.revision} record={record} open={index === 0} />)}
+            {[...stats.changes].reverse().map((record, index) => <ChangeEntry key={record.id} record={record} open={index === 0} />)}
           </section>
 
           <section>

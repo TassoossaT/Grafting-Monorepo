@@ -432,3 +432,90 @@ export function circularBrushStrokeOutline(
   }
   return { kind: "segments", color, opacity, positions: Float32Array.from(positions) };
 }
+/** Sides of every ring a volume ghost is drawn with. */
+const VOLUME_RING_SIDES = 24;
+
+/**
+ * A brush's disc swept along `path`, square to `normal` -- the way it
+ * pushes: a ring round each point and two lines down its sides, the flat
+ * ghost of a brush drawn on a wall.
+ */
+export function discWireframe(path: readonly ConstructionPosition[], radius: number, normal: ConstructionPosition, color: number, opacity = 0.75): PreviewDescriptor {
+  const positions: number[] = [];
+  const add = (a: ConstructionPosition, b: ConstructionPosition) => positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  const length = Math.hypot(normal.x, normal.y, normal.z) || 1;
+  const n = { x: normal.x / length, y: normal.y / length, z: normal.z / length };
+  // Two directions square to the normal: one level, one as upright as it allows.
+  const level = Math.hypot(n.x, n.z) > 1e-6 ? { x: -n.z / Math.hypot(n.x, n.z), y: 0, z: n.x / Math.hypot(n.x, n.z) } : { x: 1, y: 0, z: 0 };
+  const other = { x: n.y * level.z - n.z * level.y, y: n.z * level.x - n.x * level.z, z: n.x * level.y - n.y * level.x };
+  const at = (p: ConstructionPosition, angle: number): ConstructionPosition => ({
+    x: p.x + (level.x * Math.cos(angle) + other.x * Math.sin(angle)) * radius,
+    y: p.y + (level.y * Math.cos(angle) + other.y * Math.sin(angle)) * radius,
+    z: p.z + (level.z * Math.cos(angle) + other.z * Math.sin(angle)) * radius,
+  });
+  for (const point of path) {
+    for (let i = 0; i < VOLUME_RING_SIDES; i++) add(at(point, (2 * Math.PI * i) / VOLUME_RING_SIDES), at(point, (2 * Math.PI * (i + 1)) / VOLUME_RING_SIDES));
+  }
+  for (let i = 0; i + 1 < path.length; i++) {
+    const [a, b] = [path[i]!, path[i + 1]!];
+    const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    // The sides: square to the span within the disc's plane.
+    const side = { x: n.y * d.z - n.z * d.y, y: n.z * d.x - n.x * d.z, z: n.x * d.y - n.y * d.x };
+    const s = Math.hypot(side.x, side.y, side.z);
+    if (s < 1e-9) continue;
+    for (const sign of [1, -1]) {
+      const o = { x: (side.x / s) * radius * sign, y: (side.y / s) * radius * sign, z: (side.z / s) * radius * sign };
+      add({ x: a.x + o.x, y: a.y + o.y, z: a.z + o.z }, { x: b.x + o.x, y: b.y + o.y, z: b.z + o.z });
+    }
+  }
+  return { kind: "segments", color, opacity, positions: Float32Array.from(positions) };
+}
+
+/**
+ * A capsule swept along `path` -- every point within `radius` of it -- drawn
+ * as a wire volume: three great circles round each point of the path, rings
+ * across each span every so often and four lines down its sides. A wire
+ * reads as a volume where a flat fill reads as a disc, and the preview layer
+ * draws it through whatever stands in front, so a shape inside a hill is
+ * still seen whole. One point is a sphere.
+ */
+export function capsuleWireframe(
+  path: readonly ConstructionPosition[],
+  radius: number,
+  color: number,
+  opacity = 0.75,
+  /** How tall against how wide: `1` round, less a squashed pile, `0` flat on its plan. */
+  squash = 1,
+): PreviewDescriptor {
+  const positions: number[] = [];
+  const add = (a: ConstructionPosition, b: ConstructionPosition) => positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  const plus = (p: ConstructionPosition, u: ConstructionPosition, s: number, v: ConstructionPosition, t: number): ConstructionPosition => ({
+    x: p.x + u.x * s + v.x * t, y: p.y + (u.y * s + v.y * t) * squash, z: p.z + u.z * s + v.z * t,
+  });
+  const ring = (centre: ConstructionPosition, u: ConstructionPosition, v: ConstructionPosition) => {
+    for (let i = 0; i < VOLUME_RING_SIDES; i++) {
+      const a = (2 * Math.PI * i) / VOLUME_RING_SIDES, b = (2 * Math.PI * (i + 1)) / VOLUME_RING_SIDES;
+      add(plus(centre, u, Math.cos(a) * radius, v, Math.sin(a) * radius), plus(centre, u, Math.cos(b) * radius, v, Math.sin(b) * radius));
+    }
+  };
+  const X = { x: 1, y: 0, z: 0 }, Y = { x: 0, y: 1, z: 0 }, Z = { x: 0, y: 0, z: 1 };
+  for (const point of path) {
+    ring(point, X, Y);
+    ring(point, Y, Z);
+    ring(point, Z, X);
+  }
+  for (let i = 0; i + 1 < path.length; i++) {
+    const [a, b] = [path[i]!, path[i + 1]!];
+    const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    const length = Math.hypot(d.x, d.y, d.z);
+    if (length < 1e-9) continue;
+    const along = { x: d.x / length, y: d.y / length, z: d.z / length };
+    // Two directions square to the span: one level, one as upright as it allows.
+    const flat = Math.hypot(along.x, along.z) > 1e-6 ? { x: -along.z / Math.hypot(along.x, along.z), y: 0, z: along.x / Math.hypot(along.x, along.z) } : X;
+    const up = { x: along.y * flat.z - along.z * flat.y, y: along.z * flat.x - along.x * flat.z, z: along.x * flat.y - along.y * flat.x };
+    for (const [u, s] of [[flat, 1], [flat, -1], [up, 1], [up, -1]] as const) add(plus(a, u, s * radius, u, 0), plus(b, u, s * radius, u, 0));
+    const rings = Math.max(1, Math.floor(length / radius));
+    for (let k = 1; k < rings; k++) ring(plus(a, along, (length * k) / rings, along, 0), flat, up);
+  }
+  return { kind: "segments", color, opacity, positions: Float32Array.from(positions) };
+}

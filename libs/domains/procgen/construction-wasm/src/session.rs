@@ -679,6 +679,36 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Carves into the ground or fills it in, as an edit of the ground's own
+    /// mesh: the faces handed in laid again, the ring of nodes round them
+    /// kept. Pure -- reads nothing from this session and mutates nothing in
+    /// it; the caller registers the result. See `terrain_volume`.
+    pub fn edit_terrain_volume_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = crate::terrain_volume::edit_terrain_volume(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
+    /// Lays a layer of earth on the ground, takes one off it, or levels it:
+    /// the patch's own surface moved and laid again with the plane's grid.
+    /// Pure -- reads nothing from this session and mutates nothing in it; the
+    /// caller registers the result. See `terrain_layer`.
+    pub fn layer_terrain_surface_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = crate::terrain_layer::layer_terrain_surface(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
+    /// Lays a patch of ground again on its own surface, its shape unchanged:
+    /// the repair round a structure, wherever the ground is. Pure -- reads
+    /// nothing from this session and mutates nothing in it; the caller
+    /// registers the result. See `terrain_regenerate`.
+    pub fn regenerate_terrain_surface_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = crate::terrain_regenerate::regenerate_terrain_surface(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     /// Which of the given XZ points already sit inside a region -- what a
     /// generator consults so it only builds over open ground. See
     /// `footprint::classify_points`.

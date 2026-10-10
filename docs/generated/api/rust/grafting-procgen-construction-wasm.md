@@ -82,6 +82,13 @@ Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
 
 `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::edit_terrain_volume_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Carves into the ground or fills it in, as an edit of the ground's own
+mesh: the faces handed in laid again, the ring of nodes round them
+kept. Pure -- reads nothing from this session and mutates nothing in
+it; the caller registers the result. See `terrain_volume`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::field_query_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Where ground-plane points project onto the curves a surface was swept
@@ -116,6 +123,13 @@ every new corner, neither of which this bridge has any business
 deciding. See `grid_generation::irregular_quad_grid`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::is_none(abi: &Self::Abi) -> bool`
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::layer_terrain_surface_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Lays a layer of earth on the ground, takes one off it, or levels it:
+the patch's own surface moved and laid again with the plane's grid.
+Pure -- reads nothing from this session and mutates nothing in it; the
+caller registers the result. See `terrain_layer`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_edge_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
@@ -178,6 +192,13 @@ World points as unclamped `(u, v)` on an upright host face.
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::redo_region_overlay(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Restores the state immediately after one undone generic overlay.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::regenerate_terrain_surface_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Lays a patch of ground again on its own surface, its shape unchanged:
+the repair round a structure, wherever the ground is. Pure -- reads
+nothing from this session and mutates nothing in it; the caller
+registers the result. See `terrain_regenerate`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::region_topologies_in_bounds_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 

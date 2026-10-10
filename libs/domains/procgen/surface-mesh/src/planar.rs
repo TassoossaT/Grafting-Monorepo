@@ -71,3 +71,22 @@ pub fn triangulate_contour_loops<'a>(
         indices,
     })
 }
+
+/// The fan of a loop's own corners round its first, in three dimensions:
+/// the mesh of last resort for a face that flattens onto no plane without
+/// folding; none for a loop enclosing nothing. Normals are the loop's own,
+/// by Newell's method.
+pub fn fan_mesh(outer: &[[f32; 3]]) -> Option<TriangulatedMesh> {
+    if outer.len() < 3 {
+        return None;
+    }
+    // A loop enclosing nothing -- its corners in a line -- has no mesh at all.
+    let normal = face_normal(outer)?;
+    let indices: Vec<u32> = (1..outer.len() as u32 - 1).flat_map(|k| [0, k, k + 1]).collect();
+    Some(TriangulatedMesh {
+        normals: vec![normal; outer.len()],
+        positions: outer.to_vec(),
+        uvs: outer.iter().map(|point| [point[0], point[2]]).collect(),
+        indices,
+    })
+}

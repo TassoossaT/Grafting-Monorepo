@@ -19,7 +19,6 @@ export { navigateTool } from "./core/navigate-tool.ts";
 export { createStructureEditBehavior, withStructureEditing, type StructureEditBehavior, type StructureEditOptions } from "./core/structure-edit-behavior.ts";
 
 export { terrainSculptTool } from "./terrain/terrain-sculpt-tool.ts";
-export { restackTerrain } from "./terrain/terrain-restack.ts";
 
 export { wallLineTool } from "./walls/wall-line-tool.ts";
 export { wallBrushTool } from "./walls/wall-brush-tool.ts";

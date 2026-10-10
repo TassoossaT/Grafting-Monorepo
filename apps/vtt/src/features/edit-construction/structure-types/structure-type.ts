@@ -221,6 +221,12 @@ export interface CutFallout {
    */
   readonly draggedSurfaceKeys?: readonly ConstructionSurfaceKey[];
   /**
+   * Where an edit carried each of its moved nodes from. The dragged faces are
+   * read with these positions, so the ground they stood for is the ground
+   * they covered -- not a face stretched to where the structure went.
+   */
+  readonly carriedFrom?: ReadonlyMap<ConstructionNodeId, ConstructionPosition>;
+  /**
    * The XZ shape the cut was asked about -- the painter's own footprint.
    *
    * A repair that regrows ground through the same generator the sculpt brush

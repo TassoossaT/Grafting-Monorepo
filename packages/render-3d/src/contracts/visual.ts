@@ -104,6 +104,14 @@ export type MaterialDescriptor =
       readonly texture?: TextureSource;
       /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
       readonly clippable?: boolean;
+      /**
+       * Never drawn, only hit by `pick()`. Defaults to `false`.
+       *
+       * A pick proxy at `opacity: 0` is still drawn every frame -- as a
+       * transparent object, sorted by distance -- however little it shows, so a
+       * proxy per surface costs a draw call per surface whenever the view moves.
+       */
+      readonly pickOnly?: boolean;
     }
   | {
       /** Draws edges rather than faces. */

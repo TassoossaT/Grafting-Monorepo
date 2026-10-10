@@ -13,6 +13,8 @@ export const RECENT_CHANGES = 8;
 
 /** One change of the map, with the commits that made it and what it did. */
 export interface ChangeRecord {
+  /** Counts up with every record: a stroke the engine refused is timed but leaves the revision where it was, so the revision names no record alone. */
+  readonly id: number;
   /** The map's revision once the change was read. */
   readonly revision: number;
   /** What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads. */
@@ -88,6 +90,7 @@ export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): Debug
     let previous: MapFingerprint = EMPTY_FINGERPRINT;
     let seenRevision: number | undefined;
     let seenSeq = 0;
+    let recorded = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const read = () => {
@@ -114,6 +117,7 @@ export function useDebugStats(runtime: TabletopRuntime, enabled: boolean): Debug
       previous = print;
 
       const record: ChangeRecord = {
+        id: ++recorded,
         revision: snapshot.map.revision,
         label: commits.length > 0 ? nameCommits(commits.map((commit) => commit.label)) : first ? "mapa carregado" : "sem operação cronometrada",
         ...(commits.length > 0 ? { ms: commits.reduce((sum, commit) => sum + commit.ms, 0) } : {}),

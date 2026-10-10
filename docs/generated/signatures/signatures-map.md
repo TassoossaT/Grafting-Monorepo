@@ -163,6 +163,27 @@ pub fn is_empty(&self) -> bool
 pub fn bounds_of(&self, region_id: &RegionId) -> Option<&RegionBounds>
 pub fn insert(&mut self, region_id: RegionId, bounds: RegionBounds)
 pub fn remove(&mut self, region_id: &RegionId) -> Option<RegionBounds>
+
+// src/terrain_layer.rs
+pub struct TerrainLayerRequest
+pub struct BedDto
+pub fn layer_terrain_surface(
+
+// src/terrain_regenerate.rs
+pub struct GivenPointDto
+pub struct TerrainRegenerateRequest
+pub enum OriginDto
+pub struct LandingDto
+pub struct TerrainRegenerateResponse
+pub fn regenerate_terrain_surface(request: TerrainRegenerateRequest) -> Result<TerrainRegenerateResponse, String>
+
+// src/terrain_volume.rs
+pub struct FacesDto
+pub struct ShapeDto
+pub struct ColumnDto
+pub struct TerrainVolumeEditRequest
+pub struct TerrainVolumeEditResponse
+pub fn edit_terrain_volume(request: TerrainVolumeEditRequest) -> Result<TerrainVolumeEditResponse, String>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -472,6 +493,7 @@ pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
 
 // src/planar.rs
 pub fn triangulate_contour_loops<'a>(
+pub fn fan_mesh(outer: &[[f32; 3]]) -> Option<TriangulatedMesh>
 
 // src/profile.rs
 pub fn triangulate_profile_sheet(
@@ -3947,14 +3969,75 @@ export function anchoredConstraints(
   /** Sources numbered just before, from `startingIndex` on: a node already among them keeps its number. */
   before: readonly ConstructionNodeId[] = [],
   withEdges = false,
-export function buildConstraintRings(
-  targetPolygon: PlanarArea,
-  faceSize: number,
-  perimeters: ConstraintTable,
-  /**
-  * Whether a corner lies on a structure's side -- where the ground meets it,
-  * a place a cut gave way partway along it. Such a corner is exactly where
-  * the ground must meet that side, so it takes a node only standing right
+
+// src/composition/tabletop/terrain/ground-commit.ts
+export interface GroundCommitRuntime {
+  applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
+  applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: "local", causeId: string): ConstructionPatchOutcome;
+  getSnapshot(): { readonly map: { readonly nodePositions: ReadonlyMap<ConstructionNodeId, { readonly position: ConstructionPosition }> } };
+export interface LaidGround {
+  readonly vertices: readonly (readonly [number, number, number])[];
+  readonly faces: readonly (readonly number[])[];
+  /** The node a corner already is, or `undefined` for a new corner. */
+  readonly nodeOf: (vertex: number) => ConstructionNodeId | undefined;
+  /** New corners lying on a side between two standing nodes. */
+  readonly landed?: readonly { readonly vertex: number; readonly from: ConstructionNodeId; readonly to: ConstructionNodeId }[];
+  }
+export interface GroundCommit {
+  readonly operationId: string;
+  readonly tableId: string;
+  /** The faces taken away. */
+  readonly replaced: readonly ConstructionRegionTopology[];
+  /** Faces standing round them -- ground beyond, structures met -- whose edges the new ground reuses. */
+  readonly around: readonly ConstructionRegionTopology[];
+  readonly surfaceType: string;
+export interface GroundCommitOutcome {
+  readonly built: number;
+  readonly refused: number;
+  /** New corners on a side that could not split it: one T-junction each. */
+  readonly unadopted: number;
+  }
+export function commitGround(runtime: GroundCommitRuntime, commit: GroundCommit): GroundCommitOutcome {
+  const { operationId, tableId, laid } = commit;
+  const live = runtime.getSnapshot().map.nodePositions;
+
+  // Every standing edge by the pair it joins, with the end it is stored from.
+  const standing = new Map<string, { readonly edgeId: string; readonly start: ConstructionNodeId }>();
+export function indexedFaces(faces: readonly ConstructionRegionTopology[]): {
+  readonly ids: readonly ConstructionNodeId[];
+  readonly vertices: readonly (readonly [number, number, number])[];
+  readonly faces: readonly (readonly number[])[];
+  } {
+  const index = new Map<ConstructionNodeId, number>();
+
+// src/composition/tabletop/terrain/ground-surface.ts
+export const DEFAULT_FACE_SIDE = 2;
+export function heightRangeOf(face: ConstructionRegionTopology): { readonly low: number; readonly high: number } {
+  let low = Infinity, high = -Infinity;
+  for (const node of face.nodes) {
+  low = Math.min(low, node.position.y);
+export function walkSurface(
+  faces: readonly ConstructionRegionTopology[],
+  seeds: readonly ConstructionRegionTopology[],
+  accept: (face: ConstructionRegionTopology) => boolean,
+  ): ConstructionRegionTopology[] {
+  const byEdge = new Map<string, ConstructionRegionTopology[]>();
+export function surfaceComponents(faces: readonly ConstructionRegionTopology[]): ConstructionRegionTopology[][] {
+  const left = new Set(faces.map(keyOf));
+export function regrowFaceSide(faces: readonly ConstructionRegionTopology[]): number {
+  const sides = faces.flatMap((face) => {
+  const at = new Map(face.nodes.map((node) => [node.id, node.position]));
+export function closedPatch(
+  patch: readonly ConstructionRegionTopology[],
+  ground: readonly ConstructionRegionTopology[],
+  ): ConstructionRegionTopology[] {
+  const members = new Map(patch.map((face) => [keyOf(face), face] as const));
+export function grownInward(
+  patch: readonly ConstructionRegionTopology[],
+  ground: readonly ConstructionRegionTopology[],
+  rounds: number,
+  ): ConstructionRegionTopology[] {
+  const members = new Map(patch.map((face) => [keyOf(face), face] as const));
 
 // src/composition/tabletop/terrain/structure-contact.ts
 export interface StructureMeeting {
@@ -3964,22 +4047,41 @@ export interface StructureMeeting {
   readonly seeds: readonly { readonly seed: readonly string[]; readonly surfaceType: string }[];
   /** Whether a node is a structure's -- never a height the ground should take. */
   holds(nodeId: ConstructionNodeId): boolean;
-  /** The structures' outlines as constraint rings, numbered from `startingIndex`. */
+  /**
+export interface StructureContactRuntime extends PlanarPort {
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  }
 export const NO_STRUCTURES: StructureMeeting = Object.freeze({
   area: [],
   seeds: [],
   holds: () => false,
   constraints: () => ({ rings: [], sources: [] }),
   liesOnSide: () => false,
+  standsUnder: () => false,
   heightAt: () => undefined,
-  });
 export function meetStructures(
-  runtime: TerrainCutRuntime,
+  runtime: StructureContactRuntime,
   bounds: ConstructionTopologyBoundsQuery,
   groundType: string,
   terrainStanding: readonly ConstructionRegionTopology[],
+  restingOn: readonly ConstructionRegionTopology[] = terrainStanding,
   ): StructureMeeting {
   const standingHere = timePhase("estruturas no lugar", () => runtime.getRegionTopologiesInBounds(bounds));
+
+// src/composition/tabletop/terrain/terrain-conform.ts
+export interface TerrainConformRuntime extends GroundCommitRuntime {
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined;
+  }
+export const GROUND_REST_SINK = 0.08;
+export function conformGround(runtime: TerrainConformRuntime, fallout: CutFallout, causeId: string, tableId: string): number {
+  // Where the change was: where the structure stands, and where it stood.
+  const places = [
+  ...(fallout.footprintOutline ?? []).map(([x, z]) => ({ x, z })),
+  ...fallout.paintedNodes.map((node) => node.position),
+  ...(fallout.vacatedGround ?? []).flatMap((piece) => (piece[0] ?? []).map(([x, z]) => ({ x, z }))),
+  ...(fallout.carriedFrom ? [...fallout.carriedFrom.values()] : []),
+  ];
 
 // src/composition/tabletop/terrain/terrain-constraints.ts
 export interface ConstraintRing {
@@ -3995,26 +4097,6 @@ export interface ConstraintTable {
   /** `sources[i]` is the node id handed out as `source: i`. */
   readonly sources: readonly ConstructionNodeId[];
   }
-export function perimeterConstraints(
-  topologies: readonly ConstructionRegionTopology[],
-  startingIndex: number,
-  ): ConstraintTable {
-  const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
-export function constraintsFromRings(
-  rings: readonly (readonly ConstructionRegionEdge[])[],
-  positionOf: (nodeId: ConstructionNodeId) => { readonly x: number; readonly z: number } | undefined,
-  startingIndex: number,
-  ): ConstraintTable {
-  const sources: ConstructionNodeId[] = [];
-  const index = new Map<ConstructionNodeId, number>();
-export function outlineConstraints(
-  rings: readonly (readonly (readonly [number, number])[])[],
-  /** Consecutive points nearer than this collapse to one. `0` welds nothing. */
-  weld = 0,
-  ): readonly ConstraintRing[] {
-  const weldSq = weld * weld;
-  return rings
-  .map((ring) => {
 export interface ContourAdoption {
   readonly vertex: number;
   readonly edge: ConstructionRegionEdge;
@@ -4023,35 +4105,7 @@ export interface ContourAdoption {
   /** Length of the edge being split, for spacing checks. */
   readonly edgeLength?: number;
   }
-export interface ContourSnap {
-  readonly vertex: number;
-  /** The `source` index of the ring corner it takes the identity of. */
-  readonly source: number;
-  /** Split to perform when that corner identity is already claimed elsewhere. */
-  readonly fallback?: ContourAdoption;
-  }
-export interface AdoptionDrops {
-  readonly noEdge: number;
-  readonly atCorner: number;
-  readonly degenerate: number;
-  readonly unknownRing: number;
-  }
-export interface ResolvedAdoptions {
-  readonly adoptions: readonly ContourAdoption[];
-  readonly snaps: readonly ContourSnap[];
-  readonly dropped: AdoptionDrops;
-  }
 export const SHORTEST_USEFUL_FRACTION = 0.25;
-export const OUTLINE_CHORD_PER_FACE = 2;
-export const OUTLINE_WELD_PER_FACE = 0.5;
-export function resolveAdoptions(
-  holeRings: readonly ConstraintRing[],
-  boundaryRings: readonly ConstraintRing[],
-  reported: readonly ConstructionGridContourNode[],
-  positionOf: (vertex: number) => { readonly x: number; readonly z: number } | undefined,
-  /** Fragments shorter than this are not created; see {@link SHORTEST_USEFUL_FRACTION}. */
-  shortestUseful = 0,
-  ): ResolvedAdoptions {
 export interface AdoptionRuntime {
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
   }
@@ -4064,97 +4118,11 @@ export function adoptContourNodes(
   nodeIdFor: (vertex: number) => ConstructionNodeId,
   positionOf: (vertex: number) => ConstructionPosition | undefined,
 
-// src/composition/tabletop/terrain/terrain-cut-executor.ts
-export function executeTerrainCut(
-  runtime: TerrainCutRuntime,
-  request: StructuralCutRequest,
-  ): StructuralCutOutcome {
-  const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
-  const outline = rawOutline.length >= 3 ? rawOutline : [];
-
-  const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
-
-// src/composition/tabletop/terrain/terrain-diagnostics.ts
-export interface TerrainCommitReport {
-  /** Which operation this was: a stroke, a cut repair. */
-  readonly what: string;
-  readonly faceSideAsked: number;
-  readonly boundary: readonly ConstraintRing[];
-  readonly holes: readonly ConstraintRing[];
-  readonly grid: ConstructionIrregularQuadGrid | undefined;
-  readonly adopted: number;
-export function logTerrainCommit(report: TerrainCommitReport): void {
-  try {
-  describe(report);
-export function logContourGrowth(what: string, before: number, after: number): void {
-  if (!Number.isFinite(before) || !Number.isFinite(after)) return;
-  const delta = after - before;
-  const line = `${TERRAIN_PREFIX} ${what}: contorno ${before} -> ${after} nós (${delta >= 0 ? "+" : ""}${delta})`;
-  if (delta > 0) console.warn(line, { antes: before, depois: after, delta });
-
-// src/composition/tabletop/terrain/terrain-fill.ts
-export interface TerrainFillRuntime {
-  generateIrregularQuadGrid(
-  request: ConstructionIrregularQuadGridRequest,
-  ): ConstructionIrregularQuadGrid | undefined;
-  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome;
-  applyPatchReplacement(
-  request: ApplyPatchReplacementRequest,
-  origin: "local",
-export interface FillBounds {
-  readonly minX: number;
-  readonly minZ: number;
-  readonly maxX: number;
-  readonly maxZ: number;
-  }
-export interface TerrainFillRequest {
-  /**
-  * Prefix every node and edge this fill mints is named under. Whatever the
-  * caller passes has to be unique to this fill: two fills sharing a prefix
-  * would mint the same node id for different ground.
-  */
-  readonly mint: string;
-  /** Which table the shared boundary edges belong to. */
-export interface TerrainFillOutcome {
-  readonly built: number;
-  /** Faces the engine refused: ground that already has a face on both sides. */
-  readonly refused: number;
-  /** Nodes that wanted a neighbour's edge split and did not get it -- one T-junction each. */
-  readonly unadopted: number;
-  /** `false` when refinement hit its vertex ceiling and part of the area came back coarser. */
-  readonly refinementComplete: boolean;
-export const DEFAULT_FACE_SIDE = 2;
-export interface QuadDrops {
-  avoided: number;
-  unnamed: number;
-  degenerate: number;
-  retained: number;
-  /**
-  * Plan area of the cells dropped for a legitimate reason.
-  *
-export function gridPatch(
-  tableId: string,
-  grid: ConstructionIrregularQuadGrid,
-  idFor: (vertex: number) => ConstructionNodeId | undefined,
-  nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-  surfaceType: string,
-  edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
-  quadOf?: Map<string, readonly number[]>,
-export function tangledRing(rings: readonly (readonly { readonly x: number; readonly z: number }[])[]): string | undefined {
-  const side = (p: { x: number; z: number }, q: { x: number; z: number }, r: { x: number; z: number }) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
-export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
-  if (request.boundary.length === 0) return NOTHING;
-  // A ring that crosses itself describes no ground: the
-  // generator would not refuse them but fail inside the engine, and a failure
-  // there leaves the whole session unusable for every edit after it. They are
-  // refused here instead, and the ground there is left as it stands.
-  const tangled = tangledRing([...request.boundary, ...request.holes].map((ring) => ring.points));
-
 // src/composition/tabletop/terrain/terrain-lattice-reaction.ts
-export interface LatticeReactionRuntime extends TerrainRegenerateRuntime {
+export interface LatticeReactionRuntime extends TerrainRegrowRuntime, TerrainConformRuntime {
   getSnapshot(): { readonly tableId: string; readonly map: { readonly nodePositions: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
 export type LatticeRepairExecutor = (
-  runtime: TerrainRegenerateRuntime,
+  runtime: TerrainRegrowRuntime & TerrainConformRuntime,
   fallout: CutFallout,
   causeId: string,
   tableId: string,
@@ -4166,7 +4134,7 @@ export function topologyIntersectsPolygon(topology: ConstructionRegionTopology, 
   const positions = new Map(topology.nodes.map((node) => [node.id, [node.position.x, node.position.z] as [number, number]]));
 export function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number) {
   const buckets = new Map<string, ConstructionPosition[]>();
-export function latticeRegenerateReaction(executor: LatticeRepairExecutor = repairTerrainCut): Reaction<LatticeReactionRuntime> {
+export function latticeRegenerateReaction(executor: LatticeRepairExecutor = conformGround): Reaction<LatticeReactionRuntime> {
   return (runtime, effect, hits) => {
   if (effect.kind === "remove") {
   executor(
@@ -4175,77 +4143,64 @@ export function latticeRegenerateReaction(executor: LatticeRepairExecutor = repa
   effect.causeId,
   runtime.getSnapshot().tableId,
 
-// src/composition/tabletop/terrain/terrain-neighborhood.ts
-export interface TerrainStrokeBounds {
-  readonly minX: number;
-  readonly minZ: number;
-  readonly maxX: number;
-  readonly maxZ: number;
-  }
-export interface TerrainNeighbourhoodRuntime {
-  getRegionTopologiesInBounds(bounds: TerrainStrokeBounds & {
-  readonly seeds?: readonly { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }[];
-  }): readonly ConstructionRegionTopology[];
-  }
-export interface TerrainCutRuntime extends TerrainFillRuntime, PlanarPort {
+// src/composition/tabletop/terrain/terrain-regrow.ts
+export interface TerrainRegrowRuntime extends StructureContactRuntime, GroundCommitRuntime {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined;
   }
-export function terrainStandingAround(
-  runtime: TerrainNeighbourhoodRuntime,
-  covered: readonly ConstructionCoveredRegion[],
-  within: TerrainStrokeBounds,
+export const STROKE_MARGIN = 2 * DEFAULT_FACE_SIDE;
+export function regrowGround(runtime: TerrainRegrowRuntime, fallout: CutFallout, causeId: string, tableId: string): number {
+  const named = fallout.consumedSurfaceKeys
+  .map((key) => runtime.getRegionTopology(key))
+  .filter((face): face is ConstructionRegionTopology => face !== undefined);
+
+// src/composition/tabletop/terrain/terrain-volume-edit.ts
+export function shapeDistance(point: ConstructionPosition, shape: ConstructionVolumeShape): number {
+  // A brush pushed out of a wall reaches across the wall as far as its
+  // radius, and in front of it or behind only as far as its depth and its
+  // radius carry it.
+  if (isLayer(shape) && shape.direction) {
+  const { across, along } = againstWay(point, shape.path, shape.direction);
+export function brushWay(
+  runtime: { getRegionTopologiesInBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }): readonly ConstructionRegionTopology[] },
+  point: ConstructionPosition,
   reach: number,
-  ): readonly ConstructionRegionTopology[] {
-  return runtime.getRegionTopologiesInBounds({
-  minX: within.minX - reach,
-export interface HeightField {
-  at(point: { readonly x: number; readonly z: number }): number | undefined;
-  }
-export function heightFieldOf(anchors: readonly ConstructionPosition[], reach: number): HeightField {
-  const buckets = new Map<string, ConstructionPosition[]>();
-
-// src/composition/tabletop/terrain/terrain-regenerate.ts
-export type { HeightField } from "./terrain-neighborhood.ts";
-export type TerrainRegenerateRuntime = TerrainCutRuntime;
-export function repairTerrainCut(
-  runtime: TerrainRegenerateRuntime,
-  fallout: CutFallout,
-  causeId: string,
-  tableId: string,
-  ): number {
-  if (fallout.consumedSurfaceKeys.length === 0 && (!fallout.vacatedGround || fallout.vacatedGround.length === 0)) return 0;
-
-
-// src/composition/tabletop/terrain/terrain-restack.ts
-export const ELEVATION_STEP = 0.5;
-export function dirtProfile(normalizedDistance: number): number {
-  const t = 1 - Math.min(Math.max(normalizedDistance, 0), 1);
-export function dirtLoadOver(
-  path: readonly ConstructionPosition[],
-  radius: number,
-  ): (point: ConstructionPosition) => number {
-  if (path.length === 0 || !(radius > 0)) return () => 0;
-  const segments = path.map((from, index) => ({ from, to: path[index + 1] ?? from }));
-export interface RestackOutcome {
-  readonly raisedFaces: number;
-  /** Distinct nodes actually moved -- shared corners count once. */
-  readonly movedVertices: number;
-  /**
-  * Why some covered faces were left alone -- a wall the brush centred on,
-  * most commonly. Reported rather than thrown: refusing the *whole* stroke
-  * over one such face was the earlier behaviour, and it meant painting
-export function facesToRaise(resolved: readonly ResolvedCoverage[]): readonly ConstructionCoveredRegion[] {
-  return resolved
-  .filter((entry) => entry.interaction.kind === "restack" && entry.covered.coverage === "centroid")
-  .map((entry) => entry.covered);
-export function restackTerrain(
+  facing: ConstructionPosition,
+  ): ConstructionPosition | undefined {
+  let x = 0, y = 0, z = 0;
+  for (const face of runtime.getRegionTopologiesInBounds({ minX: point.x - reach, minZ: point.z - reach, maxX: point.x + reach, maxZ: point.z + reach })) {
+export function commitTerrainVolumeEdit(
   ctx: ToolContext,
-  paintedType: string,
-  covered: readonly ConstructionCoveredRegion[],
-  causeId: string,
-  /** How much of a full step lands on a given node. Defaults to all of it. */
-  loadAt: (point: ConstructionPosition) => number = () => 1,
-  mode: TerrainSculptMode = "elevate",
+  shapes: readonly ConstructionVolumeShape[],
+  options: {
+  readonly faceSide?: number;
+  readonly seed: number;
+  readonly table?: number;
+  readonly surfaceType?: string;
+export function layerLaid(edited: ReturnType<ToolContext["runtime"]["layerTerrainSurface"]>, ids: readonly ConstructionNodeId[], given: readonly ConstructionNodeId[]): LaidGround | undefined {
+  if (!edited) return undefined;
+  const nodeOf = (origin: ConstructionSurfaceOrigin | null | undefined) => (origin === null || origin === undefined ? undefined : origin.kind === "patch" ? ids[origin.index] : given[origin.index]);
+export function carveShape(points: readonly ConstructionPosition[], radius: number): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function fillShape(points: readonly ConstructionPosition[], radius: number, rise: number, outward?: ConstructionPosition): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function volumeStrokePath(mode: "carve" | "fill", points: readonly ConstructionPosition[], radius: number, rise: number): readonly ConstructionPosition[] {
+  const shape = mode === "carve" ? carveShape(points, radius) : fillShape(points, radius, rise);
+export interface TerrainBrush {
+  readonly strength?: number;
+  readonly falloff?: number;
+  readonly falloffType?: "smooth" | "linear" | "spherical" | "tip";
+  /** For a raise or a lower: the way it pushes, out of the surface it is drawn on. Omitted: up. */
+  readonly direction?: ConstructionPosition;
+  }
+export function moundShape(effect: "raise" | "lower", points: readonly ConstructionPosition[], radius: number, height: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function levelShapes(points: readonly ConstructionPosition[], radius: number, reach: number, brush: TerrainBrush = {}): readonly ConstructionVolumeShape[] {
+  const path = thinned(points, radius * PATH_STEP);
+export function smoothShape(points: readonly ConstructionPosition[], radius: number, filter: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
+export function noiseShape(points: readonly ConstructionPosition[], radius: number, height: number, scale: number, seed: number, brush: TerrainBrush = {}): ConstructionVolumeShape | undefined {
+  const path = thinned(points, radius * PATH_STEP);
 
 // src/composition/tabletop/tools/core/boundary-edges.ts
 export function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
@@ -4491,9 +4446,11 @@ export const graphNodeOf = (sample: Pick<PointerSample, "node" | "nodeId">): str
 // src/composition/tabletop/tools/core/pointer-ray.ts
 export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
   const exact = exactAtHeight(sample, y);
-export function withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample {
+export function surfaceKeyOfRef(surfaceRef: string): ConstructionSurfaceKey {
+  const parts = surfaceRef.split(",");
+export function withFacePlane(sample: PointerSample, faceOf: (surfaceKey: ConstructionSurfaceKey) => ConstructionRegionTopology | undefined): PointerSample {
   if (sample.surfaceRef === undefined) return sample;
-  const topology = topologies.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
+  const topology = faceOf(surfaceKeyOfRef(sample.surfaceRef));
 
 // src/composition/tabletop/tools/core/pointer-scale.ts
 export function metersPerPixelAt(hit: Pick<PointerSample, "point" | "ray">, viewportHeight: number, fovDegrees: number): number | undefined {
@@ -5288,6 +5245,17 @@ export function circularBrushStrokeOutline(
   ): PreviewDescriptor {
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
+export function discWireframe(path: readonly ConstructionPosition[], radius: number, normal: ConstructionPosition, color: number, opacity = 0.75): PreviewDescriptor {
+  const positions: number[] = [];
+  const add = (a: ConstructionPosition, b: ConstructionPosition) => positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+export function capsuleWireframe(
+  path: readonly ConstructionPosition[],
+  radius: number,
+  color: number,
+  opacity = 0.75,
+  /** How tall against how wide: `1` round, less a squashed pile, `0` flat on its plan. */
+  squash = 1,
+  ): PreviewDescriptor {
 
 // src/composition/tabletop/tools/shapes/ribbon-mesh-preview.ts
 export const PREVIEW_ELEVATION = 0.05;
@@ -5407,9 +5375,9 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
-  const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
-  const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
+  // Every stroke shows the volume it would take or add under the pointer before it starts.
+  previewOnHover: () => true,
+
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
@@ -5591,13 +5559,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 // src/composition/tabletop/use-debug-stats.ts
 export const RECENT_CHANGES = 8;
 export interface ChangeRecord {
+  /** Counts up with every record: a stroke the engine refused is timed but leaves the revision where it was, so the revision names no record alone. */
+  readonly id: number;
   /** The map's revision once the change was read. */
   readonly revision: number;
   /** What made it, in one line: the commits' labels, or what happened when no timed commit did, as when the map loads. */
   readonly label: string;
   /** The commits' time together, in milliseconds; absent when no timed commit made it. */
-  readonly ms?: number;
-  /** The slowest phase of any of those commits. */
 export interface DebugStats {
   /** The last full window of frames; absent until one has passed. */
   readonly frame?: FrameStats;
@@ -7515,61 +7483,6 @@ export const roofTransitionStructureType: StructureTypeDefinition = Object.freez
   validateMotion: undefined,
   recipe: roofRecipeGeneration,
 
-// src/features/edit-construction/structure-types/structural-cut.ts
-export type CutProfile =
-export interface StructuralCutArea {
-  /** The 2D outline of the cut area on the XZ plane. */
-  readonly outline?: readonly (readonly [number, number])[];
-  /** Optional pre-computed PlanarArea for the cut or brush area. */
-  readonly sweptPolygon?: PlanarArea;
-  /** 3D center point of the cut/brush/explosion in world coordinates. */
-  readonly center?: { readonly x: number; readonly y: number; readonly z: number };
-export interface StructuralCutRequest {
-  readonly area: StructuralCutArea;
-  readonly targetSurfaceType: string;
-  readonly profile: CutProfile;
-  readonly causeId: string;
-  readonly tableId: string;
-  readonly faceSide?: number;
-  readonly seed?: number;
-export interface StructuralCutOutcome {
-  readonly builtFaces: number;
-  readonly removedFaces: number;
-  readonly refusedFaces: number;
-  readonly success: boolean;
-  readonly message?: string;
-  }
-export function distanceSqToSegment2D(
-  px: number,
-  pz: number,
-  ax: number,
-  az: number,
-  bx: number,
-  bz: number,
-  ): { readonly distSq: number; readonly t: number } {
-export function distanceAndElevationOnPath(
-  px: number,
-  pz: number,
-  path: readonly { readonly x: number; readonly y?: number; readonly z: number }[],
-  ): { readonly distance: number; readonly pathY?: number } {
-  if (path.length === 0) return { distance: Infinity };
-export function calculateProfileDisplacement(
-  point: { readonly x: number; readonly z: number },
-  profile: CutProfile,
-  centerOrPath:
-  | { readonly x: number; readonly z: number }
-  | readonly { readonly x: number; readonly y?: number; readonly z: number }[],
-  radius: number,
-  normal: { readonly x: number; readonly y: number; readonly z: number } = { x: 0, y: 1, z: 0 },
-export function calculateProfileHeight(
-  point: { readonly x: number; readonly z: number },
-  baseHeight: number,
-  profile: CutProfile,
-  centerOrPath:
-  | { readonly x: number; readonly z: number }
-  | readonly { readonly x: number; readonly y?: number; readonly z: number }[],
-  radius: number,
-
 // src/features/edit-construction/structure-types/structure-type.ts
 export type EditRole = string;
 export type EditResolution =
@@ -7766,9 +7679,9 @@ export interface WallParams {
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
   /**
-  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
-  */
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
+  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
+export type TerrainSculptMode = "add" | "dig" | "smooth" | "flatten" | "noise" | "elevate" | "lower" | "carve" | "fill";
+export type TerrainFalloffType = "smooth" | "linear" | "spherical" | "tip";
 export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
   if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
   return faceSizeOverride;
@@ -7795,7 +7708,6 @@ export interface OpeningParams {
   readonly shape: OpeningShape;
 export function withOpeningKind(params: OpeningParams, kind: OpeningParams["openingKind"]): OpeningParams {
   return kind === "door" ? { ...params, openingKind: "door", height: Math.max(params.height, 2) } : { ...params, openingKind: "window" };
-export const OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>> = Object.freeze({ window: 0x7dd3fc, door: 0xd97706 });
 
 // src/features/edit-construction/topology/arc-follow.ts
 export function arcsFollowing(
@@ -8123,9 +8035,23 @@ export function floorsWithout(floors: readonly ConstructionRegionTopology[], run
 
 // src/features/edit-construction/topology/ground-contact.ts
 export const GROUND_CONTACT_CLEARANCE = 1.5;
-export const GROUND_THROUGH_TOLERANCE = 0.05;
+export const GROUND_THROUGH_TOLERANCE = 0.3;
 export const GROUND_SIDE_REST_ROOM = 0.25;
-export type GroundHeightAt = (point: Plan) => number | undefined;
+export type GroundHeightAt = (point: Plan, reference?: number) => number | undefined;
+export function groundLayerAt(layers: readonly { readonly height: number; readonly facesUp: boolean }[], reference: number): number | undefined {
+  let over: { readonly height: number; readonly facesUp: boolean } | undefined;
+  let under: number | undefined;
+  for (const layer of layers) {
+  if (layer.height > reference + 1e-6) {
+  if (over === undefined || layer.height < over.height) over = layer;
+  } else if (under === undefined || layer.height > under) {
+  under = layer.height;
+export function facesUp(topology: ConstructionRegionTopology): boolean {
+  const ring = faceRings(topology)[0] ?? [];
+  let y = 0;
+  for (let i = 0; i < ring.length; i++) {
+  const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+  y += (a.z - b.z) * (a.x + b.x);
 export type ContactCell = readonly (readonly [number, number])[];
 export type GroundContact =
 export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined {

@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+const require_fs = () => ({ writeFileSync });
+let regrowCount = 0;
 import { initSync, ConstructionSession } from "../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js";
 import { cloudTypesFor, createEditHistoryStack, hasTrait, surfaceTypesWithTrait } from "../src/features/edit-construction/index.ts";
 
@@ -70,6 +72,40 @@ export function sessionFixture() {
         return undefined;
       }
       return { ...wire, vertices: wire.vertices.map((v) => (v.source === null ? { x: v.x, z: v.z } : { x: v.x, z: v.z, source: v.source })) };
+    },
+    regenerateTerrainSurface(request) {
+      try {
+        if (process.env.REGROW_DUMP_ALL) require_fs().writeFileSync(`${process.env.REGROW_DUMP_ALL}-${String(++regrowCount).padStart(3, "0")}.json`, JSON.stringify({ request }));
+        return JSON.parse(session.regenerate_terrain_surface_json(JSON.stringify(request)));
+      } catch (error) {
+        if (process.env.REGROW_DEBUG) {
+          console.error("[regrow]", String(error?.message ?? error));
+          if (process.env.REGROW_DUMP) require_fs().writeFileSync(`${process.env.REGROW_DUMP}-${Date.now()}.json`, JSON.stringify({ error: String(error?.message ?? error), request }));
+        }
+        return undefined;
+      }
+    },
+    layerTerrainSurface(request) {
+      try {
+        return JSON.parse(session.layer_terrain_surface_json(JSON.stringify(request)));
+      } catch (error) {
+        if (process.env.REGROW_DEBUG) {
+          console.error("[layer]", String(error?.message ?? error));
+          if (process.env.REGROW_DUMP) require_fs().writeFileSync(`${process.env.REGROW_DUMP}-layer-${Date.now()}.json`, JSON.stringify(request));
+        }
+        return undefined;
+      }
+    },
+    editTerrainVolume(request) {
+      try {
+        return JSON.parse(session.edit_terrain_volume_json(JSON.stringify(request)));
+      } catch (error) {
+        if (process.env.REGROW_DEBUG) {
+          console.error("[volume]", String(error?.message ?? error));
+          if (process.env.REGROW_DUMP) require_fs().writeFileSync(`${process.env.REGROW_DUMP}-volume-${Date.now()}.json`, JSON.stringify(request));
+        }
+        return undefined;
+      }
     },
     addPatch(patch) { const result = JSON.parse(session.add_patch_json(JSON.stringify(wirePatch(patch)))); if (result.skippedRegionIds.length) throw new Error(JSON.stringify(result)); return { ...result.outcome, skippedRegionIds: result.skippedRegionIds, skippedRegionReasons: result.skippedRegionReasons ?? [] }; },
     getRegionTopologiesInBounds: (bounds) => JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))).map(topology),

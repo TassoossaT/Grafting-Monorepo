@@ -83,9 +83,14 @@ export interface WallParams {
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
 /**
- * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
+ * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten");
+ * or carves into the ground and fills it in, in three dimensions, as an edit of the ground's own mesh: "carve" pushes in
+ * from where the stroke starts (a tunnel, a cave), "fill" runs from where it starts to where it ends (an earth bridge).
  */
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
+export type TerrainSculptMode = "add" | "dig" | "smooth" | "flatten" | "noise" | "elevate" | "lower" | "carve" | "fill";
+
+/** How a terrain brush's effect fades from its middle to its rim: a terrain editor's falloff types. */
+export type TerrainFalloffType = "smooth" | "linear" | "spherical" | "tip";
 
 /**
  * Derives a recommended face size proportionally from the brush radius.
@@ -126,6 +131,14 @@ export interface TerrainSculptParams {
    * Height step / intensity applied per stroke (in world Y units). Defaults to 0.5.
    */
   readonly elevationStep?: number;
+  /** How much of a smooth, a flatten or noise is laid, `0..1`: the share of the way to its target. */
+  readonly strength?: number;
+  /** The share of the brush's radius its effect fades over, from the rim in: `0` a hard edge, `1` fading from the middle. */
+  readonly falloff?: number;
+  /** How the effect fades over the falloff. */
+  readonly falloffType?: TerrainFalloffType;
+  /** For a smooth: the radius the mean height is read over, as a share of the brush's. */
+  readonly filterRadius?: number;
   /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
    * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
@@ -279,6 +292,10 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     brushRadius: 6,
     mode: "add",
     elevationStep: 2.0,
+    strength: 0.5,
+    falloff: 0.5,
+    falloffType: "smooth",
+    filterRadius: 0.4,
     irregularity: 0.7,
     heightScale: 1.5,
     noiseScale: 0.15,

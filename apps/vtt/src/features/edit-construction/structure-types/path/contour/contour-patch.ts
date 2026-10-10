@@ -91,10 +91,15 @@ function distanceToSegmentXZ(
  * polygon clipping so elevation stations are not lost before 3D simplification.
  */
 function restoreHeightVertices(
-  ring: PlanarRing,
+  given: PlanarRing,
   heightSamples: readonly ConstructionPosition[],
 ): PlanarRing {
-  if (heightSamples.length === 0 || ring.length < 2) return ring;
+  if (heightSamples.length === 0 || given.length < 2) return given;
+  // Walked closed, so the side from the last corner back to the first is
+  // densified too: handed open, that side -- a whole side of a road -- was
+  // never walked, and came back one straight chord whatever the slope.
+  const open = Math.hypot(given[0]![0] - given.at(-1)![0], given[0]![1] - given.at(-1)![1]) >= 1e-9;
+  const ring: PlanarRing = open ? [...given, given[0]!] : given;
 
   const cellSize = 2.0;
   const grid = new Map<string, ConstructionPosition[]>();
@@ -141,18 +146,30 @@ function restoreHeightVertices(
       }
     }
 
-    if (matching.length > 0) {
-      matching.sort((l, r) => l.t - r.t);
-      let lastT = 0;
-      for (const pt of matching) {
-        if (pt.t - lastT >= minTStep && 1 - pt.t >= minTStep) {
-          restored.push([pt.x, pt.z]);
-          lastT = pt.t;
-        }
+    matching.sort((l, r) => l.t - r.t);
+    // A gap no sample falls in is filled at the same interval: the heights
+    // come from the curve, not the samples, and a road's side over a hill
+    // with no sample within a millimetre of it was one chord from foot to
+    // foot, buried in the hill. Points the slope does not bend are dropped
+    // again by the 3D simplification.
+    let lastT = 0;
+    const fillTo = (t: number) => {
+      const steps = Math.floor((t - lastT) / minTStep);
+      for (let k = 1; k < steps; k += 1) {
+        const at = lastT + ((t - lastT) * k) / steps;
+        restored.push([a[0] + (b[0] - a[0]) * at, a[1] + (b[1] - a[1]) * at]);
+      }
+    };
+    for (const pt of matching) {
+      if (pt.t - lastT >= minTStep && 1 - pt.t >= minTStep) {
+        fillTo(pt.t);
+        restored.push([pt.x, pt.z]);
+        lastT = pt.t;
       }
     }
+    fillTo(1);
   }
-  restored.push(ring[ring.length - 1]!);
+  if (!open) restored.push(ring[ring.length - 1]!);
   return restored;
 }
 

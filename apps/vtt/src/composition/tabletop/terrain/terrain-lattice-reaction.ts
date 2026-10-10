@@ -18,7 +18,9 @@ import {
   GROUND_CONTACT_CLEARANCE,
   GROUND_SIDE_REST_ROOM,
   GROUND_THROUGH_TOLERANCE,
+  facesUp,
   groundContactOf,
+  groundLayerAt,
   groundSurfaceOf,
   hasTrait,
   insideFace,
@@ -34,7 +36,8 @@ import {
 } from "../../../features/edit-construction/index.ts";
 import { timePhase } from "../commit-timing.ts";
 import { paintedFalloutOf } from "../interference/painted-topologies.ts";
-import { repairTerrainCut, type TerrainRegenerateRuntime } from "./terrain-regenerate.ts";
+import type { TerrainRegrowRuntime } from "./terrain-regrow.ts";
+import { conformGround, type TerrainConformRuntime } from "./terrain-conform.ts";
 import { REALLY_MOVED, changeAreaOf, largestOuterRing } from "../effects/change-area.ts";
 import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
@@ -50,14 +53,14 @@ import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
  */
 
 /** What regenerating ground needs of the runtime, read and written inside the pipeline's transaction. */
-export interface LatticeReactionRuntime extends TerrainRegenerateRuntime {
+export interface LatticeReactionRuntime extends TerrainRegrowRuntime, TerrainConformRuntime {
   getSnapshot(): { readonly tableId: string; readonly map: { readonly nodePositions: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
   getFootprintCoverage?(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[];
 }
 
 /** Regenerates one ground type's consumed faces; returns how many it built. */
 export type LatticeRepairExecutor = (
-  runtime: TerrainRegenerateRuntime,
+  runtime: TerrainRegrowRuntime & TerrainConformRuntime,
   fallout: CutFallout,
   causeId: string,
   tableId: string,
@@ -235,9 +238,21 @@ function letGoOf(runtime: LatticeReactionRuntime, change: Effect["change"], hits
   const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
   const groundAt = groundSurfaceOf(hits, own);
   const held = new Set(hits.flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const groundNodes = hits.flatMap((topology) => topology.nodes.map((node) => node.position));
+  // Joined: the ground holds one of its nodes, or -- a sealed outline, met
+  // without being split -- stands a node of its own on one of its sides.
+  const joined = (face: ConstructionRegionTopology): boolean => {
+    if (face.nodes.some((node) => held.has(node.id))) return true;
+    const at = new Map(face.nodes.map((node) => [node.id, node.position]));
+    const sides = (face.outerLoops[0] ?? []).flatMap((use) => {
+      const a = at.get(use.startNodeId), b = at.get(use.endNodeId);
+      return a && b ? [[a, b] as const] : [];
+    });
+    return groundNodes.some((point) => sides.some(([a, b]) => nearestOnSegment(point, a, b).distance < 1e-3 && Math.abs(point.y - (a.y + (b.y - a.y) * nearestOnSegment(point, a, b).t)) < 1e-3));
+  };
   const after = new Map(change.after.map((face) => [face.surfaceKey.join("\u0000"), face]));
   return change.before.flatMap((face): PlanarArea => {
-    if (!face.nodes.some((node) => held.has(node.id))) return [];
+    if (!joined(face)) return [];
     const now = after.get(face.surfaceKey.join("\u0000"));
     if (now && groundContactOf(now, groundAt, GROUND_CONTACT_CELL).kind === "whole") return [];
     const at = new Map(face.nodes.map((node) => [node.id, node.position]));
@@ -314,13 +329,18 @@ function departingGroundContactOf(
     }
   }
 
+  // Of the ground over a point, the layer the departing face met: the first
+  // surface over it facing up, else the first under it -- never a ceiling.
   const findFace = (p: { readonly x: number; readonly z: number }) => {
     const list = buckets.get(`${Math.floor(p.x / size)}:${Math.floor(p.z / size)}`);
     if (!list) return undefined;
-    for (const t of list) {
-      if (insideFace(t, p)) return t;
-    }
-    return undefined;
+    const reference = surfaceAt(p);
+    const layers = list.filter((t) => insideFace(t, p)).flatMap((t) => {
+      const height = surfaceHeightOf(t)?.(p);
+      return height === undefined ? [] : [{ t, height, facesUp: facesUp(t) }];
+    });
+    const height = groundLayerAt(layers, reference);
+    return height === undefined ? undefined : layers.find((layer) => layer.height === height)?.t;
   };
 
   const held = new Set(hits.flatMap((t) => t.nodes.map((n) => n.id)));
@@ -668,6 +688,10 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
         painterSurfaceType: change.surfaceType,
         vacatedGround,
         draggedSurfaceKeys: stretched.filter((topology) => topology.surfaceType === surfaceType).map((topology) => topology.surfaceKey),
+        carriedFrom: new Map([...carriedNodeIds].flatMap((id) => {
+          const was = beforePositions.get(id);
+          return was ? [[id, was] as const] : [];
+        })),
       },
       effect.causeId,
       tableId,
@@ -685,10 +709,11 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
 }
 
 /**
- * Builds the reaction around an executor. The default regenerates for real;
- * tests hand in a recorder to see exactly what a regeneration would be given.
+ * Builds the reaction around an executor. The default brings the ground to
+ * rest under the structures (`conformGround`) for real; tests hand in a
+ * recorder to see exactly what a regeneration would be given.
  */
-export function latticeRegenerateReaction(executor: LatticeRepairExecutor = repairTerrainCut): Reaction<LatticeReactionRuntime> {
+export function latticeRegenerateReaction(executor: LatticeRepairExecutor = conformGround): Reaction<LatticeReactionRuntime> {
   return (runtime, effect, hits) => {
     if (effect.kind === "remove") {
       executor(

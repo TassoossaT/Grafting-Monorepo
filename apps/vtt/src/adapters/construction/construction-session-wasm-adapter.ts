@@ -40,6 +40,10 @@ import type {
   ConstructionGridContourNode,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
+  ConstructionTerrainVolumeEdit,
+  ConstructionTerrainRegenerateRequest,
+  ConstructionTerrainRegeneration,
+  ConstructionTerrainVolumeEditRequest,
   ConstructionPatch,
   ConstructionPatchOutcome,
   ConstructionPosition,
@@ -522,6 +526,34 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     }
 
     return this.#generateSingleGrid(request);
+  }
+
+  regenerateTerrainSurface(request: ConstructionTerrainRegenerateRequest): ConstructionTerrainRegeneration | undefined {
+    try {
+      return JSON.parse(this.#read().regenerate_terrain_surface_json(JSON.stringify(request))) as ConstructionTerrainRegeneration;
+    } catch {
+      // A refusal: the patch describes no ground the engine can lay again.
+      return undefined;
+    }
+  }
+
+  editTerrainVolume(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainVolumeEdit | undefined {
+    try {
+      return JSON.parse(this.#read().edit_terrain_volume_json(JSON.stringify(request))) as ConstructionTerrainVolumeEdit;
+    } catch (error) {
+      // A refusal, like the grid's: the edit describes nothing the engine can lay.
+      console.warn(`[terreno] o núcleo recusou a edição de volume: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+  }
+
+  layerTerrainSurface(request: ConstructionTerrainVolumeEditRequest): ConstructionTerrainRegeneration | undefined {
+    try {
+      return JSON.parse(this.#read().layer_terrain_surface_json(JSON.stringify(request))) as ConstructionTerrainRegeneration;
+    } catch (error) {
+      console.warn(`[terreno] o núcleo recusou a camada: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
   }
 
   #generateSingleGrid(
